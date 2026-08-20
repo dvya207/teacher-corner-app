@@ -1,0 +1,607 @@
+/* ==========================================================================
+   Inter, SELF-HOSTED.
+
+   @fontsource ships the woff2 files inside the package, so Angular bundles them
+   and the app needs no network at runtime — which is the property the previous
+   font-stack-only approach was protecting. It was `--font: 'Inter', …system
+   fallback`, which meant the app only rendered in Inter on machines that
+   happened to have it installed, and silently fell back everywhere else.
+
+   Four weights, matching what the UI actually uses: 400 body, 500 labels,
+   600 buttons and headings, 700 numerals and table headers. Loading the whole
+   family would ship six unused weights.
+   ========================================================================== */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+
+/* ==========================================================================
+   TeacherCorner — global tokens, resets and shared primitives.
+
+   Everything that more than one component needs lives here. Component CSS
+   files style only their own markup and read these variables rather than
+   restating colours, so a palette change is a single edit in this file.
+   ========================================================================== */
+
+:root {
+
+  /* ==========================================================================
+     THE REAL PALETTE, read from production's source rather than sampled from
+     screenshots of it.
+     ==========================================================================
+
+     Everything below comes from two files in
+     ~/code/thinktac-india-production/apps/teacher-corner2-0:
+
+       tailwind.config.js        theme 'theme-brand':
+                                   primary = generatePalette('#169CD8')
+                                   accent  = generatePalette('#272B66')
+       institutions-list.component.scss   "Tarang Design System v2" tokens,
+                                          hardcoded and authoritative
+       classy.component.scss              the sidebar's own hardcoded colours
+
+     WHY THIS REPLACED THE SAMPLED VALUES. Every colour here used to be picked by
+     reading pixels out of reference screenshots. Those screenshots are in a wide
+     gamut space, so saturated colours read back shifted by 30+ points while
+     near-neutrals and near-whites read back almost true. The result was a palette
+     whose greys were nearly right and whose blues and violets were not: the
+     sidebar came out violet (#330268) where production is navy (#272B66), and
+     the primary button came out #278edd where production is #169CD8.
+
+     Nothing is sampled now. If a value is not in production's source it is
+     derived from production's values by production's own method, and says so.
+     -------------------------------------------------------------------------- */
+
+  /* ---- Brand navy -------------------------------------------------------
+     LARGE DARK SURFACES ONLY: the sidebar, the banner's left end, the login
+     hero. Also form labels, which production sets to text-accent-600.
+
+     ANCHORED ON --brand-900: #272B66, which classy.component.scss hardcodes as
+     the sidebar background and which is the 500 of production's accent ramp.
+
+     NOTHING INTERACTIVE READS FROM HERE. Focus rings, the active nav pill,
+     links and hovers all use --accent-* below: navy for large dark surfaces,
+     cyan-blue for anything the user acts on. */
+  /* ------------------------------------------------------------------------
+     Signed-out hero surface.
+
+     SAMPLED, not chosen. Measured off the production login page: the mean of
+     25k background pixels is #281165, with the top-left corner at #330267 and
+     the bottom-right at #270075. It is a deep VIOLET whose green channel stays
+     between 0 and 34 across the whole panel, which is what keeps it violet
+     rather than the navy the --brand-* ramp produces (--brand-900 is #272b66,
+     green 43, and reads blue-grey).
+
+     A token of its own rather than a retune of --brand-*, because those three
+     also paint the app shell's sidebar and the dashboard, and nothing was asked
+     of either. The sign-out and welcome screens still use the old ramp, so they
+     no longer match this page; aligning them is a one-line change each.
+
+     NOW A FLAT FILL, on instruction: #25086d, replacing the sampled three-stop
+     gradient above. The production page is a gradient, so this is a deliberate
+     departure from it rather than a closer match. The measurements are kept in
+     this comment because they are what the gradient would be restored from.
+
+     Specified as #25086d00 originally. That is 8-digit #RRGGBBAA, so the
+     trailing 00 is an ALPHA of zero and the panel would have rendered fully
+     transparent over the white page. Read as the 6-digit colour.
+     ------------------------------------------------------------------------ */
+  --hero-surface: #25086d;
+
+  /* Glass over that surface. Both sampled from the same page: the floating
+     cards and the feature chips sit at an implied white alpha of 0.072-0.087,
+     so one value serves both. */
+  --hero-glass: rgba(255, 255, 255, 0.08);
+  --hero-glass-line: rgba(255, 255, 255, 0.16);
+
+  --brand-950: #151737;
+  --brand-900: #272b66;
+  /* Between production's accent-500 and accent-400, interpolated in the lrgb
+     space its own generatePalette uses. For gradients, not for controls. */
+  --brand-800: #444672;
+  --brand-700: #54567b;
+
+  /* ---- Accent: production's primary -------------------------------------
+     EVERY interactive colour: focus rings, the active nav pill, links, primary
+     buttons, toggles, the banner's right-hand end.
+
+       500  #169cd8   generatePalette('#169CD8')[500], and $accent
+       600  #1283b8   $accent-hover, verbatim
+       800  #0f6b94   generatePalette('#169CD8')[800], for the pressed state
+       400  #73b4e0   [400]
+       300  #a1c9e8   [300]
+     ------------------------------------------------------------------------ */
+  --accent-800: #0f6b94;
+  --accent-600: #1283b8;
+  --accent-500: #169cd8;
+  --accent-400: #73b4e0;
+  --accent-300: #a1c9e8;
+
+  --focus-ring: 0 0 0 3px rgba(22, 156, 216, 0.1);
+
+  /* ---- Neutrals ---------------------------------------------------------
+     Production's Tarang tokens, not a sampled approximation of them:
+
+       #111827  $text-primary     headings, table body, input text
+       #374151  used directly in production's own rules
+       #6b7280  $text-secondary   secondary text, stat labels
+       #9ca3af  $text-tertiary    muted: subtitles, table heads, inactive tabs
+       #cbd5e1  control borders
+       #e5e7eb  $border           card borders, row dividers
+       #f0f1f3  $border-light     the lighter divider
+       #f7f8fa  $bg               the page background
+     ---------------------------------------------------------------------- */
+  --ink-900: #111827;
+  --ink-700: #374151;
+  --ink-500: #6b7280;
+  --ink-400: #9ca3af;
+  --ink-300: #cbd5e1;
+  --ink-200: #e5e7eb;
+  --ink-100: #f0f1f3;
+  --ink-050: #f7f8fa;
+  --white: #ffffff;
+
+  /* ---- Semantic ---------------------------------------------------------- */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+
+  /* ---- Status tints -----------------------------------------------------
+     Production's $*-bg tokens with the text colours its own badges pair with
+     them ($success-bg/#065F46, $warning-bg/#92400E, $error-bg/#EF4444), plus
+     $accent-light for the active-tab and selected-row fill. */
+  --tint-blue: #e8f4fd;
+  --tint-green: #ecfdf5;
+  --tint-amber: #fffbeb;
+  --tint-red: #fef2f2;
+  --on-blue: #169cd8;
+  --on-green: #065f46;
+  --on-amber: #92400e;
+  --on-red: #ef4444;
+
+  /* ---- Surfaces ---------------------------------------------------------- */
+  --page-bg: var(--ink-050);
+  --surface: var(--white);
+  --border: var(--ink-200);
+  --text: var(--ink-900);
+  /* --ink-500, NOT the sampled #9da1b0 the reference uses for subtitles.
+     #9da1b0 on white is 2.6:1, which fails WCAG AA even for large text, and
+     this token carries hint and helper copy across every form in the app.
+     --ink-400 is applied directly where the reference's lighter grey is
+     structural rather than prose: uppercase table headers and page subtitles. */
+  --text-muted: var(--ink-500);
+
+  /* Form labels, EXACTLY production's: its markup sets text-accent-600 on every
+     mat-label, and accent-600 of generatePalette('#272B66') is this. Four points
+     off --brand-900, which is what this used to approximate it with. */
+  --label: #23275c;
+
+  /* .edit-dialog-overlay, verbatim: a neutral black at 45%, not the navy-tinted
+     scrim each modal used to mix for itself. */
+  --overlay: rgba(0, 0, 0, 0.45);
+
+  /* Two slate steps production uses alongside the Tarang neutrals: the dialog
+     close button's fill and its icon (#F1F5F9 / #64748B), and the programme
+     dialog's active tab fill. */
+  --slate-100: #f1f5f9;
+  --slate-500: #64748b;
+
+  /* ---- Shape and depth ---------------------------------------------------
+     Production's own radii, counted from its stylesheet: 8px is the workhorse
+     (buttons, inputs, cards), 9999px every pill, 6px the sidebar's active item,
+     12px the larger panels.
+
+     CARDS CARRY ALMOST NO SHADOW: $shadow is
+     `0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04)`, which is what
+     --shadow-sm is now. The primary button has NO resting shadow at all and
+     gains `0 4px 12px rgba(22,156,216,0.25)` on hover, so --shadow-btn is that
+     hover shadow rather than a resting one. Modals use
+     `0 20px 60px rgba(0,0,0,0.2)`. */
+  --radius-sm: 6px;
+  --radius-card: 8px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 22px;
+  --radius-full: 9999px;
+  /* Production's own dialog: learningunit-list.component.scss .edit-dialog is
+     16px, which is rounder than any other surface it draws. */
+  --radius-dialog: 16px;
+
+  /* All four are production's, verbatim: $shadow for cards, its button hover
+     glow, its popover shadow and its modal shadow. */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-btn: 0 4px 12px rgba(22, 156, 216, 0.25);
+  --shadow-md: 0 6px 8px 2px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.2);
+  /* .edit-dialog's two-layer shadow, verbatim. */
+  --shadow-dialog: 0 20px 60px rgba(0, 0, 0, 0.15), 0 4px 16px rgba(0, 0, 0, 0.08);
+
+  /* ---- Layout ------------------------------------------------------------
+     The sidebar width is a variable because the shell animates between the
+     two values, and the topbar and content offsets have to follow it. */
+  /* 308px = 260 + half an inch at 96 CSS px per inch.
+     Slightly wider than the reference's own ~256px sidebar, on instruction.
+     --sidebar-w-collapsed is deliberately untouched: the collapsed rail holds
+     icons only, so its width is set by those and not by the expanded panel. */
+  --sidebar-w: 308px;
+  --sidebar-w-collapsed: 76px;
+  --topbar-h: 64px;
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Inter is now bundled (see the @import block at the top of this file), so
+     the first entry is guaranteed rather than hopeful. The system faces remain
+     as a fallback for the frame before the woff2 decodes. */
+  --font: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* ==========================================================================
+   Reset
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  /* 100dvh rather than 100vh: it tracks the genuinely visible area as mobile
+     browser chrome appears and disappears, so a centred card is not pushed
+     under the address bar. */
+  min-height: 100dvh;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--page-bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Visible focus for keyboard users only. :focus-visible rather than :focus,
+   so a mouse click does not leave a ring behind on every button. */
+:focus-visible {
+  outline: 2px solid var(--accent-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   Shared primitives
+   ========================================================================== */
+
+/* ---- Form field ---------------------------------------------------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+
+/* THE REFERENCE'S LABEL COLOUR, sampled from its own forms: a dark violet, the
+   same one its sidebar uses, not grey and not the accent blue this app used.
+   It is the single most repeated colour on a form, so getting it wrong made
+   every modal read as a different product. */
+.field > label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.field input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.field input::placeholder {
+  color: var(--ink-400);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/* Error state is driven by a class rather than :invalid, because :invalid
+   matches an empty required field before the user has typed anything and
+   would paint the form red on first paint. */
+.field input.is-error {
+  border-color: var(--danger);
+}
+
+.field input.is-error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
+}
+
+.field-error {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--danger);
+}
+
+/* ---- Buttons ------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  font-size: 14.5px;
+  font-weight: 600;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              transform 0.12s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* --accent-500, not --accent-600.
+   Sampled off the reference's own Save Changes button, which is the brighter,
+   more cyan blue (#278edd) rather than the darker #2f5faf this used. The darker
+   shade now does the job it is good at: the hover and pressed states, which
+   previously repeated the base colour and so did nothing at all. */
+.btn-primary {
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+/* The shadow appears on HOVER, which is where production puts it: its resting
+   primary button is flat. */
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-600);
+  box-shadow: var(--shadow-btn);
+}
+
+.btn-primary:active:not(:disabled) {
+  background: var(--accent-800);
+  transform: translateY(1px);
+}
+
+.btn-outline {
+  background: var(--white);
+  color: var(--ink-700);
+  border: 1px solid var(--ink-300);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background: var(--ink-050);
+  border-color: var(--ink-400);
+}
+
+/* The quiet half of a modal footer: Cancel, Back. Used in eight places and, until
+   now, defined in none of them — it rendered as bare .btn, which is close to what
+   the reference shows but left the hover state to chance. Pinned here, at what it
+   already looked like, plus a hover the reference has. */
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-700);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* ---- Spinner ------------------------------------------------------------- */
+
+.spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- Placeholder pages ---------------------------------------------------
+   The four admin sections are routed and navigable but have no content yet.
+   They share this treatment so an empty section reads as "not built yet"
+   rather than as a page that failed to load. */
+
+.page-stub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 420px;
+  padding: 48px 24px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--ink-300);
+  border-radius: var(--radius-lg);
+}
+
+.page-stub .stub-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-lg);
+  background: var(--tint-blue);
+  color: var(--accent-600);
+}
+
+.page-stub h2 {
+  font-size: 20px;
+}
+
+.page-stub p {
+  max-width: 420px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ---- Motion -------------------------------------------------------------- */
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.35s var(--ease) both;
+}
+
+/* Honour a user's reduced-motion preference across every animation in the
+   app, including the ones declared in component stylesheets. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   Confirm dialog
+
+   One destructive-action dialog, shared by every list page: Institutions,
+   Classrooms and Programme all delete the same way, and three copies of these
+   rules would drift. Named .confirm-overlay rather than .modal-overlay because
+   each modal COMPONENT defines its own .modal-overlay with its own z-index, and
+   a global rule of the same specificity would race those.
+   ========================================================================== */
+/* ==========================================================================
+   Delete confirmation
+
+   A modal, unlike the two-click confirm the other tables use for a single row.
+   Deleting a programme also strips it from every classroom using it and the
+   restore does not put those back, which is a consequence that has to be read
+   rather than absorbed from a button relabelling itself.
+   ========================================================================== */
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.confirm-card {
+  width: min(440px, 100%);
+  padding: 26px 26px 22px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.34);
+  text-align: center;
+}
+
+.confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: var(--tint-red);
+  color: var(--danger);
+}
+
+.confirm-card h2 {
+  margin-bottom: 10px;
+  font-size: 19px;
+  line-height: 1.35;
+  color: var(--ink-900);
+  overflow-wrap: anywhere;
+}
+
+.confirm-card p {
+  margin-bottom: 8px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.confirm-warn {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--tint-amber);
+  color: var(--on-amber) !important;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: var(--white);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--on-red);
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

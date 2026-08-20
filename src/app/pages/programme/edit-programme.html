@@ -1,0 +1,126 @@
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="modal-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Edit programme"
+    (click)="$event.stopPropagation()"
+  >
+
+    <!-- Header: the display name and the live status, as in the reference. -->
+    <header class="modal-head">
+      <div class="head-title">
+        <h2>{{ programme().displayName }}</h2>
+        <span class="status-badge" [class.is-active]="isLive()">{{ statusLabel() }}</span>
+      </div>
+
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">
+        <app-icon name="close" [size]="18" />
+      </button>
+    </header>
+
+    <div class="modal-body">
+
+      @if (error()) {
+        <div class="modal-error" role="alert">{{ error() }}</div>
+      }
+
+
+        <div class="field">
+          <label for="ep-name">Programme Name <span class="req" aria-hidden="true">*</span></label>
+          <input
+            id="ep-name"
+            type="text"
+            autocomplete="off"
+            [value]="programmeName()"
+            (input)="setName(valueOf($event))"
+          />
+        </div>
+
+        <div class="field">
+          <label for="ep-display">Display Name <span class="req" aria-hidden="true">*</span></label>
+          <input
+            id="ep-display"
+            type="text"
+            autocomplete="off"
+            [value]="displayName()"
+            [placeholder]="programmeName()"
+            (input)="setDisplayName(valueOf($event))"
+          />
+        </div>
+
+        <!-- Read-only: the code comes from the sequence and is never retyped.
+             Production marks the same field [readonly]. -->
+        <div class="field">
+          <label for="ep-code">Programme Code</label>
+          <input id="ep-code" type="text" [value]="programme().programmeCode" readonly />
+        </div>
+
+        <div class="field">
+          <label for="ep-status">Programme Status <span class="req" aria-hidden="true">*</span></label>
+          <select id="ep-status" (change)="setStatus(valueOf($event))">
+            @for (option of statuses(); track option.value) {
+              <option [value]="option.value" [selected]="option.value === status()">
+                {{ option.label }}
+              </option>
+            }
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="ep-desc">Programme Description <span class="req" aria-hidden="true">*</span></label>
+          <textarea
+            id="ep-desc"
+            rows="3"
+            [value]="description()"
+            (input)="setDescription(valueOf($event))"
+          ></textarea>
+        </div>
+
+        <div class="field">
+          <label for="ep-type">Programme Type</label>
+          <select id="ep-type" (change)="setType(valueOf($event))">
+            @for (option of types(); track option.value) {
+              <option [value]="option.value" [selected]="option.value === type()">
+                {{ option.label }}
+              </option>
+            }
+          </select>
+        </div>
+
+        <!-- Editing only, and read-only: moving a programme between schools
+             would orphan it from the classrooms already carrying it. -->
+        <div class="field">
+          <label for="ep-school">Institution</label>
+          <input id="ep-school" type="text" [value]="programme().institutionName" readonly />
+        </div>
+
+        <!-- Shown, not editable. Production fixes the grade range at creation —
+             its age/grade block is guarded by a flag only the create flow sets. -->
+        <div class="field">
+          <label for="ep-scope">Grade / Age</label>
+          <input id="ep-scope" type="text" [value]="scopeLabel()" readonly />
+          <span class="field-hint">
+            Fixed when the programme is created, as in ThinkTac production.
+          </span>
+        </div>
+
+    </div>
+
+    <footer class="modal-foot">
+      <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
+      <button
+        type="button"
+        class="btn btn-primary save-btn"
+        [disabled]="!valid() || !dirty() || saving()"
+        (click)="save()"
+      >
+        {{ saving() ? 'Saving…' : 'Save' }}
+      </button>
+    </footer>
+
+  </div>
+</div>

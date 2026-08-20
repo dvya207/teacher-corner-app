@@ -1,0 +1,230 @@
+<div class="login-layout">
+
+  <!-- ====================================================================
+       Left: the form panel
+       ==================================================================== -->
+  <section class="form-panel">
+    <div class="form-inner animate-fade-up">
+
+      <app-logo class="brand" [size]="30" />
+
+      <p class="eyebrow">Teacher Corner</p>
+
+      @if (step() === 'phone') {
+        <h1>Sign in to your account</h1>
+        <p class="subtitle">Enter your registered mobile number to continue</p>
+      } @else {
+        <h1>Enter the code</h1>
+        <!-- The number is echoed so a mistyped digit is visible here rather than
+             after waiting out a countdown for an SMS that went elsewhere. -->
+        <p class="subtitle">
+          We sent a {{ slots.length }}-digit code to <strong>{{ sentTo() }}</strong>
+        </p>
+      }
+
+      @if (!configured) {
+        <div class="notice" role="status">
+          <strong>Firebase is not configured yet.</strong>
+          Paste a real web config into <code>src/environments/environment.ts</code>
+          before sign-in will work.
+        </div>
+      }
+
+      <!-- role="alert" so a screen reader reports a rejected sign-in without the
+           user going looking for it. Shared by both steps and both providers,
+           because only one of them can be in flight at a time. -->
+      @if (errorMessage()) {
+        <div class="form-error" role="alert">{{ errorMessage() }}</div>
+      }
+
+      <!-- ================================================================
+           Step 1 — mobile number
+           ================================================================ -->
+      @if (step() === 'phone') {
+
+        <form (submit)="$event.preventDefault(); sendCode()">
+
+          <div class="field">
+            <label for="mobile">Mobile Number</label>
+
+            <div class="phone-row">
+              <!-- Every distinct dial code, listed as flag + code and nothing else, on
+                   instruction. India is preselected because it is the overwhelmingly
+                   common case and the number placeholder assumes it. -->
+              <select
+                class="country"
+                aria-label="Country dial code"
+                (change)="onCountryChange($any($event.target).value)"
+                [disabled]="busy()"
+              >
+                @for (dial of dialCodes; track dial.label) {
+                  <option [value]="dial.code" [selected]="dial.code === countryCode()">
+                    {{ dial.flag }} {{ dial.code }}
+                  </option>
+                }
+              </select>
+
+              <input
+                id="mobile"
+                type="tel"
+                inputmode="numeric"
+                autocomplete="tel-national"
+                [attr.maxlength]="maxDigits()"
+                [placeholder]="numberHint()"
+                [value]="phoneNumber()"
+                (input)="onPhoneInput($any($event.target).value)"
+                [disabled]="busy()"
+              />
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block send-btn" [disabled]="!canSend()">
+            @if (pending() === 'send') {
+              <span class="spinner" aria-hidden="true"></span>
+              Sending code...
+            } @else {
+              Send OTP
+            }
+          </button>
+
+        </form>
+
+      } @else {
+
+        <!-- ================================================================
+             Step 2 — the code
+             ================================================================ -->
+        <form (submit)="$event.preventDefault(); verifyCode()">
+
+          <!-- Six boxes behaving as one field: arrows and backspace move between
+               them, and a pasted code fills across them instead of landing whole
+               in whichever box had focus. -->
+          <div class="code-row" role="group" aria-label="Verification code">
+            @for (slot of slots; track slot) {
+              <input
+                #digitInput
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="1"
+                class="digit"
+                [class.is-filled]="digits()[slot]"
+                [attr.aria-label]="'Digit ' + (slot + 1)"
+                [value]="digits()[slot]"
+                (input)="onDigitInput(slot, $any($event.target).value)"
+                (keydown)="onDigitKeydown(slot, $event)"
+                (paste)="onDigitPaste(slot, $event)"
+                [disabled]="busy()"
+              />
+            }
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block send-btn" [disabled]="!codeComplete() || busy()">
+            @if (pending() === 'verify') {
+              <span class="spinner" aria-hidden="true"></span>
+              Verifying...
+            } @else {
+              Verify and sign in
+            }
+          </button>
+
+          <div class="code-actions">
+            @if (resendIn() > 0) {
+              <!-- Counts down rather than disabling silently, so the wait is a
+                   known length instead of an unexplained dead button. -->
+              <span class="resend-wait">Resend available in {{ resendIn() }}s</span>
+            } @else {
+              <button type="button" class="link-btn" (click)="resend()" [disabled]="busy()">
+                Resend code
+              </button>
+            }
+
+            <button type="button" class="link-btn" (click)="changeNumber()" [disabled]="busy()">
+              Change number
+            </button>
+          </div>
+
+        </form>
+
+      }
+
+      <!-- ================================================================
+           The other way in
+           ================================================================ -->
+      <div class="divider"><span>or</span></div>
+
+      <button
+        type="button"
+        class="btn btn-outline btn-block google-btn"
+        (click)="signInWithGoogle()"
+        [disabled]="busy()"
+      >
+        @if (pending() === 'google') {
+          <span class="spinner" aria-hidden="true"></span>
+          Connecting to Google...
+        } @else {
+          <app-icon name="google" [size]="18" />
+          Sign in with Google
+        }
+      </button>
+
+      <p class="foot">Signing in as a <strong>Teacher</strong></p>
+
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       Right: the marketing hero.
+
+       aria-hidden and entirely presentational. It repeats nothing the form
+       needs, and a screen reader user landing on the sign-in page should reach
+       the mobile number field rather than a marketing headline first.
+       ==================================================================== -->
+  <section class="hero-panel" aria-hidden="true">
+
+    <!-- DECORATION ONLY. Empty elements rather than anything a screen reader has to
+         skip, inside a panel that is already aria-hidden.
+
+         Three concentric rings, two soft blobs and a dot field, which is the same
+         set production layers here (tt-deco-dots, tt-deco-blob--tr/--bl,
+         tt-deco-circle--lg/--md/--sm). One ring on a flat fill left the panel
+         reading as an empty page; depth is what a single ring cannot give. -->
+    <span class="deco-dots"></span>
+    <span class="deco-blob deco-blob--tr"></span>
+    <span class="deco-blob deco-blob--bl"></span>
+    <span class="ring ring-lg"></span>
+    <span class="ring ring-md"></span>
+    <span class="ring ring-sm"></span>
+
+    <div class="hero-copy">
+      <span class="hero-pill-top"><i class="dot"></i> STEM Education Platform</span>
+
+      <h2>
+        Empowering Teachers,
+        <span class="accent">Inspiring Futures</span>
+      </h2>
+
+      <!-- Names only what is behind the sign-in. Wording is the user's. -->
+      <p>
+        Manage institutions, classrooms, programmes and STEM clubs from one place.
+      </p>
+
+      <!-- Chips, matching the production hero's row. One line each, so the
+           summaries in HERO_MODULES are deliberately not rendered.
+
+           The icon carries meaning the word alone does not at a glance, and it is
+           the SAME icon the sidebar uses for that section, so the chip previews
+           where the teacher will end up. -->
+      <ul class="hero-modules">
+        @for (module of heroModules; track module.name) {
+          <li class="hero-module">
+            <app-icon [name]="module.icon" [size]="15" />
+            {{ module.name }}
+          </li>
+        }
+      </ul>
+    </div>
+
+  </section>
+
+</div>

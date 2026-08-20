@@ -1,0 +1,294 @@
+<!-- Top-right, above the fields, exactly where step 1 puts its own toggle. -->
+<div class="bulk-row">
+  <span class="toggle-label" id="bulk-teachers-label">Bulk Upload Teachers</span>
+  <button
+    type="button"
+    class="switch"
+    role="switch"
+    aria-labelledby="bulk-teachers-label"
+    [attr.aria-checked]="bulkUpload()"
+    [class.is-on]="bulkUpload()"
+    (click)="toggleBulkUpload()"
+  >
+    <span class="switch-knob"></span>
+  </button>
+</div>
+
+@if (bulkUpload()) {
+
+  <div class="step-stub">
+    <span class="stub-icon"><app-icon name="download" [size]="24" /></span>
+    <h2>Bulk upload</h2>
+    <p>
+      Importing a spreadsheet of teachers is not wired up yet. Switch
+      <strong>Bulk Upload Teachers</strong> off to enter them one at a time.
+    </p>
+  </div>
+
+} @else {
+
+  <fieldset class="entry">
+
+    <!-- Phone and Email share a row, as in the reference. -->
+    <div class="field-row">
+
+      <div class="field">
+        <label for="tc-phone">Phone <span class="req" aria-hidden="true">*</span></label>
+        <!-- The dial code is a PREFIX inside the field, not a separate control,
+             so the focus ring surrounds the whole thing. It is never folded into
+             the stored number. -->
+        <div class="phone-control">
+          <span class="phone-prefix">{{ dial() }}</span>
+          <input
+            id="tc-phone"
+            type="tel"
+            inputmode="numeric"
+            autocomplete="off"
+            placeholder="Enter valid 10 digits phone number"
+            [value]="entry().phone"
+            [class.is-error]="phoneInvalid()"
+            (blur)="markBlurred('phone')"
+            (input)="update('phone', valueOf($event))"
+          />
+        </div>
+        @if (phoneInvalid()) {
+          <span class="field-error">Enter valid 10 digits phone number</span>
+        }
+      </div>
+
+      <div class="field">
+        <label for="tc-email">Email (optional)</label>
+        <input
+          id="tc-email"
+          type="email"
+          autocomplete="off"
+          placeholder="Enter your email address"
+          [value]="entry().email"
+          [disabled]="identityLocked()"
+          [class.is-error]="emailInvalid()"
+          (blur)="markBlurred('email')"
+          (input)="update('email', valueOf($event))"
+        />
+        @if (emailInvalid()) {
+          <span class="field-error">Enter a valid email address</span>
+        }
+      </div>
+
+    </div>
+
+    <!-- The number is already on file. Said here, directly under the field that
+         caused it, rather than at the top of the card. -->
+    @if (matched(); as existing) {
+      <p class="matched" role="status">
+        <app-icon name="check-circle" [size]="15" />
+        <span>
+          <strong>{{ existing.firstName }} {{ existing.lastName }}</strong> is already
+          registered on this number.
+        </span>
+      </p>
+    }
+
+    <div class="field">
+      <label for="tc-first">First Name <span class="req" aria-hidden="true">*</span></label>
+      <input
+        id="tc-first"
+        type="text"
+        autocomplete="off"
+        placeholder="Enter your first name"
+        [value]="entry().firstName"
+        [disabled]="identityLocked()"
+        [class.is-error]="missing('firstName')"
+        (blur)="markBlurred('firstName')"
+        (input)="update('firstName', valueOf($event))"
+      />
+      @if (missing('firstName')) {
+        <span class="field-error">First name is required</span>
+      }
+    </div>
+
+    <div class="field">
+      <label for="tc-last">Last Name <span class="req" aria-hidden="true">*</span></label>
+      <input
+        id="tc-last"
+        type="text"
+        autocomplete="off"
+        placeholder="Enter your last name"
+        [value]="entry().lastName"
+        [disabled]="identityLocked()"
+        [class.is-error]="missing('lastName')"
+        (blur)="markBlurred('lastName')"
+        (input)="update('lastName', valueOf($event))"
+      />
+      @if (missing('lastName')) {
+        <span class="field-error">Last name is required</span>
+      }
+    </div>
+
+    <div class="field">
+      <label for="tc-role">Teacher Role</label>
+      <!-- SELECTS BIND [selected] ON THE OPTIONS, not [value] on the <select>:
+           [value] is discarded while @for is still building the option list. -->
+      <select id="tc-role" [disabled]="identityLocked()" (change)="update('role', valueOf($event))">
+        @for (option of roles(); track option) {
+          <option [value]="option" [selected]="option === entry().role">{{ option }}</option>
+        }
+      </select>
+    </div>
+
+    <!-- ==================================================================
+         The classes this teacher takes.
+
+         ONE ROW PER CLASS, and the ⊕ below adds another. Every row but the
+         last is COMMITTED: read-only, with a bin to remove it, exactly as the
+         reference draws them.
+         ================================================================== -->
+    @for (row of classes(); track $index) {
+
+      <div class="class-row" [class.is-locked]="locked($index)">
+
+        <div class="field">
+          <label [attr.for]="'tc-grade-' + $index">
+            Grade
+            @if (!locked($index)) {
+              <span class="req" aria-hidden="true">*</span>
+            }
+          </label>
+          <select
+            [id]="'tc-grade-' + $index"
+            [disabled]="locked($index) || identityLocked()"
+            [class.is-error]="missingClass($index, 'grade')"
+            (blur)="markBlurred($index + '.grade')"
+            (change)="updateClass($index, 'grade', valueOf($event))"
+          >
+            <option value="" [selected]="!row.grade">Select</option>
+            @for (option of grades(); track option) {
+              <option [value]="option" [selected]="option === row.grade">
+                {{ gradeLabel(option) }}
+              </option>
+            }
+          </select>
+          @if (missingClass($index, 'grade')) {
+            <span class="field-error">Grade is required</span>
+          }
+        </div>
+
+        <div class="field">
+          <label [attr.for]="'tc-section-' + $index">
+            Section
+            @if (!locked($index)) {
+              <span class="req" aria-hidden="true">*</span>
+            }
+          </label>
+          <select
+            [id]="'tc-section-' + $index"
+            [disabled]="locked($index) || identityLocked()"
+            [class.is-error]="missingClass($index, 'section')"
+            (blur)="markBlurred($index + '.section')"
+            (change)="updateClass($index, 'section', valueOf($event))"
+          >
+            <option value="" [selected]="!row.section">Select</option>
+            @for (option of sections(); track option) {
+              <option [value]="option" [selected]="option === row.section">{{ option }}</option>
+            }
+          </select>
+          @if (missingClass($index, 'section')) {
+            <span class="field-error">Section is required</span>
+          }
+        </div>
+
+        <div class="field field-wide">
+          <label [attr.for]="'tc-programme-' + $index">
+            Programme
+            @if (!locked($index)) {
+              <span class="req" aria-hidden="true">*</span>
+            }
+          </label>
+          <select
+            [id]="'tc-programme-' + $index"
+            [disabled]="locked($index) || identityLocked() || programmes().length === 0"
+            [class.is-error]="missingClass($index, 'programmeId')"
+            (blur)="markBlurred($index + '.programmeId')"
+            (change)="updateClass($index, 'programmeId', valueOf($event))"
+          >
+            <option value="" [selected]="!row.programmeId"></option>
+            @for (option of programmes(); track option.id) {
+              <option [value]="option.id" [selected]="option.id === row.programmeId">
+                {{ option.name }}
+              </option>
+            }
+          </select>
+          @if (missingClass($index, 'programmeId')) {
+            <span class="field-error">Programme is required</span>
+          }
+        </div>
+
+        <!-- HIDDEN WHILE THERE IS ONLY ONE ROW. A teacher must take at least one
+             class, so on a lone row the bin has nothing to remove — it could only
+             clear the fields, which is not what a bin means. It appears as soon as
+             the ⊕ has produced a second row.
+
+             The grid keeps its fourth column either way, so the three controls do
+             not change width when the bin arrives. -->
+        @if (count() > 1) {
+          <button
+            type="button"
+            class="class-remove"
+            (click)="removeClass($index)"
+            [attr.aria-label]="'Remove class ' + ($index + 1)"
+          >
+            <app-icon name="trash" [size]="18" />
+          </button>
+        }
+
+      </div>
+
+    }
+
+    @if (programmes().length === 0) {
+      <span class="field-hint is-warn">
+        This institution has no live programmes yet. Create one under
+        <strong>Programme</strong> before assigning teachers to a class.
+      </span>
+    }
+
+  </fieldset>
+
+  <!-- Bottom-right, as in the reference. Adds a CLASS row, not a teacher, so it
+       is an icon button and not a worded action.
+
+       IT IS ALSO WHAT REVEALS THE FIRST ROW: no class controls are shown until it
+       is pressed, so the label has to read for that case too. -->
+  <!-- WITHDRAWN for a teacher who already exists: there is nothing to add to a
+       form that cannot be edited. -->
+  @if (canAddClass()) {
+    <div class="add-row">
+      <button
+        type="button"
+        class="add-entry"
+        (click)="addClass()"
+        [attr.aria-label]="count() === 0 ? 'Add a class' : 'Add another class'"
+      >
+        <app-icon name="plus-circle" [size]="26" />
+      </button>
+    </div>
+  }
+
+  <div class="entry-foot">
+    <!-- Dead until the teacher and their classes are complete, matching the
+         reference and step 1's Continue. Fields explain themselves on blur. -->
+    <button
+      type="button"
+      class="btn btn-primary"
+      [disabled]="saving() || !canSubmit()"
+      (click)="submit()"
+    >
+      @if (saving()) {
+        <span class="spinner"></span>
+        Saving
+      } @else {
+        Submit
+      }
+    </button>
+  </div>
+
+}

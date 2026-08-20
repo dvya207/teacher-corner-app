@@ -1,0 +1,356 @@
+/* ==========================================================================
+   Add / Edit Learning Unit — modal form
+
+   The shell is the same rules add-classroom.css and add-programme.css use. The
+   modals in this app sit one click apart and any drift between them reads as a
+   bug rather than as variety.
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 100%);
+  max-height: min(860px, calc(100dvh - 48px));
+  border-radius: var(--radius-dialog);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+  overflow: hidden;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 16px;
+}
+
+.modal-head h2 {
+  font-size: 21px;
+  color: var(--ink-900);
+}
+
+.modal-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--slate-100);
+  color: var(--slate-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.modal-close:hover {
+  background: var(--ink-200);
+  color: var(--ink-900);
+}
+
+.modal-body {
+  flex: 1;
+  padding: 4px 26px 22px;
+  overflow-y: auto;
+}
+
+.modal-error {
+  margin-bottom: 16px;
+  padding: 11px 14px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--on-red);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.modal-body select,
+.modal-body textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.modal-body select {
+  appearance: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5l5-5' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 38px;
+  cursor: pointer;
+}
+
+.modal-body textarea {
+  resize: vertical;
+  min-height: 84px;
+  line-height: 1.55;
+}
+
+.modal-body select:focus,
+.modal-body textarea:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+.field-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.optional {
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-400);
+}
+
+/* ==========================================================================
+   Disabled fields — the progressive unlock made visible
+   ==========================================================================
+   The form enables its fields in order, so at any moment several are inert. They
+   are dimmed rather than hidden: a field that appears as the previous one is
+   filled makes the modal jump and reflow under the cursor, while a visibly
+   locked field tells the user the order without a sentence explaining it. */
+
+.modal-body input:disabled,
+.modal-body select:disabled,
+.modal-body textarea:disabled {
+  border-color: var(--ink-200);
+  background: var(--slate-100);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.modal-body select:disabled {
+  /* The chevron would still read as "openable" at full strength. */
+  opacity: 0.72;
+}
+
+/* ---- Warnings on a field ------------------------------------------------- */
+
+.field-hint.is-warn {
+  color: var(--on-red);
+}
+
+/* The icon sits on the first line and the copy flows as one block beside it, so
+   a two-line hint indents under itself rather than wrapping beneath the icon.
+   align-items is flex-start, not center: centring a one-line icon against
+   two lines of text pushes it out of line with the first. */
+.field-hint.is-locked {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--accent-600);
+}
+
+.field-hint.is-locked app-icon {
+  /* Optical alignment with the cap height of the first line. */
+  margin-top: 3px;
+}
+
+.field-hint.is-locked strong {
+  font-weight: 700;
+}
+
+.field input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+/* ==========================================================================
+   Input with a trailing action — the pencil
+   ==========================================================================
+   Version Number and Display Name are filled in for the user and unlocked by a
+   deliberate click, which is production's arrangement. The button sits INSIDE
+   the field's border rather than beside it, so the pair reads as one control and
+   the row does not gain a second column that the grid would then have to size. */
+
+.input-with-action {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-action input {
+  padding-right: 44px;
+}
+
+.input-action {
+  position: absolute;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-400);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.input-action:hover {
+  background: var(--slate-100);
+  color: var(--ink-900);
+}
+
+/* On, i.e. unlocked. The accent is the same signal production uses — it turns
+   the pencil blue while the field is editable. */
+.input-action.is-on {
+  background: var(--tint-blue);
+  color: var(--accent-500);
+}
+
+/* ==========================================================================
+   Existing-unit suggestions
+   ==========================================================================
+   The "or Version" route. A plain absolutely-positioned list rather than a
+   combobox widget: it is chosen with the mouse from at most eight rows, and the
+   input remains a normal text field for the case where none of them is wanted. */
+
+.field-suggest {
+  position: relative;
+}
+
+.suggest-list {
+  position: absolute;
+  top: calc(100% - 12px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  max-height: 244px;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-dialog);
+  list-style: none;
+  overflow-y: auto;
+}
+
+.suggest-row {
+  display: block;
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+  color: var(--ink-900);
+  transition: background 0.12s var(--ease);
+}
+
+.suggest-row:hover {
+  background: var(--slate-100);
+}
+
+/* ==========================================================================
+   Grouped sections
+   ==========================================================================
+   Categorisation is seven fields nobody fills in, and Details is three the Add
+   dialog does not ask for. Both need a boundary, or they read as more things to
+   type. */
+
+.field-group {
+  margin: 4px 0 18px;
+  padding: 16px 16px 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--slate-100);
+}
+
+.field-group legend {
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+
+.legend-note {
+  margin-left: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+
+/* A disabled fieldset dims its contents in every browser; the rules above give
+   the individual controls the same treatment, and this stops the legend being
+   dimmed with them — it is a heading, not an input. */
+.field-group:disabled legend {
+  color: var(--label);
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 26px 22px;
+  border-top: 1px solid var(--border);
+}
+
+.save-btn {
+  min-width: 180px;
+}
+
+.btn-primary:disabled {
+  background: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.req {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 620px) {
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .modal-card {
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

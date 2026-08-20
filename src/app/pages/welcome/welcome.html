@@ -1,0 +1,36 @@
+<div class="welcome-page">
+
+  <!-- The centred block. The footer below is pinned to the bottom of the page
+       instead of sitting at the end of this stack, so it does not pull the
+       block off centre. -->
+  <div class="welcome-block animate-fade-up">
+
+    <app-logo class="brand" variant="light" [size]="40" />
+
+    <p class="eyebrow">Welcome to</p>
+
+    <h1>ThinkTac Teacher Corner</h1>
+
+    <p class="tagline">ThinkTac &bull; Empowering STEM Educators</p>
+
+    <span class="rule" aria-hidden="true"></span>
+
+    <!-- The only announced element on the page. Everything above is decorative
+         branding, and a screen reader user needs to know the app is working
+         rather than finished. -->
+    <p class="loading" role="status">
+      <span class="dots" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </span>
+      <span class="sr-only">Loading Teacher Corner</span>
+    </p>
+
+  </div>
+
+  <p class="footer" aria-hidden="true">
+    <span>Learn</span>
+    <span>Explore</span>
+    <span>Create</span>
+  </p>
+
+</div>

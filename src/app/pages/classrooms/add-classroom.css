@@ -1,0 +1,389 @@
+/* ==========================================================================
+   Add Classroom — modal form
+
+   The shell (overlay, card, head, body, foot) is deliberately identical to
+   add-institution.css. The two modals sit one click apart in the same app and
+   any drift between them reads as a bug rather than as variety.
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 100%);
+  /* Caps the card at the viewport so the footer stays reachable; the body
+     scrolls inside rather than the whole page scrolling behind the overlay. */
+  max-height: min(860px, calc(100dvh - 48px));
+  border-radius: var(--radius-dialog);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+  overflow: hidden;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 14px;
+}
+
+.modal-head h2 {
+  font-size: 21px;
+  color: var(--ink-900);
+}
+
+.modal-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--slate-100);
+  color: var(--slate-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.modal-close:hover {
+  background: var(--ink-200);
+  color: var(--ink-900);
+}
+
+.modal-body {
+  flex: 1;
+  padding: 6px 26px 22px;
+  overflow-y: auto;
+}
+
+/* Save failure, rendered INSIDE the modal. On the page behind it, it would sit
+   under the overlay where nobody can see it — which makes a failed Create look
+   like a button that silently did nothing. */
+.modal-error {
+  margin-bottom: 16px;
+  padding: 11px 14px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--on-red);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Match selects to inputs — a bare <select> keeps the platform's own border
+   and height, which is visibly shorter than .field input. */
+.modal-body select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  appearance: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5l5-5' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 38px;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.modal-body select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Locked controls -----------------------------------------------------
+   A field that has not unlocked yet is greyed rather than hidden. Hiding it
+   would make the form appear to grow as it is filled, and there would be no
+   way to see what is still coming. */
+
+.modal-body select:disabled,
+.modal-body input:disabled {
+  background-color: var(--ink-050);
+  border-color: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.modal-body select:disabled {
+  opacity: 1;
+}
+
+/* ---- Board + Search row -------------------------------------------------- */
+
+.search-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  /* Aligns with the select beside it, which sits below its own label. */
+  margin-top: 25px;
+  min-width: 132px;
+  padding: 12px 18px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.search-btn:hover:not(:disabled) {
+  border-color: var(--accent-400);
+  color: var(--accent-600);
+}
+
+.search-btn:disabled {
+  background: var(--ink-050);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+/* ---- Hints --------------------------------------------------------------- */
+
+.field-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.field-hint.is-warn {
+  color: var(--on-amber);
+}
+
+.optional {
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-400);
+}
+
+.chosen-count {
+  margin-left: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-600);
+}
+
+/* ---- Programme picker ----------------------------------------------------
+   A checkable list rather than <select multiple>, which needs ctrl-clicking to
+   choose more than one and shows about four rows before it scrolls. */
+
+.picker {
+  max-height: 210px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  overflow-y: auto;
+}
+
+/* The locked state mimics a placeholder select, so the field reads the same as
+   its neighbours before it opens. */
+.picker.is-locked {
+  padding: 12px 14px;
+  background: var(--ink-050);
+  border-color: var(--ink-200);
+  font-size: 14px;
+  color: var(--ink-400);
+}
+
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ink-100);
+  text-align: left;
+  transition: background 0.12s var(--ease);
+}
+
+.picker-row:last-child {
+  border-bottom: none;
+}
+
+.picker-row:hover {
+  background: var(--ink-050);
+}
+
+.picker-row.is-selected {
+  background: var(--tint-blue);
+}
+
+.picker-check {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: 1px solid var(--ink-300);
+  border-radius: 5px;
+  background: var(--white);
+  color: var(--white);
+  transition: background 0.12s var(--ease), border-color 0.12s var(--ease);
+}
+
+.picker-row.is-selected .picker-check {
+  border-color: var(--accent-600);
+  background: var(--accent-600);
+}
+
+.picker-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.picker-copy strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.picker-copy span {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.picker-empty {
+  padding: 22px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---- Inline programme creation ------------------------------------------- */
+
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 6px 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-600);
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.new-programme {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px dashed var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+}
+
+.new-programme-note {
+  margin: -6px 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.new-programme-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 26px 22px;
+  border-top: 1px solid var(--border);
+}
+
+.create-btn {
+  min-width: 168px;
+}
+
+.btn-primary:disabled {
+  background: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.req {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 620px) {
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .modal-card {
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .search-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .search-btn {
+    margin-top: 0;
+    margin-bottom: 18px;
+    width: 100%;
+  }
+}
+
+/* A group heading that titles the checkable list rather than one control. Styled
+   as .field > label is in styles.css, because it plays the same visual role. */
+.field-label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  /* Matches a real .field > label. */
+  color: var(--label);
+}

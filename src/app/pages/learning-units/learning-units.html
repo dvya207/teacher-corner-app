@@ -1,0 +1,433 @@
+<header class="page-head">
+  <div class="page-head-copy">
+    <h1>Learning Units</h1>
+    <p>Manage all learning units, descriptions, resources and version changes</p>
+  </div>
+
+  <div class="page-head-actions">
+    <button type="button" class="add-btn" (click)="openAdd()">
+      <app-icon name="plus-circle" [size]="18" />
+      Add
+    </button>
+
+    <button
+      type="button"
+      class="export-btn"
+      [disabled]="exporting()"
+      (click)="exportWorkbook()"
+    >
+      <app-icon name="download" [size]="17" />
+      {{ exporting() ? 'Exporting…' : 'Export' }}
+    </button>
+
+    <button type="button" class="trash-btn" (click)="openTrash()">
+      <app-icon name="trash" [size]="17" />
+      Trash
+    </button>
+  </div>
+</header>
+
+@if (!statsHidden()) {
+  <section class="stat-cards">
+    <div class="stat-card">
+      <span class="sc-icon sc-total"><app-icon name="book" [size]="20" /></span>
+      <span class="sc-copy">
+        <strong>{{ totalCount() }}</strong>
+        <span>Total LUs</span>
+      </span>
+    </div>
+
+    <div class="stat-card">
+      <span class="sc-icon sc-live"><app-icon name="check" [size]="20" /></span>
+      <span class="sc-copy">
+        <strong>{{ liveCount() }}</strong>
+        <span>Live</span>
+      </span>
+    </div>
+
+    <div class="stat-card">
+      <span class="sc-icon sc-draft"><app-icon name="clipboard" [size]="20" /></span>
+      <span class="sc-copy">
+        <strong>{{ draftCount() }}</strong>
+        <span>Draft / Other</span>
+      </span>
+    </div>
+  </section>
+}
+
+@if (error()) {
+  <div class="load-error" role="alert">
+    <strong>Learning units unavailable.</strong>
+    {{ error() }}
+  </div>
+}
+
+@if (notice()) {
+  <div class="toast" role="status">
+    <span class="toast-icon"><app-icon name="check-circle" [size]="18" /></span>
+    {{ notice() }}
+    <button type="button" class="toast-close" (click)="dismissNotice()" aria-label="Dismiss">
+      <app-icon name="close" [size]="14" />
+    </button>
+  </div>
+}
+
+<section class="table-panel">
+
+  <div class="table-toolbar">
+    <div class="filter-pills">
+      @for (filter of filters; track filter) {
+        <button
+          type="button"
+          class="pill"
+          [class.is-active]="activeFilter() === filter"
+          (click)="setFilter(filter)"
+        >
+          {{ filter }}
+        </button>
+      }
+    </div>
+
+    <div class="toolbar-right">
+      <span class="loaded-count">
+        Loaded {{ filtered().length }} of {{ totalCount() }} entries
+      </span>
+
+      <button type="button" class="hide-btn" (click)="toggleStats()">
+        <app-icon [name]="statsHidden() ? 'eye' : 'eye-off'" [size]="15" />
+        {{ statsHidden() ? 'Show' : 'Hide' }} Stats
+      </button>
+
+      <!-- Cards or rows. A segmented pair rather than two separate buttons, so
+           which one is active is legible without reading a tooltip. -->
+      <div class="view-toggle" role="group" aria-label="View">
+        <button
+          type="button"
+          class="vt-btn"
+          [class.is-on]="view() === 'card'"
+          [attr.aria-pressed]="view() === 'card'"
+          aria-label="Card view"
+          title="Card view"
+          (click)="setView('card')"
+        >
+          <app-icon name="grid" [size]="16" />
+        </button>
+
+        <button
+          type="button"
+          class="vt-btn"
+          [class.is-on]="view() === 'list'"
+          [attr.aria-pressed]="view() === 'list'"
+          aria-label="List view"
+          title="List view"
+          (click)="setView('list')"
+        >
+          <app-icon name="list" [size]="16" />
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================
+       CARD VIEW
+       ====================================================================== -->
+  @if (view() === 'card') {
+    @if (filtered().length > 0) {
+      <div class="lu-grid">
+        @for (unit of filtered(); track unit.docId; let i = $index) {
+          <article class="lu-card" [class.is-busy]="busyRow() === unit.docId">
+            <div class="card-banner" [style.background]="cardGradient(unit, i)">
+              <span class="card-banner-code">{{ unit.learningUnitCode || '—' }}</span>
+
+              <!-- Actions on hover, and on focus — a keyboard user reaches these
+                   by tabbing, at which point hover has never fired. -->
+              <div class="card-actions">
+                <button
+                  type="button"
+                  class="card-act"
+                  aria-label="Edit"
+                  title="Edit"
+                  (click)="openEdit(unit)"
+                >
+                  <app-icon name="edit" [size]="15" />
+                </button>
+
+                <button
+                  type="button"
+                  class="card-act is-danger"
+                  aria-label="Move to Trash"
+                  title="Move to Trash"
+                  (click)="moveToTrash(unit)"
+                >
+                  <app-icon name="trash" [size]="15" />
+                </button>
+              </div>
+            </div>
+
+            <div class="card-body">
+              <span class="card-code">{{ unit.learningUnitCode || '—' }}</span>
+              <h3 class="card-name" [title]="title(unit)">{{ title(unit) }}</h3>
+
+              <div class="card-badges">
+                @if (unit.version) {
+                  <span class="cb cb-ver">{{ unit.version }}</span>
+                }
+                @if (unit.isoCode) {
+                  <span class="cb cb-lang">{{ unit.isoCode }}</span>
+                }
+                <span class="cb cb-status" [class.is-live]="isLive(unit)">
+                  {{ statusLabel(unit) }}
+                </span>
+              </div>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  } @else {
+
+    <!-- ====================================================================
+         LIST VIEW
+         ==================================================================== -->
+    <div class="table-scroll">
+      <table class="lu-table">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th class="col-name">Display Name</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Language</th>
+            <th>Version</th>
+            <th>Status</th>
+            <th>Maturity</th>
+            <th>Domain</th>
+            <th>Sub-Domain</th>
+            <th>Subject</th>
+            <th class="col-centre">Difficulty</th>
+            <th>Time</th>
+            <th>Owner</th>
+            <th>Created</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          @for (unit of filtered(); track unit.docId) {
+            <tr [class.is-busy]="busyRow() === unit.docId">
+              <td class="cell-code">{{ unit.learningUnitCode || '—' }}</td>
+
+              <td class="col-name" [title]="title(unit)">{{ title(unit) }}</td>
+
+              <td class="truncate" [title]="unit.learningUnitName">{{ unit.learningUnitName }}</td>
+
+              <td class="nowrap">{{ unit.type || '—' }}</td>
+
+              <td class="nowrap">{{ languageLabel(unit) }}</td>
+
+              <td class="cell-mono">{{ unit.version || '—' }}</td>
+
+              <td>
+                <span class="status-badge" [class.is-active]="isLive(unit)">
+                  {{ statusLabel(unit) }}
+                </span>
+              </td>
+
+              <td class="nowrap">{{ unit.Maturity || '—' }}</td>
+
+              <td class="truncate">{{ unit.domainName || '—' }}</td>
+              <td class="truncate">{{ unit.subDomainName || '—' }}</td>
+              <td class="truncate">{{ unit.subjectName || '—' }}</td>
+
+              <td class="col-centre">{{ unit.difficultyLevel || '—' }}</td>
+
+              <td class="nowrap cell-muted">{{ timeLabel(unit) }}</td>
+
+              <td class="truncate cell-muted">{{ unit.tacOwnerName || '—' }}</td>
+
+              <td class="nowrap cell-muted">
+                {{ toDate(unit.createdAt) ? (toDate(unit.createdAt) | date: 'dd/MM/yy') : '—' }}
+              </td>
+
+              <td class="col-actions">
+                <button
+                  type="button"
+                  class="row-btn"
+                  aria-label="Edit"
+                  title="Edit"
+                  (click)="openEdit(unit)"
+                >
+                  <app-icon name="edit" [size]="16" />
+                </button>
+
+                <button
+                  type="button"
+                  class="row-btn is-danger"
+                  aria-label="Move to Trash"
+                  title="Move to Trash"
+                  (click)="moveToTrash(unit)"
+                >
+                  <app-icon name="trash" [size]="16" />
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <!-- One empty / loading state for both views, outside the branch above so the
+       wording does not have to be written twice. -->
+  @if (loading()) {
+    <div class="table-state">Loading learning units…</div>
+  } @else if (filtered().length === 0) {
+    <div class="table-state">
+      @if (error()) {
+        Nothing could be loaded.
+      } @else if (units().length === 0) {
+        No learning units yet. Use <strong>Add</strong> to create one.
+      } @else {
+        No learning units match this filter.
+      }
+    </div>
+  }
+</section>
+
+<!-- One modal for both create and edit: a learning unit is the same flat form
+     either way, so two components would be the same markup twice.
+
+     `units` and `trashedUnits` are what let it offer the existing units as
+     suggestions and work out the next version number — both need the whole
+     collection, which this page has already loaded. -->
+@if (form() !== null) {
+  <app-learning-unit-form
+    [unit]="editingUnit()"
+    [units]="units()"
+    [trashedUnits]="trashed()"
+    [saving]="saving()"
+    [error]="modalError()"
+    (closed)="closeForm()"
+    (submitted)="submitForm($event)"
+  />
+}
+
+<!-- ======================================================================
+     Trash — full-screen overlay
+     ====================================================================== -->
+@if (trashOpen()) {
+  <div class="trash-overlay animate-fade-up">
+
+    <header class="trash-head">
+      <h2>
+        Deleted Learning Units
+        <span class="trash-count">{{ trashed().length }}</span>
+      </h2>
+
+      <div class="trash-head-actions">
+        <button
+          type="button"
+          class="empty-btn"
+          [class.is-confirming]="confirmingEmpty()"
+          [disabled]="trashed().length === 0 || busyRow() === '__all__'"
+          (click)="emptyTrash()"
+        >
+          <app-icon name="trash" [size]="16" />
+          @if (busyRow() === '__all__') {
+            Emptying...
+          } @else if (confirmingEmpty()) {
+            Confirm — delete {{ trashed().length }} permanently
+          } @else {
+            Empty Trash
+          }
+        </button>
+
+        <button type="button" class="trash-close" (click)="closeTrash()" aria-label="Close">
+          <app-icon name="close" [size]="19" />
+        </button>
+      </div>
+    </header>
+
+    <div class="trash-body">
+      @if (trashLoading()) {
+        <div class="trash-state">Loading Trash…</div>
+      } @else if (trashError()) {
+        <div class="trash-state is-error" role="alert">{{ trashError() }}</div>
+      } @else if (trashed().length > 0) {
+        <table class="lu-table trash-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th class="col-name">Name</th>
+              <th>Version</th>
+              <th>Status</th>
+              <th>Owner</th>
+              <th>Deleted Date</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            @for (unit of trashed(); track unit.docId) {
+              <tr [class.is-busy]="busyRow() === unit.docId">
+                <td class="cell-code">{{ unit.learningUnitCode || '—' }}</td>
+
+                <!-- Name over display name, as production's trash renders it:
+                     what was deleted is identified by its internal name first. -->
+                <td class="col-name">
+                  <span class="cell-title">{{ unit.learningUnitName || title(unit) }}</span>
+                  @if (unit.learningUnitDisplayName) {
+                    <span class="cell-sub">{{ unit.learningUnitDisplayName }}</span>
+                  }
+                </td>
+
+                <td class="cell-mono">{{ unit.version || '—' }}</td>
+
+                <td>
+                  <span class="status-badge" [class.is-active]="isLive(unit)">
+                    {{ statusLabel(unit) }}
+                  </span>
+                </td>
+
+                <td class="truncate cell-muted">{{ unit.tacOwnerName || '—' }}</td>
+
+                <td class="deleted-date">
+                  {{ toDate(unit.trashAt) ? (toDate(unit.trashAt) | date: 'dd/MM/yyyy') : '—' }}
+                </td>
+
+                <td class="col-actions">
+                  <button
+                    type="button"
+                    class="row-btn is-boxed"
+                    aria-label="Restore"
+                    title="Restore"
+                    (click)="restore(unit)"
+                  >
+                    <app-icon name="restore" [size]="15" />
+                  </button>
+
+                  <button
+                    type="button"
+                    class="row-btn is-boxed is-danger"
+                    aria-label="Delete permanently"
+                    title="Delete permanently"
+                    (click)="purge(unit)"
+                  >
+                    <app-icon name="trash" [size]="15" />
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <div class="trash-empty">
+          <span class="trash-empty-icon"><app-icon name="trash" [size]="26" /></span>
+          <h3>No learning units in trash</h3>
+          <p>Deleted learning units will appear here, and can be restored.</p>
+        </div>
+      }
+    </div>
+
+  </div>
+}

@@ -1,0 +1,803 @@
+/* ==========================================================================
+   App shell — fixed sidebar, sticky topbar, scrolling content.
+   ========================================================================== */
+
+.shell {
+  display: flex;
+  min-height: 100dvh;
+  background: var(--page-bg);
+}
+
+/* ==========================================================================
+   Sidebar
+   ========================================================================== */
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-w);
+  height: 100dvh;
+  padding: 16px 12px;
+  /* FLAT, not a gradient, and #272B66: classy.component.scss sets exactly that
+     on .fuse-vertical-navigation-wrapper. The value this had was sampled from a
+     screenshot as #330268 from top to
+     bottom; the gradient this replaced ran to --brand-950 and read as two
+     different colours on a tall screen — #3f0068 at the top against #2a0045 at
+     the bottom, which also drifted magenta as it darkened. */
+  background: var(--brand-900);
+  color: rgba(255, 255, 255, 0.82);
+  /* Only width animates. Animating the whole element would drag the nav
+     labels through a repaint on every frame of the collapse. */
+  transition: width 0.22s var(--ease);
+}
+
+.shell.is-collapsed .sidebar {
+  width: var(--sidebar-w-collapsed);
+}
+
+/* ---- Head ---------------------------------------------------------------- */
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 20px;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.collapse-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  color: rgba(255, 255, 255, 0.6);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease),
+              rotate 0.22s var(--ease);
+}
+
+.collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--white);
+}
+
+/* The chevron points the way it will move the panel, so the control reads the
+   same in both states without needing a second icon. */
+.shell.is-collapsed .collapse-btn {
+  rotate: 180deg;
+}
+
+/* ---- Nav ----------------------------------------------------------------- */
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.nav-section {
+  margin: 20px 0 7px;
+  padding: 0 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  /* #169CD8, which classy.component.scss sets on its navigation group titles,
+     at the same 11px / 700 / 0.06em. It was #75abe4, sampled from a screenshot,
+     and before that a 38%
+     white, which greyed out against the violet; the reference tints it blue,
+     tying the section headings to the active pill. */
+  color: var(--accent-500);
+  white-space: nowrap;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  /* classy.component.scss tints nav icons rgba(203,213,225,.7). */
+  color: rgba(203, 213, 225, 0.7);
+  white-space: nowrap;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--white);
+}
+
+/* routerLinkActive writes this class. The exact-match option is deliberately
+   not used: a future /classrooms/:id should keep Classrooms lit. */
+.nav-item.is-active {
+  /* --accent-500 = #169CD8, which classy.component.scss sets on the active
+     navigation item. The darker step sits too
+     close to the navy behind it to read as a selection at all. */
+  background: var(--accent-500);
+  color: var(--white);
+  font-weight: 600;
+  /* classy.component.scss: 0 2px 8px rgba(22,156,216,.35) on the active item. */
+  box-shadow: 0 2px 8px rgba(22, 156, 216, 0.35);
+}
+/* ---- Collapsed state -----------------------------------------------------
+   Labels are hidden with width/opacity rather than display:none, so the text
+   fades out as the panel narrows instead of vanishing on frame one. Each item
+   keeps its title attribute, which becomes the only label at this width.
+
+   The logo is NOT narrowed here. It is an <img> inside the Logo component, so
+   it swaps to the square mark-only asset via [compact] in the template rather
+   than being restyled from this file. */
+
+.shell.is-collapsed .nav-label {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 76px cannot hold the mark and the chevron side by side: they compete for the
+   same row and the mark gets clipped to a sliver. Stack them instead. */
+.shell.is-collapsed .sidebar-head {
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 18px;
+}
+
+.shell.is-collapsed .sidebar-brand {
+  flex-shrink: 0;
+}
+
+.nav-label {
+  transition: opacity 0.15s var(--ease);
+}
+
+.shell.is-collapsed .nav-item {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.shell.is-collapsed .nav-section {
+  /* The heading has no icon to fall back on, so it becomes a rule instead of
+     truncated text. */
+  height: 1px;
+  margin: 16px 10px 12px;
+  padding: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.14);
+  color: transparent;
+}
+
+/* ==========================================================================
+   Main column
+   ========================================================================== */
+
+.main {
+  flex: 1;
+  min-width: 0;
+  margin-left: var(--sidebar-w);
+  transition: margin-left 0.22s var(--ease);
+}
+
+.shell.is-collapsed .main {
+  margin-left: var(--sidebar-w-collapsed);
+}
+
+/* ---- Topbar -------------------------------------------------------------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: var(--topbar-h);
+  padding: 0 26px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.breadcrumb a {
+  color: var(--text-muted);
+  transition: color 0.15s var(--ease);
+}
+
+.breadcrumb a:hover {
+  color: var(--accent-600);
+}
+
+.crumb-sep {
+  color: var(--ink-300);
+}
+
+.crumb-current {
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.topbar-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* Centres the field in the bar regardless of how wide the breadcrumb and
+     the actions happen to be. */
+  flex: 1;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.search-icon {
+  position: absolute;
+  left: 16px;
+  display: flex;
+  color: var(--ink-400);
+  pointer-events: none;
+}
+
+.topbar-search input {
+  width: 100%;
+  /* 40px tall, matching the reference's 39px measured field. */
+  padding: 10px 16px 10px 42px;
+  /* --ink-300, the sampled #ccd3e2. NOT --border: the reference gives the search
+     field a visibly stronger edge than its cards, which is what stops the field
+     disappearing into the white topbar. */
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-full);
+  background: var(--ink-050);
+  font-size: 14px;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease),
+              box-shadow 0.15s var(--ease);
+}
+
+.topbar-search input:focus {
+  outline: none;
+  background: var(--white);
+  border-color: var(--accent-500);
+  /* The same ring every other field in the app uses. This was a violet literal
+     from the old palette that matched nothing after the recolour. */
+  box-shadow: var(--focus-ring);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.icon-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.icon-btn:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.icon-btn .dot {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+/* ---- User menu ----------------------------------------------------------- */
+
+.user-menu {
+  position: relative;
+}
+
+.user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 9px 5px 5px;
+  border-radius: var(--radius-full);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease);
+}
+
+.user-trigger:hover {
+  background: var(--ink-100);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-600), var(--accent-400));
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--white);
+}
+
+.user-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.user-text strong {
+  font-size: 13.5px;
+  color: var(--ink-900);
+}
+
+.user-role {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* ---- Topbar popovers -----------------------------------------------------
+   One shared shell for the notifications panel and the user menu, so they
+   cannot drift apart in radius, shadow or offset. */
+
+.popover-host {
+  position: relative;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 40;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: fade-up 0.15s var(--ease) both;
+}
+
+/* ---- Notifications panel ------------------------------------------------- */
+
+.notifications-panel {
+  width: min(360px, calc(100vw - 32px));
+}
+
+.np-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  /* Runs from the real navy to the real accent — #272B66 to #169CD8 — rather
+     than between the two screenshot-sampled values it used, which were
+     exactly --brand-900 to --accent-500 across the 135deg diagonal. The
+     gradient this replaced ran brand-900 to brand-700, violet to violet, so it
+     read as one flat purple block with none of the reference's blue fall-off. */
+  background: linear-gradient(135deg, var(--brand-900) 0%, var(--accent-500) 100%);
+  color: var(--white);
+}
+
+.np-head-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.np-head-copy strong {
+  font-size: 15px;
+}
+
+.np-head-copy span {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.np-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--white);
+  transition: background 0.15s var(--ease);
+}
+
+.np-mark:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.np-mark:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.np-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 38px 26px 42px;
+  text-align: center;
+}
+
+.np-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  background: var(--ink-100);
+  color: var(--ink-400);
+}
+
+.np-empty h3 {
+  font-size: 17px;
+  color: var(--ink-900);
+}
+
+.np-empty p {
+  max-width: 250px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.np-list {
+  max-height: 340px;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.np-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+}
+
+/* Which module the event came from, at a glance: a feed mixing institutions,
+   classrooms and programmes is unreadable as three identical rows of text. */
+.np-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--tint-blue);
+  color: var(--on-blue);
+}
+
+.np-icon[data-module='classroom'] {
+  background: var(--tint-green);
+  color: var(--on-green);
+}
+
+.np-icon[data-module='programme'] {
+  background: var(--tint-amber);
+  color: var(--on-amber);
+}
+
+.np-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.np-item strong {
+  font-size: 13.5px;
+  color: var(--ink-900);
+}
+
+.np-copy span {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.np-item.is-unread {
+  background: var(--tint-blue);
+}
+
+/* ---- User dropdown ------------------------------------------------------- */
+
+.user-dropdown {
+  width: min(300px, calc(100vw - 32px));
+}
+
+.ud-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  /* Runs from the real navy to the real accent — #272B66 to #169CD8 — rather
+     than between the two screenshot-sampled values it used, which were
+     exactly --brand-900 to --accent-500 across the 135deg diagonal. The
+     gradient this replaced ran brand-900 to brand-700, violet to violet, so it
+     read as one flat purple block with none of the reference's blue fall-off. */
+  background: linear-gradient(135deg, var(--brand-900) 0%, var(--accent-500) 100%);
+  color: var(--white);
+}
+
+.avatar-lg {
+  width: 42px;
+  height: 42px;
+  font-size: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+}
+
+.ud-head-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.ud-head-copy > strong {
+  font-size: 15px;
+}
+
+.ud-head-copy > span {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* An email can be longer than the panel; truncate rather than widen it. */
+.ud-identity {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ud-item {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--ink-100);
+  text-align: left;
+  transition: background 0.15s var(--ease);
+}
+
+.ud-item:hover {
+  background: var(--ink-050);
+}
+
+.ud-item-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  /* Production's $accent-light. An opaque tint
+     rather than an alpha over white: the reference's is opaque, and a
+     translucent one would darken if the panel ever sat on anything but white. */
+  background: var(--tint-blue);
+  color: var(--accent-500);
+}
+
+.ud-item-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.ud-item-copy strong {
+  font-size: 13.5px;
+  color: var(--ink-900);
+}
+
+.ud-item-copy span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ud-item.is-danger .ud-item-icon {
+  /* Production's $error-bg. */
+  background: var(--tint-red);
+  color: var(--danger);
+}
+
+.ud-item.is-danger:hover {
+  background: var(--tint-red);
+}
+
+/* Production's $error. The neutral --text-muted the other rows use reads as a
+   different kind of row here; the reference carries the red through both lines. */
+.ud-item.is-danger .ud-item-copy span {
+  color: var(--danger);
+}
+
+.ud-item.is-danger .ud-item-copy strong {
+  /* Production's $error, which is --danger. */
+  color: var(--danger);
+}
+
+.ud-foot {
+  padding: 11px 16px;
+  /* #f8fafc is --ink-050 exactly, which the reference's footer already matched. */
+  background: var(--ink-050);
+  font-size: 11.5px;
+  text-align: center;
+  /* Production's $text-tertiary, which is --ink-400. */
+  color: var(--ink-400);
+}
+
+/* ---- Content ------------------------------------------------------------- */
+
+.content {
+  padding: 26px;
+  /* The topbar is 64px; this keeps a full-height page from forcing a scrollbar
+     over content that already fits. */
+  min-height: calc(100dvh - var(--topbar-h));
+}
+
+/* ==========================================================================
+   Drawer trigger — hidden until the sidebar becomes an overlay
+   ========================================================================== */
+
+.drawer-btn {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 38px;
+  height: 38px;
+  padding: 0 8px;
+  border-radius: var(--radius-md);
+}
+
+.drawer-btn span {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ink-700);
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  background: var(--overlay);
+}
+
+/* ==========================================================================
+   Responsive
+
+   Below 900px the sidebar leaves the flow and slides in over the content. The
+   collapsed/expanded desktop state is irrelevant at this width, so the drawer
+   always opens at full width regardless of .is-collapsed.
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  /* CAPPED as a drawer, so the panel can never cover the whole screen: with no
+     page edge showing there is nothing to tap to dismiss and no cue that this is
+     an overlay rather than the entire app. At the current 260px the cap only
+     engages below a ~310px viewport, but it also means --sidebar-w can be
+     widened again without breaking the drawer. */
+  .sidebar {
+    translate: -100% 0;
+    width: min(var(--sidebar-w), 84vw);
+    transition: translate 0.22s var(--ease);
+  }
+
+  .shell.drawer-open .sidebar,
+  .shell.is-collapsed.drawer-open .sidebar {
+    translate: 0 0;
+    width: min(var(--sidebar-w), 84vw);
+  }
+
+  /* Undo the collapsed treatment inside the drawer: at this width there is
+     room for labels, and icon-only navigation with no tooltips on touch is
+     unusable. */
+  .shell.is-collapsed .nav-label {
+    width: auto;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .shell.is-collapsed .nav-item {
+    justify-content: flex-start;
+    padding-inline: 12px;
+  }
+
+  .shell.is-collapsed .sidebar-head {
+    flex-direction: row;
+    gap: 8px;
+    padding-bottom: 20px;
+  }
+
+  .shell.is-collapsed .nav-section {
+    height: auto;
+    margin: 20px 0 7px;
+    padding: 0 12px;
+    background: none;
+    color: rgba(255, 255, 255, 0.38);
+  }
+
+  .collapse-btn {
+    display: none;
+  }
+
+  .main,
+  .shell.is-collapsed .main {
+    margin-left: 0;
+  }
+
+  .drawer-btn {
+    display: flex;
+  }
+
+  .topbar {
+    gap: 12px;
+    padding: 0 16px;
+  }
+
+  /* The search field would squeeze the breadcrumb and the user menu into
+     nothing at this width. */
+  .topbar-search {
+    display: none;
+  }
+
+  .content {
+    padding: 18px 16px;
+  }
+}
+
+@media (max-width: 560px) {
+  .breadcrumb a,
+  .crumb-sep {
+    display: none;
+  }
+
+  .user-text {
+    display: none;
+  }
+}

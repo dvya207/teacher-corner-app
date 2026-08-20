@@ -1,0 +1,25 @@
+{
+  "//": "LOCAL DEV ONLY. Never used for a deploy: firebase.json is the deploy config and this file is passed explicitly with --config. Kept separate from firebase.emulator.json because that one is what `npm run test:rules` loads, and adding a functions block there would start the Functions emulator for every rules-test run.",
+
+  "functions": [
+    {
+      "source": "functions-otp",
+      "codebase": "tcdev-otp"
+    }
+  ],
+
+  "firestore": {
+    "//": "The NAMED database the functions write to. The emulator honours the id, so OTPVerifications lands in 'teacher-corner-dev' locally exactly as it would in the cloud.",
+    "database": "teacher-corner-dev",
+    "rules": "firestore.rules"
+  },
+
+  "emulators": {
+    "//": "Auth is here because verifyOtp mints a CUSTOM TOKEN. A token minted by the emulator's Admin SDK is only accepted by the Auth emulator, so signInWithCustomToken needs it or the last step of the flow fails.",
+    "auth": { "port": 9099, "host": "127.0.0.1" },
+    "functions": { "port": 5001, "host": "127.0.0.1" },
+    "firestore": { "port": 8080, "host": "127.0.0.1" },
+    "ui": { "enabled": true, "port": 4001 },
+    "singleProjectMode": true
+  }
+}

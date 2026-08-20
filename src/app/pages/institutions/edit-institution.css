@@ -1,0 +1,328 @@
+/* ==========================================================================
+   Edit Institution — tabbed modal
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+}
+
+.edit-card {
+  display: flex;
+  flex-direction: column;
+  width: min(1080px, 100%);
+  max-height: calc(100dvh - 48px);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+  overflow: hidden;
+}
+
+.edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 26px 16px;
+}
+
+.edit-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-title app-icon {
+  color: var(--accent-600);
+}
+
+.modal-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--slate-100);
+  color: var(--slate-500);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.modal-close:hover {
+  background: var(--ink-200);
+  color: var(--ink-900);
+}
+
+/* ---- Tabs ----------------------------------------------------------------
+   Scroll horizontally rather than wrapping: six pills on two lines push the
+   form down and make the modal feel like it has two headers. */
+
+.edit-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 26px 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.edit-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.edit-tab {
+  flex-shrink: 0;
+  padding: 9px 18px;
+  /* Reserved so the active pill's ring cannot shift the row by a pixel when it
+     moves from tab to tab. */
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.edit-tab:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+/* An OUTLINED pill, as the reference draws it: tinted fill, blue text and a
+   1px blue ring. The ring is what makes the active tab read as selected rather
+   than merely tinted. */
+.edit-tab.is-active {
+  background: var(--tint-blue);
+  border: 1px solid var(--accent-300);
+  color: var(--accent-500);
+  font-weight: 600;
+}
+
+/* ---- Body ---------------------------------------------------------------- */
+
+.edit-body {
+  flex: 1;
+  padding: 6px 26px 22px;
+  border-top: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 26px;
+  padding-top: 18px;
+}
+
+.span-2 {
+  grid-column: 1 / -1;
+  max-width: calc(50% - 13px);
+}
+
+.board-pane {
+  padding-top: 18px;
+}
+
+.req {
+  color: var(--danger);
+}
+
+/* Nothing to override any more: the global .field > label carries the
+   reference's dark violet, so this modal, the classroom modal and every wizard
+   label the same way. */
+.edit-body .field > label {
+  font-weight: 600;
+}
+
+.control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.control-icon {
+  position: absolute;
+  left: 13px;
+  display: flex;
+  color: var(--ink-400);
+  pointer-events: none;
+}
+
+.control input {
+  width: 100%;
+  padding: 12px 14px 12px 40px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.control input:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
+}
+
+/* The document id. Editable-looking but not editable — changing it would mean
+   a different document, not a renamed one. */
+.control input[readonly] {
+  background: var(--ink-050);
+  color: var(--ink-400);
+  padding-left: 14px;
+}
+
+.edit-body select {
+  width: 100%;
+  padding: 12px 38px 12px 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  appearance: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5l5-5' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+/* A select sitting in the icon slot needs room for the icon on the left, the
+   same as an input does. The right-hand padding already clears the chevron. */
+.control select {
+  padding-left: 42px;
+}
+
+.edit-body select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
+}
+
+/* Customer School carries a red/green state marker in the reference. Drawn as
+   a left border rather than an extra element, so the control stays one node. */
+select.with-state[data-state='no'] {
+  border-left: 4px solid var(--danger);
+}
+
+select.with-state[data-state='yes'] {
+  border-left: 4px solid var(--success);
+}
+
+/* A real button. It replaced a decorative span that carried pointer-events:none,
+   so it could never have been clicked despite looking like a copy affordance. */
+.control-copy {
+  position: absolute;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-400);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.control-copy:hover {
+  background: var(--ink-100);
+  color: var(--ink-700);
+}
+
+.control:has(.control-copy) input {
+  padding-right: 42px;
+}
+
+/* Shown only when the clipboard could not be reached. */
+.field-note {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--ink-500);
+  word-break: break-all;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+
+.edit-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 16px 26px 22px;
+  border-top: 1px solid var(--border);
+}
+
+.save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 150px;
+  justify-content: center;
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  /* The same primary ramp as .btn-primary: accent-500 base, sampled off the
+     reference's Save Changes, with the darker shades for hover and pressed. */
+  background: var(--accent-500);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--white);
+  transition: background 0.15s var(--ease), transform 0.12s var(--ease);
+}
+
+.save-btn:hover:not(:disabled) {
+  background: var(--accent-600);
+}
+
+.save-btn:active:not(:disabled) {
+  background: var(--accent-800);
+  transform: translateY(1px);
+}
+
+.save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 780px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .span-2 {
+    max-width: none;
+  }
+
+  .edit-card {
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .modal-overlay {
+    padding: 0;
+  }
+}
+
+/* A failed save's message, in the footer beside Save Changes rather than on the
+   page behind the overlay, where it could not be seen. */
+.edit-error {
+  flex: 1;
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--danger);
+}

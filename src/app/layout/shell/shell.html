@@ -1,0 +1,221 @@
+<div class="shell" [class.is-collapsed]="collapsed()" [class.drawer-open]="drawerOpen()">
+
+  <!-- Backdrop for the mobile drawer. Only rendered when the drawer is open,
+       so it cannot swallow clicks on desktop. -->
+  @if (drawerOpen()) {
+    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+    <div class="drawer-backdrop" (click)="toggleDrawer()"></div>
+  }
+
+  <!-- ====================================================================
+       Sidebar
+       ==================================================================== -->
+  <aside class="sidebar">
+
+    <div class="sidebar-head">
+      <a class="sidebar-brand" routerLink="/dashboard" aria-label="TeacherCorner home">
+        <!-- The mobile drawer un-collapses visually, so the full lockup comes
+             back there even when the desktop state is collapsed.
+             alt="" because the anchor above already carries an aria-label. -->
+        <app-logo
+          variant="light"
+          [size]="28"
+          [compact]="collapsed() && !drawerOpen()"
+          alt=""
+        />
+      </a>
+
+      <button
+        type="button"
+        class="collapse-btn"
+        (click)="toggleCollapsed()"
+        [attr.aria-label]="collapsed() ? 'Expand sidebar' : 'Collapse sidebar'"
+        [attr.aria-expanded]="!collapsed()"
+      >
+        <app-icon name="chevron-left" [size]="18" />
+      </button>
+    </div>
+
+    <nav class="sidebar-nav">
+
+      @for (item of primaryNav; track item.path) {
+        <a
+          class="nav-item"
+          [routerLink]="item.path"
+          routerLinkActive="is-active"
+          [title]="item.label"
+        >
+          <app-icon [name]="item.icon" [size]="19" />
+          <span class="nav-label">{{ item.label }}</span>
+        </a>
+      }
+
+      <p class="nav-section">Admin</p>
+
+      @for (item of adminNav; track item.path) {
+        <a
+          class="nav-item"
+          [routerLink]="item.path"
+          routerLinkActive="is-active"
+          [title]="item.label"
+        >
+          <app-icon [name]="item.icon" [size]="19" />
+          <span class="nav-label">{{ item.label }}</span>
+        </a>
+      }
+
+    </nav>
+
+    <!-- No Log out here. It lives in the topbar user menu, which is the only
+         place it needs to be; a second copy pinned to the sidebar foot was
+         removed on instruction. -->
+
+  </aside>
+
+  <!-- ====================================================================
+       Main column
+       ==================================================================== -->
+  <div class="main">
+
+    <header class="topbar">
+
+      <!-- Mobile-only drawer trigger. Hidden by CSS above the breakpoint
+           rather than removed, so no layout shift on resize. -->
+      <button type="button" class="drawer-btn" (click)="toggleDrawer()" aria-label="Open navigation">
+        <span></span><span></span><span></span>
+      </button>
+
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a routerLink="/dashboard">{{ crumbRoot() }}</a>
+        <span class="crumb-sep" aria-hidden="true">›</span>
+        <span class="crumb-current" aria-current="page">{{ pageTitle() }}</span>
+      </nav>
+
+      <div class="topbar-search">
+        <span class="search-icon"><app-icon name="search" [size]="17" /></span>
+        <input type="search" [attr.placeholder]="searchPlaceholder()" aria-label="Search" [(ngModel)]="searchQuery" />
+      </div>
+
+      <div class="topbar-actions">
+
+        <div class="popover-host">
+          <button
+            type="button"
+            class="icon-btn"
+            aria-label="Notifications"
+            (click)="toggleNotifications()"
+            [attr.aria-expanded]="notificationsOpen()"
+          >
+            <app-icon name="bell" [size]="19" />
+            @if (unreadCount() > 0) {
+              <span class="dot" aria-hidden="true"></span>
+            }
+          </button>
+
+          @if (notificationsOpen()) {
+            <div class="popover notifications-panel">
+              <div class="np-head">
+                <span class="np-head-copy">
+                  <strong>Notifications</strong>
+                  <span>{{ unreadCount() > 0 ? unreadCount() + ' unread' : "You're all caught up" }}</span>
+                </span>
+
+                <button
+                  type="button"
+                  class="np-mark"
+                  (click)="markAllRead()"
+                  [disabled]="unreadCount() === 0"
+                >
+                  <app-icon name="check-mail" [size]="15" />
+                  Mark all read
+                </button>
+              </div>
+
+              @if (notifications().length === 0) {
+                <div class="np-empty">
+                  <span class="np-empty-icon"><app-icon name="bell" [size]="26" /></span>
+                  <h3>No notifications</h3>
+                  <p>When you have notifications, they will appear here.</p>
+                </div>
+              } @else {
+                <ul class="np-list">
+                  @for (note of notifications(); track note.id) {
+                    <li class="np-item" [class.is-unread]="!note.read">
+                      <span class="np-icon" [attr.data-module]="note.module">
+                        <app-icon [name]="moduleIcon(note.module)" [size]="15" />
+                      </span>
+                      <span class="np-copy">
+                        <strong>{{ note.title }}</strong>
+                        <span>{{ note.description }}</span>
+                      </span>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="popover-host user-menu">
+          <button
+            type="button"
+            class="user-trigger"
+            (click)="toggleUserMenu()"
+            [attr.aria-expanded]="userMenuOpen()"
+          >
+            <span class="avatar">{{ displayInitials().toUpperCase() }}</span>
+            <span class="user-text">
+              <strong>{{ displayName() }}</strong>
+              <span class="user-role">{{ userRole }}</span>
+            </span>
+            <app-icon name="chevron-down" [size]="15" />
+          </button>
+
+          @if (userMenuOpen()) {
+            <div class="popover user-dropdown">
+
+              <div class="ud-head">
+                <span class="avatar avatar-lg">{{ displayInitials().toUpperCase() }}</span>
+                <span class="ud-head-copy">
+                  <strong>{{ displayName() }}</strong>
+                  <span>Signed in as</span>
+                  <span class="ud-identity">{{ userIdentity }}</span>
+                </span>
+              </div>
+
+              <button type="button" class="ud-item" (click)="editProfile()">
+                <span class="ud-item-icon"><app-icon name="edit" [size]="17" /></span>
+                <span class="ud-item-copy">
+                  <strong>Edit Profile</strong>
+                  <span>Update your personal details</span>
+                </span>
+              </button>
+
+              <button type="button" class="ud-item is-danger" (click)="logout()">
+                <span class="ud-item-icon"><app-icon name="logout" [size]="17" /></span>
+                <span class="ud-item-copy">
+                  <strong>Sign out</strong>
+                  <span>End your current session</span>
+                </span>
+              </button>
+
+              <p class="ud-foot">Teacher Corner</p>
+            </div>
+          }
+        </div>
+
+      </div>
+    </header>
+
+    <main class="content">
+      <router-outlet />
+    </main>
+
+  </div>
+
+@if (profileOpen()) {
+  <app-update-profile
+    (closed)="closeProfile()"
+    (saved)="onProfileSaved($event)"
+  />
+}

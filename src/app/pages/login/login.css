@@ -1,0 +1,564 @@
+/* ==========================================================================
+   Sign-in — split layout: white form panel left, purple hero right.
+   ========================================================================== */
+
+.login-layout {
+  display: grid;
+  /* 29%, measured off the reference, where the form takes 538 of 1852px. The
+     minmax floor stops it collapsing on a narrow window; the hero absorbs all
+     spare width so the form never stretches on an ultrawide monitor. */
+  grid-template-columns: minmax(420px, 29%) 1fr;
+  min-height: 100dvh;
+}
+
+/* ==========================================================================
+   Left — form panel
+   ========================================================================== */
+
+.form-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 48px;
+  background: var(--white);
+  /* A tall viewport centres the card; a short one scrolls from the top rather
+     than clipping the Google button off the bottom. */
+  overflow-y: auto;
+}
+
+.form-inner {
+  width: 100%;
+  max-width: 380px;
+}
+
+.brand {
+  display: block;
+  margin-bottom: 54px;
+}
+
+.eyebrow {
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--accent-500);
+}
+
+.form-inner h1 {
+  font-size: 27px;
+  color: var(--ink-900);
+}
+
+.subtitle {
+  margin: 9px 0 28px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Setup banner, shown only while environment.ts holds placeholders. */
+.notice {
+  margin-bottom: 22px;
+  padding: 12px 14px;
+  border: 1px solid var(--warning);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: var(--tint-amber);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--on-amber);
+}
+
+.notice strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.notice code {
+  font-size: 11.5px;
+  word-break: break-all;
+}
+
+
+/* ==========================================================================
+   Mobile number + code entry
+   ========================================================================== */
+
+/* Two controls reading as one field: a fixed prefix and the number beside it.
+   Separate boxes rather than one input with the code baked in, so the code can
+   never be edited or deleted by a teacher clearing the field. */
+.phone-row {
+  display: flex;
+  gap: 8px;
+}
+
+/* A SELECT now, not a static box, so it needs the native chrome removed and the
+   arrow redrawn — otherwise it sits a different height from the number beside it.
+   Width is fixed rather than intrinsic: a select sizes itself to its LONGEST option,
+   and "+1684" would otherwise stretch this box permanently. */
+.country {
+  flex-shrink: 0;
+  /* 76px. Sized to the SELECTED value rather than to the longest option: the closed
+     control only ever shows one code, and the common one is short (+91). A five-digit
+     code like +1684 ellipsises rather than widening the box for everybody, which is the
+     right trade when the number beside it is what wants the room. */
+  width: 82px;
+  /* padding-right must CLEAR the chevron, not merely approach it. The arrow is 14px
+     wide sitting 9px from the right edge, so it occupies the last 23px; at 19px the
+     text ran under it and "+91" collided with the glyph. */
+  padding: 12px 24px 12px 9px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink-700);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.country:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+.country:disabled {
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.phone-row input {
+  /* Overrides .field input's full width, which would push the prefix out. */
+  min-width: 0;
+  flex: 1;
+  letter-spacing: 0.02em;
+}
+
+/* ---- Code boxes ---------------------------------------------------------- */
+
+.code-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.digit {
+  /* Equal flex rather than a fixed width, so six boxes always fill the column
+     exactly and never overflow it at the 380px form width. */
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  padding: 0;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  text-align: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink-900);
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.digit:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/* A filled box reads as done at a glance, so progress across the row is
+   visible without counting characters. */
+.digit.is-filled {
+  border-color: var(--accent-300);
+  background: var(--tint-blue);
+}
+
+/* ---- Resend / change number --------------------------------------------- */
+
+.code-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  font-size: 12.5px;
+}
+
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent-600);
+  cursor: pointer;
+}
+
+.link-btn:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.link-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.resend-wait {
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   The two routes in
+   ========================================================================== */
+
+/* Blue on the left running to the hero's violet on the right, sampled across the
+   production button: #2988d6 at its left edge, #330e6e at its right. The flat
+   --accent-500 fill .btn-primary provides is the left end only, which is why the
+   button read as a plain blue bar against a violet page. */
+.send-btn {
+  height: 48px;
+  font-size: 15px;
+  background: linear-gradient(90deg, #2988d6 0%, #330e6e 100%);
+}
+
+/* .btn-primary's hover swaps `background` for a flat colour, which would drop the
+   gradient entirely. Brightness carries the state instead. */
+.send-btn:hover:not(:disabled) {
+  background: linear-gradient(90deg, #2988d6 0%, #330e6e 100%);
+  filter: brightness(1.08);
+}
+
+.send-btn:active:not(:disabled) {
+  background: linear-gradient(90deg, #2988d6 0%, #330e6e 100%);
+  filter: brightness(0.95);
+}
+
+/* Restored with the second provider. It was removed when Google was the only
+   way in, because with one route there was nothing to separate. */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 22px 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--ink-200);
+}
+
+.divider span {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* THE SECOND WAY IN, not the first: the mobile code leads. It stays white with
+   the coloured G, which is what Google's own branding requires of a sign-in
+   button, and that reads as secondary here without any extra restraint. */
+.google-btn {
+  height: 48px;
+  font-size: 15px;
+  box-shadow: var(--shadow-sm);
+}
+
+.google-btn:hover:not(:disabled) {
+  border-color: var(--accent-400);
+  box-shadow: var(--shadow-md);
+}
+
+.form-error {
+  margin-bottom: 16px;
+  padding: 11px 13px;
+  border: 1px solid var(--tint-red);
+  border-radius: var(--radius-sm);
+  background: var(--tint-red);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--on-red);
+}
+
+
+.foot {
+  margin-top: 26px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.foot strong {
+  color: var(--accent-600);
+}
+
+/* ==========================================================================
+   Right — hero panel
+   ========================================================================== */
+
+.hero-panel {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 64px;
+  overflow: hidden;
+  /* NO radial highlight. The reference has none: its green channel stays under
+     ~34 across the whole panel, which is what keeps it a deep violet rather than
+     the lilac a soft-light bloom produces.
+
+     SAMPLED, not picked. See --hero-surface in styles.css for the measurements.
+     The --brand-* ramp this used reads navy, because --brand-900 carries a green
+     channel of 43 against the reference's 0-34.
+
+     NOTE: the sign-out and welcome screens still use that ramp, so they no
+     longer match this page. Aligning them is one line each. */
+  background: var(--hero-surface);
+  color: var(--white);
+}
+
+/* ==========================================================================
+   Hero decoration.
+
+   Everything here is behind .hero-copy (z-index 1) and pointer-events:none, so
+   none of it can intercept a click meant for the form.
+   ========================================================================== */
+
+/* ---- Concentric rings --------------------------------------------------- */
+
+/* Three, not one. A single 549px ring on a flat fill read as an empty page with a
+   circle drawn on it; three at falling opacity give the panel a centre to sit in.
+   Sizes step by roughly 140px so the gaps read as deliberate rather than as a
+   near-miss. */
+.ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.ring-lg {
+  width: 549px;
+  height: 549px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.ring-md {
+  width: 410px;
+  height: 410px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ring-sm {
+  width: 272px;
+  height: 272px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ---- Soft colour, top-right and bottom-left ----------------------------- */
+
+/* Two blurred radial washes. These are what stop the fill reading as one flat
+   block: the eye needs some variation across a surface this large, and the flat
+   #25086d gives it none. Kept very low alpha, because the panel is a backdrop for
+   white text and anything stronger starts competing with the headline. */
+.deco-blob {
+  position: absolute;
+  width: 620px;
+  height: 620px;
+  border-radius: 50%;
+  filter: blur(90px);
+  pointer-events: none;
+}
+
+/* Accent blue, echoing the "Inspiring Futures" line and the Send OTP button, so
+   the colour appears twice rather than once. */
+.deco-blob--tr {
+  top: -190px;
+  right: -170px;
+  background: radial-gradient(circle, rgba(41, 134, 214, 0.30) 0%, transparent 70%);
+}
+
+/* Violet, lifting the corner furthest from the form. */
+.deco-blob--bl {
+  bottom: -220px;
+  left: -160px;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.26) 0%, transparent 70%);
+}
+
+/* ---- Dot field ---------------------------------------------------------- */
+
+/* A 22px grid of 1px dots, masked to fade out before it reaches any edge so it
+   never ends in a visible straight line. Texture at this contrast is felt rather
+   than seen, which is the intent: it should not be legible as dots. */
+.deco-dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.11) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 30%, transparent 78%);
+  pointer-events: none;
+}
+
+/* ---- Hero copy ----------------------------------------------------------- */
+
+.hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 520px;
+  text-align: center;
+}
+
+.hero-pill-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 26px;
+  padding: 7px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.09);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.hero-pill-top .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-400);
+}
+
+.hero-copy h2 {
+  /* 36.5px at the reference's 1852px page. Measured from the headline's ink
+     width: "Empowering Teachers," runs 392px there against 493px here, so this
+     was rendering about a quarter too large. */
+  font-size: clamp(30px, 1.97vw, 38px);
+  line-height: 1.18;
+}
+
+.hero-copy h2 .accent {
+  display: block;
+  /* #278edd, measured off the reference: a cyan-leaning blue, not the app's
+     --accent-400 violet-blue, which read 63,132,250 against the reference's
+     39,141,220. The same blue the sign-out and welcome screens use. */
+  color: var(--accent-500);
+}
+
+/* #ffffff8c and 15px are production's own declared values for this paragraph,
+   read from its .tt-deco-desc rule rather than sampled off a screenshot. The
+   8-digit form is kept as production writes it; 0x8c is alpha 140, so 55% white.
+   This was rgba(255,255,255,0.76), which rendered the line noticeably brighter
+   and flattened the gap between it and the headline above. */
+.hero-copy > p {
+  margin: 20px auto 0;
+  max-width: 430px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: #ffffff8c;
+}
+
+/* The three modules, as chips.
+
+   A ROW OF PILLS, matching the production hero's chip row: centred, wrapping,
+   translucent white over the violet. This replaces a left-aligned list of
+   name-over-summary rows.
+
+   The summaries are not rendered here. A chip is one line at this width, which
+   is exactly why the previous layout used two; see hero-content.ts. */
+.hero-modules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  /* Wide enough for all three chips on one row. It was 400px, which broke them
+     2 + 1 — fine when they were bare words, lopsided once each gained an icon and
+     grew about 30px. A single row of three under a two-line headline is the more
+     settled shape. */
+  max-width: 560px;
+  margin: 32px auto 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The chip's icon sits at the text's own colour and must not shrink when several
+   chips share a row. */
+.hero-module app-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.hero-module {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px 9px 14px;
+  border: 1px solid var(--hero-glass-line);
+  border-radius: var(--radius-full);
+  background: var(--hero-glass);
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--white);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Responsive
+
+   Below 1024px the hero is removed from the DOM flow entirely rather than
+   stacked under the form. It is decorative, and stacking it would put a
+   marketing headline between the user and the submit button on exactly the
+   devices with the least room for it.
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  .login-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .form-panel {
+    padding: 32px 22px;
+  }
+
+  /* Six boxes plus five gaps have to fit the narrowest phone. The gap shrinks
+     first, because reducing the box height instead makes the digits too small
+     to check against an SMS at a glance. */
+  .code-row {
+    gap: 6px;
+  }
+
+  .digit {
+    height: 48px;
+    font-size: 18px;
+  }
+
+  .brand {
+    margin-bottom: 36px;
+  }
+
+  .form-inner h1 {
+    font-size: 24px;
+  }
+}
+
+/* Short viewports: stop centring, so the top of the form stays reachable. */
+@media (max-height: 700px) {
+  .form-panel {
+    align-items: flex-start;
+  }
+
+  .brand {
+    margin-bottom: 32px;
+  }
+}

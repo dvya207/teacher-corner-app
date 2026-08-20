@@ -1,0 +1,330 @@
+/* ==========================================================================
+   Bulk Upload Schools
+
+   The row treatment, the selects and the bin are the SAME rules step 2's class
+   rows use, restated because component styles are scoped. Copied values, not
+   re-chosen ones, so the two panels cannot drift apart.
+   ========================================================================== */
+
+/* ---- The class structure -------------------------------------------------
+   The reference tints this whole block, which is what separates "the shape
+   every school gets" from "the file you are uploading" without a heading. */
+
+.bulk-classes {
+  margin-bottom: 22px;
+  padding: 18px 16px 8px;
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+}
+
+.bulk-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.3fr) 36px;
+  align-items: start;
+  gap: 12px;
+}
+
+.bulk-row + .bulk-row {
+  margin-top: 4px;
+}
+
+/* A COMMITTED ROW, greyed rather than hidden: it is part of the structure being
+   described, so it stays on screen and read-only. */
+.bulk-row.is-locked {
+  opacity: 0.72;
+}
+
+.bulk-row .field {
+  margin-bottom: 10px;
+}
+
+.req {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  appearance: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5l5-5' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+select.is-error {
+  border-color: var(--danger);
+}
+
+select:disabled {
+  background-color: var(--ink-050);
+  border-color: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+/* Sits on the controls' baseline, not the label's. */
+.bulk-remove {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 40px;
+  margin-top: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  transition: background 0.15s var(--ease);
+}
+
+.bulk-remove:hover {
+  background: var(--tint-red);
+}
+
+.bulk-remove:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.add-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 2px 0 6px;
+}
+
+.add-entry {
+  display: grid;
+  place-items: center;
+  color: var(--accent-500);
+  transition: color 0.15s var(--ease), transform 0.12s var(--ease);
+}
+
+.add-entry:hover {
+  color: var(--accent-600);
+  transform: scale(1.06);
+}
+
+.add-entry:focus-visible {
+  outline: none;
+  border-radius: 50%;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- The file ------------------------------------------------------------ */
+
+.upload-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* A LABEL WRAPPING A HIDDEN INPUT. The native control cannot be styled, and a
+   button that forwards a click to it is a second thing that can fall out of step
+   with the disabled state. */
+.file-pick {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--accent-500);
+  color: var(--white);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: background 0.15s var(--ease);
+}
+
+.file-pick:hover {
+  background: var(--accent-600);
+}
+
+.file-pick:focus-within {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.file-pick input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Greyed until a board is chosen, as in the reference. */
+.file-pick.is-disabled {
+  background: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.file-pick.has-file {
+  background: var(--accent-800);
+}
+
+.upload-btn {
+  min-width: 116px;
+}
+
+.btn-primary:disabled {
+  background: var(--ink-200);
+  color: var(--ink-400);
+}
+
+.clear-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.clear-file:hover {
+  color: var(--danger);
+}
+
+.field-hint {
+  display: block;
+  margin-top: 9px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.field-hint.is-warn {
+  margin: 4px 0 2px;
+  color: var(--on-amber);
+}
+
+.load-error {
+  margin: 12px 0 0;
+  padding: 11px 14px;
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13px;
+  color: var(--on-red);
+}
+
+/* ---- What the file holds -------------------------------------------------- */
+
+.report {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--tint-green);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--on-green);
+}
+
+.report-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+}
+
+.report-head app-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* A file that yields nothing is not good news, so it is not painted as though
+   it were. */
+.report:has(.is-bad) {
+  background: var(--tint-amber);
+  color: var(--on-amber);
+}
+
+.report-problems {
+  margin: 8px 0 0;
+  padding-left: 24px;
+}
+
+.report-problems li {
+  margin-bottom: 2px;
+}
+
+/* Said every time, because a report that lists rows looks like a receipt. */
+.report-foot {
+  margin: 9px 0 0;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.template-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-600);
+}
+
+.template-link:hover {
+  color: var(--accent-800);
+  text-decoration: underline;
+}
+
+.template-link:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--focus-ring);
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 860px) {
+  .bulk-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 36px;
+  }
+}
+
+@media (max-width: 560px) {
+  .bulk-row {
+    grid-template-columns: 1fr;
+  }
+
+  .bulk-remove {
+    justify-self: end;
+    margin: 0 0 12px;
+  }
+
+  .upload-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

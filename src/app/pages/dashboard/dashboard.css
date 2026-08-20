@@ -1,0 +1,208 @@
+/* ==========================================================================
+   Dashboard — the welcome banner and its headline counts.
+
+   The four action tiles that used to sit beneath the banner are gone, so the
+   banner IS the page. It is sized to fill the content area rather than left as
+   a strip above empty space, and its contents are centred vertically so the
+   extra height reads as deliberate composition rather than as padding.
+   ========================================================================== */
+
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  /* The shell's .content reserves the viewport minus the 64px topbar and adds
+     26px of padding on all sides. Subtracting both makes this host exactly the
+     visible area, so `flex: 1` below fills the page without overflowing it and
+     forcing a scrollbar over content that already fits. */
+  min-height: calc(100dvh - var(--topbar-h) - 52px);
+}
+
+.welcome-banner {
+  /* Takes whatever height is left after the error notice, if one renders. */
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(32px, 5vw, 64px);
+  flex-wrap: wrap;
+  padding: clamp(32px, 5vw, 60px);
+  border-radius: var(--radius-xl);
+  /* Navy into cyan, left to right: production's two base colours, #272B66 and
+     #169CD8. The radial sits on top so the left end reads as a lit corner
+     rather than flat colour. */
+  background:
+    radial-gradient(circle at 12% 0%, rgba(118, 119, 145, 0.35), transparent 46%),
+    linear-gradient(100deg, var(--brand-900) 0%, var(--accent-600) 52%, var(--accent-500) 100%);
+  color: var(--white);
+  box-shadow: 0 14px 34px rgba(39, 43, 102, 0.28);
+}
+
+.welcome-copy {
+  min-width: 0;
+}
+
+.welcome-copy h1 {
+  /* A touch larger than before: the banner is the whole page now, and the old
+     size was scaled for a strip with tiles competing beneath it. */
+  font-size: clamp(24px, 2.8vw, 36px);
+  line-height: 1.2;
+}
+
+.wave {
+  /* Emoji ignore the heading's letter-spacing and sit tight against the '!'. */
+  margin-left: 6px;
+}
+
+.welcome-sub {
+  margin-top: 10px;
+  font-size: clamp(14px, 1.2vw, 15.5px);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.banner-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--white);
+  transition: background 0.15s var(--ease), transform 0.12s var(--ease);
+}
+
+.banner-btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.banner-btn:active {
+  transform: translateY(1px);
+}
+
+.banner-btn.is-solid {
+  background: var(--white);
+  border-color: var(--white);
+  color: var(--brand-700);
+}
+
+.banner-btn.is-solid:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+/* ---- Count tiles --------------------------------------------------------- */
+
+.welcome-counts {
+  display: flex;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.count-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 122px;
+  padding: 24px 26px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.count-tile strong {
+  font-size: clamp(30px, 3vw, 38px);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.count-tile span {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* Sized to roughly one digit so the tile does not resize when the real number
+   lands, which would jog the whole banner on load. */
+.count-skeleton {
+  display: inline-block;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.22);
+  animation: count-pulse 1.3s var(--ease) infinite;
+}
+
+@keyframes count-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 0.85; }
+}
+
+/* ---- Load failure -------------------------------------------------------- */
+
+.load-error {
+  margin-top: 18px;
+  padding: 13px 16px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--on-red);
+}
+
+.load-error strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 720px) {
+  /* Below this width the banner stacks, so filling the viewport would stretch
+     it past what its content justifies. It sizes to its content instead. */
+  :host {
+    min-height: 0;
+  }
+
+  .welcome-banner {
+    flex: 0 0 auto;
+    padding: 26px 22px;
+    gap: 24px;
+  }
+
+  /* The tiles stretch to fill the row once they are no longer beside the
+     copy, rather than huddling at the left edge. */
+  .welcome-counts {
+    width: 100%;
+  }
+
+  .count-tile {
+    flex: 1;
+    padding: 14px 16px;
+  }
+
+  .count-tile strong {
+    font-size: 25px;
+  }
+}
+
+@media (max-width: 420px) {
+  .welcome-actions .banner-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}

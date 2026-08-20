@@ -1,0 +1,289 @@
+<!-- The backdrop dismisses on click, and Escape dismisses from the keyboard —
+     bound on the host as a document listener, because a div cannot receive a
+     keydown it never has focus for. -->
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="modal-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Add a new institution"
+    (click)="$event.stopPropagation()"
+  >
+
+    <header class="modal-head">
+      <h2>Add a New Institution</h2>
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">
+        <app-icon name="close" [size]="18" />
+      </button>
+    </header>
+
+    <div class="modal-body">
+
+      @if (error()) {
+        <div class="modal-error" role="alert">{{ error() }}</div>
+      }
+
+      <!-- Country and board came from the search that found nothing. Read-only:
+           changing them would create a school that does not match the list this
+           form was opened from, so it would not appear there. -->
+      <div class="field">
+        <label for="ai-country">Select Country</label>
+        <input id="ai-country" type="text" [value]="country()" readonly />
+      </div>
+
+      <div class="field">
+        <label for="ai-board">Select Board</label>
+        <input id="ai-board" type="text" [value]="boardLabel()" readonly />
+        <span class="field-hint">Stored as <strong>{{ board() }}</strong>, the code the search was made on.</span>
+      </div>
+
+      <div class="field">
+        <label for="ai-udise">
+          School Affiliation Number or UDISE Code <span class="req" aria-hidden="true">*</span>
+        </label>
+        <input
+          id="ai-udise"
+          [disabled]="locked('udise')"
+          type="text"
+          placeholder="Enter school affiliation number or UDISE code"
+          autocomplete="off"
+          [value]="field('registrationNumber')"
+          (input)="update('registrationNumber', valueOf($event))"
+        />
+      </div>
+
+      <div class="field">
+        <label for="ai-name">School Name <span class="req" aria-hidden="true">*</span></label>
+        <input
+          id="ai-name"
+          [disabled]="locked('name')"
+          type="text"
+          placeholder="Enter the complete name of your school"
+          autocomplete="off"
+          [value]="field('institutionName')"
+          (input)="update('institutionName', valueOf($event))"
+        />
+      </div>
+
+      <div class="field">
+        <label for="ai-medium">Medium of Instruction</label>
+        <select id="ai-medium"
+          [disabled]="locked('medium')" (change)="update('medium', valueOf($event))">
+          <option value="" disabled [selected]="field('medium') === ''">Select medium of instruction</option>
+          @for (option of mediums(); track option.code) {
+            <option [value]="option.code" [selected]="option.code === field('medium')">
+              {{ option.label }}
+            </option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="ai-type">Type of school</label>
+        <select id="ai-type"
+          [disabled]="locked('type')" (change)="update('typeofSchool', valueOf($event))">
+          <option value="" disabled [selected]="field('typeofSchool') === ''">Select type of school</option>
+          @for (option of schoolTypes(); track option.value) {
+            <option [value]="option.value" [selected]="option.value === field('typeofSchool')">
+              {{ option.value }}
+            </option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="ai-gender">Boys / Girls / Co-ed</label>
+        <select id="ai-gender"
+          [disabled]="locked('gender')" (change)="update('genderType', valueOf($event))">
+          <option value="" disabled [selected]="field('genderType') === ''">Boys / Girls / Co-ed</option>
+          @for (option of genderTypes(); track option) {
+            <option [value]="option" [selected]="option === field('genderType')">{{ option }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Prefilled from the search but editable: a mistyped pincode is
+           exactly the reason the search may have found nothing. -->
+      <div class="field">
+        <label for="ai-pincode">School Pincode</label>
+        <input
+          id="ai-pincode"
+          [disabled]="locked('pincode')"
+          type="text"
+          autocomplete="off"
+          [value]="addressField('pincode')"
+          (input)="updateAddress('pincode', valueOf($event))"
+        />
+      </div>
+
+      <div class="field">
+        <label for="ai-street">Street Name</label>
+        <input
+          id="ai-street"
+          [disabled]="locked('street')"
+          type="text"
+          placeholder="Enter street name"
+          autocomplete="off"
+          [value]="addressField('street')"
+          (input)="updateAddress('street', valueOf($event))"
+        />
+      </div>
+
+      <!-- production's Add form calls this "Locality Name" and stores it as
+           `village`; the edit modal labels the same field "Village Name". -->
+      <div class="field">
+        <label for="ai-locality">Locality Name</label>
+        <input
+          id="ai-locality"
+          [disabled]="locked('locality')"
+          type="text"
+          placeholder="Enter locality name"
+          autocomplete="off"
+          [value]="addressField('village')"
+          (input)="updateAddress('village', valueOf($event))"
+        />
+      </div>
+
+      <div class="field">
+        <label for="ai-landmark">Landmark</label>
+        <input
+          id="ai-landmark"
+          [disabled]="locked('landmark')"
+          type="text"
+          placeholder="Enter landmark name"
+          autocomplete="off"
+          [value]="addressField('landmark')"
+          (input)="updateAddress('landmark', valueOf($event))"
+        />
+      </div>
+
+      <div class="field">
+        <label for="ai-city">City Name</label>
+        <input
+          id="ai-city"
+          [disabled]="locked('city')"
+          type="text"
+          placeholder="Enter city name"
+          autocomplete="off"
+          [value]="addressField('city')"
+          (input)="updateAddress('city', valueOf($event))"
+        />
+      </div>
+
+      <div class="field">
+        <label for="ai-subdistrict">Sub District Name</label>
+        <input
+          id="ai-subdistrict"
+          [disabled]="locked('subdistrict')"
+          type="text"
+          placeholder="Enter sub district name"
+          autocomplete="off"
+          [value]="addressField('subDistrict')"
+          (input)="updateAddress('subDistrict', valueOf($event))"
+        />
+      </div>
+
+      <div class="field">
+        <label for="ai-district">District Name</label>
+        <input
+          id="ai-district"
+          [disabled]="locked('district')"
+          type="text"
+          placeholder="Enter district name"
+          autocomplete="off"
+          [value]="addressField('district')"
+          (input)="updateAddress('district', valueOf($event))"
+        />
+      </div>
+
+      <div class="field">
+        <label for="ai-state">State Name</label>
+        <input
+          id="ai-state"
+          [disabled]="locked('state')"
+          type="text"
+          placeholder="Enter state name"
+          autocomplete="off"
+          [value]="addressField('state')"
+          (input)="updateAddress('state', valueOf($event))"
+        />
+      </div>
+
+      <!-- The dial code is a PREFIX inside the field, not a separate control, so
+           the focus ring surrounds the whole thing. It is stored in its own
+           field and never folded into the number. -->
+      <div class="field">
+        <label for="ai-phone">School Representative Contact Number</label>
+        <div class="phone-control">
+          <span class="phone-prefix">{{ dialCode() }}</span>
+          <input
+            id="ai-phone"
+          [disabled]="locked('phone')"
+            type="tel"
+            placeholder="Enter the school representative's contact number"
+            autocomplete="off"
+            [value]="field('representativePhoneNumber')"
+            (input)="update('representativePhoneNumber', valueOf($event))"
+          />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="ai-first">
+          School Representative First Name <span class="req" aria-hidden="true">*</span>
+        </label>
+        <input
+          id="ai-first"
+          [disabled]="locked('first')"
+          type="text"
+          placeholder="Enter the school representative's first name"
+          autocomplete="off"
+          [value]="field('representativeFirstName')"
+          (input)="update('representativeFirstName', valueOf($event))"
+        />
+      </div>
+
+      <div class="field">
+        <label for="ai-last">School Representative Last Name</label>
+        <input
+          id="ai-last"
+          [disabled]="locked('last')"
+          type="text"
+          placeholder="Enter the school representative's last name"
+          autocomplete="off"
+          [value]="field('representativeLastName')"
+          (input)="update('representativeLastName', valueOf($event))"
+        />
+      </div>
+
+      <div class="field">
+        <label for="ai-email">School Representative Email</label>
+        <input
+          id="ai-email"
+          [disabled]="locked('email')"
+          type="email"
+          placeholder="Enter the school representative's email ID"
+          autocomplete="off"
+          [value]="field('representativeEmail')"
+          (input)="update('representativeEmail', valueOf($event))"
+        />
+      </div>
+
+    </div>
+
+    <footer class="modal-foot">
+      <button
+        type="button"
+        class="btn btn-primary submit-btn"
+        [disabled]="!valid() || saving()"
+        (click)="save()"
+      >
+        {{ saving() ? 'Submitting…' : 'Submit' }}
+      </button>
+    </footer>
+
+  </div>
+</div>

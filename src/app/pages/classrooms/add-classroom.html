@@ -1,0 +1,297 @@
+<!-- SELECTS BIND [selected] ON THE OPTIONS, not [value] on the <select>. [value]
+     alone is discarded while @for is still building the option list, so the
+     browser falls back to the FIRST option — which is how a form can end up
+     storing a value nobody chose. Same rule as add-institution.html. -->
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+
+  <!-- Stop the backdrop handler firing for clicks inside the card. -->
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="modal-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Add classroom"
+    (click)="$event.stopPropagation()"
+  >
+
+    <header class="modal-head">
+      <h2>Add Classroom</h2>
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">
+        <app-icon name="close" [size]="18" />
+      </button>
+    </header>
+
+    <div class="modal-body">
+
+      @if (error()) {
+        <div class="modal-error" role="alert">{{ error() }}</div>
+      }
+
+      <!-- Classroom Type — the first question, and what everything else keys
+           off. A club has no grade or section; a classroom has no club name. -->
+      <div class="field">
+        <label for="cls-type">Classroom Type <span class="req" aria-hidden="true">*</span></label>
+        <select id="cls-type"
+            [disabled]="locked('type')" (change)="setType(valueOf($event))">
+          <option value="" disabled [selected]="type() === ''">Select Classroom Type</option>
+          @for (option of types; track option.value) {
+            <option [value]="option.value" [selected]="option.value === type()">{{ option.label }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="cls-country">Country <span class="req" aria-hidden="true">*</span></label>
+        <select id="cls-country"
+            [disabled]="locked('country')" [disabled]="!countryUnlocked()" (change)="setCountry(valueOf($event))">
+          @for (name of countries(); track name) {
+            <option [value]="name" [selected]="name === country()">{{ name }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="cls-pincode">School Pincode <span class="req" aria-hidden="true">*</span></label>
+        <input
+          id="cls-pincode"
+            [disabled]="locked('pincode')"
+          type="text"
+          placeholder="Enter School Pincode"
+          autocomplete="off"
+          [value]="pincode()"
+          [disabled]="!pincodeUnlocked()"
+          (input)="setPincode(valueOf($event))"
+        />
+      </div>
+
+      <!-- Board and Search sit on one row, as in the reference: Search is what
+           turns the two answers above into a list of schools. -->
+      <div class="search-row">
+        <div class="field">
+          <label for="cls-board">Board <span class="req" aria-hidden="true">*</span></label>
+          <select id="cls-board"
+            [disabled]="locked('board')" [disabled]="!boardUnlocked()" (change)="setBoard(valueOf($event))">
+            <option value="" disabled [selected]="board() === ''">Select Board</option>
+            @for (option of boards(); track option.code) {
+              <option [value]="option.code" [selected]="option.code === board()" [title]="option.label">
+                {{ option.code }}
+              </option>
+            }
+          </select>
+        </div>
+
+        <button
+          type="button"
+          class="search-btn"
+          [disabled]="!searchUnlocked()"
+          (click)="search()"
+        >
+          <app-icon name="search" [size]="15" />
+          Search
+        </button>
+      </div>
+
+      <div class="field">
+        <label for="cls-school">School <span class="req" aria-hidden="true">*</span></label>
+        <select id="cls-school"
+            [disabled]="locked('school')" [disabled]="!schoolUnlocked()" (change)="setInstitution(valueOf($event))">
+          <option value="" disabled [selected]="institutionId() === ''">Select school from the list</option>
+          @for (school of matchingSchools(); track school.docId) {
+            <option [value]="school.docId" [selected]="school.docId === institutionId()">
+              {{ school.institutionName }}
+            </option>
+          }
+
+          <!-- Not a school: a reserved value that opens the inline form. A native
+               <select> cannot hold a button, and the reference puts this entry
+               inside the dropdown too. -->
+          @if (schoolUnlocked()) {
+            <option [value]="addInstitutionValue">+ Add a New Institution</option>
+          }
+        </select>
+
+        <!-- Three states, never conflated: not searched yet, searched and found
+             nothing, searched and found some. The way out of the empty case is
+             the "+ Add a New Institution" entry in the dropdown above — there is
+             deliberately no second button for it here, because one affordance in
+             two places is one too many. -->
+        @if (searched() && matchingSchools().length === 0) {
+          <span class="field-hint is-warn">
+            No school of yours matches board <strong>{{ board() }}</strong> at pincode
+            <strong>{{ pincode() }}</strong>.
+          </span>
+        }
+      </div>
+
+      <!-- Grade and Section, or the club's name. Never both. -->
+      @if (isClub()) {
+        <div class="field">
+          <label for="cls-club">STEM Club Name <span class="req" aria-hidden="true">*</span></label>
+          <input
+            id="cls-club"
+            [disabled]="locked('club')"
+            type="text"
+            placeholder="Enter STEM Club name"
+            autocomplete="off"
+            [value]="stemClubName()"
+            [disabled]="!detailsUnlocked()"
+            (input)="setStemClubName(valueOf($event))"
+          />
+        </div>
+      } @else {
+        <div class="field-row">
+          <div class="field">
+            <label for="cls-grade">Grade <span class="req" aria-hidden="true">*</span></label>
+            <select id="cls-grade"
+            [disabled]="locked('grade')" [disabled]="!detailsUnlocked()" (change)="setGrade(valueOf($event))">
+              <option value="" disabled [selected]="grade() === ''">Select</option>
+              @for (option of availableGrades(); track option) {
+                <option [value]="option" [selected]="option === grade()">{{ option }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="cls-section">Section <span class="req" aria-hidden="true">*</span></label>
+            <select id="cls-section"
+            [disabled]="locked('section')" [disabled]="!sectionUnlocked()" (change)="setSection(valueOf($event))">
+              <option value="" disabled [selected]="section() === ''">Select</option>
+              @for (option of availableSections(); track option) {
+                <option [value]="option" [selected]="option === section()">{{ option }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        @if (detailsUnlocked() && grade() && availableSections().length === 0) {
+          <span class="field-hint is-warn">
+            Every section of grade {{ grade() }} already exists at this school.
+          </span>
+        }
+      }
+
+      <!-- Programmes. A multi-select rendered as a checkable list rather than a
+           <select multiple>, which on most platforms requires ctrl-clicking and
+           hides everything past the fourth row. -->
+      <div class="field">
+        <!-- A <span>, not a <label>: this titles the checkable list below it
+             rather than a single control, and a label pointing at nothing is
+             what the accessibility rule catches. The list's own buttons carry
+             their state via aria-pressed. -->
+        <span class="field-label">
+          Programme <span class="req" aria-hidden="true">*</span>
+          @if (selectedCount() > 0) {
+            <span class="chosen-count">{{ selectedCount() }} selected</span>
+          }
+        </span>
+
+        @if (!programmesUnlocked()) {
+          <div class="picker is-locked">Select Programmes</div>
+        } @else {
+          <div class="picker">
+            @for (programme of availableProgrammes(); track programme.programmeId) {
+              <button
+                type="button"
+                class="picker-row"
+                [class.is-selected]="isSelected(programme.programmeId)"
+                [attr.aria-pressed]="isSelected(programme.programmeId)"
+                (click)="toggleProgramme(programme.programmeId)"
+              >
+                <span class="picker-check">
+                  @if (isSelected(programme.programmeId)) {
+                    <app-icon name="check" [size]="13" [strokeWidth]="2.4" />
+                  }
+                </span>
+                <span class="picker-copy">
+                  <strong>{{ programme.displayName }}</strong>
+                  @if (programme.programmeCode) {
+                    <span>{{ programme.programmeCode }}</span>
+                  }
+                </span>
+              </button>
+            } @empty {
+              <p class="picker-empty">
+                No live programmes for this school
+                @if (!isClub() && grade()) { at grade {{ grade() }} }.
+              </p>
+            }
+          </div>
+
+          <!-- Creating one here rather than sending the user to a Programme page
+               they would have to navigate back from, losing the form. -->
+          @if (creatingProgramme()) {
+            <div class="new-programme">
+              <div class="field">
+                <label for="np-name">Programme name</label>
+                <input
+                  id="np-name"
+                  type="text"
+                  [value]="newProgrammeName()"
+                  [placeholder]="suggestedName()"
+                  autocomplete="off"
+                  (input)="newProgrammeName.set(valueOf($event))"
+                />
+              </div>
+
+              <p class="new-programme-note">
+                The programme code is allocated automatically, in sequence.
+              </p>
+
+              <div class="new-programme-actions">
+                <button type="button" class="btn btn-ghost" (click)="cancelProgrammeForm()">Cancel</button>
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  [disabled]="!newProgrammeValid()"
+                  (click)="createProgramme()"
+                >
+                  Create programme
+                </button>
+              </div>
+            </div>
+          } @else {
+            <button type="button" class="link-btn" (click)="openProgrammeForm()">
+              <app-icon name="plus" [size]="14" />
+              New programme for this
+              @if (isClub()) { club } @else { grade }
+            </button>
+          }
+        }
+      </div>
+
+    </div>
+
+    <footer class="modal-foot">
+      <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
+      <button
+        type="button"
+        class="btn btn-primary create-btn"
+        [disabled]="!valid() || saving()"
+        (click)="save()"
+      >
+        {{ saving() ? 'Creating…' : 'Create Classroom' }}
+      </button>
+    </footer>
+
+  </div>
+</div>
+
+<!-- ======================================================================
+     Add a New Institution — NESTED inside this modal.
+
+     Rendered as a sibling so its own overlay stacks above this one: the
+     classroom form stays underneath with everything already typed, and closing
+     this returns to it rather than restarting it.
+     ====================================================================== -->
+@if (creatingInstitution()) {
+  <app-add-institution-inline
+    [country]="country()"
+    [board]="board()"
+    [pincode]="pincode()"
+    [saving]="saving()"
+    [error]="error()"
+    (closed)="closeInstitutionForm()"
+    (submitted)="requestInstitution($event)"
+  />
+}

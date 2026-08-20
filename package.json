@@ -1,0 +1,43 @@
+{
+  "name": "teacher-corner",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "build": "ng build",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test",
+    "test:isolation": "node --test tests/*.test.mjs",
+    "test:rules": "firebase emulators:exec --config firebase.emulator.json \"node --test tests/rules/*.test.mjs\"",
+    "lint": "ng lint",
+    "dev:emulators": "firebase emulators:start --config firebase.dev.json --only auth,functions,firestore --project helix-staging-india"
+  },
+  "private": true,
+  "packageManager": "npm@10.8.2",
+  "dependencies": {
+    "@angular/common": "^21.2.0",
+    "@angular/compiler": "^21.2.0",
+    "@angular/core": "^21.2.0",
+    "@angular/forms": "^21.2.0",
+    "@angular/platform-browser": "^21.2.0",
+    "@angular/router": "^21.2.0",
+    "@fontsource/inter": "^5.3.0",
+    "firebase": "^12.17.1",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^21.2.21",
+    "@angular/cli": "^21.2.21",
+    "@angular/compiler-cli": "^21.2.0",
+    "@eslint/js": "^10.0.1",
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "angular-eslint": "^21.4.0",
+    "eslint": "^10.8.1",
+    "jsdom": "^28.0.0",
+    "prettier": "^3.8.1",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.0.8"
+  }
+}

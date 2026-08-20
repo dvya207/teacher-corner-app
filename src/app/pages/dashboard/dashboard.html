@@ -1,0 +1,56 @@
+<section class="welcome-banner animate-fade-up">
+
+  <div class="welcome-copy">
+    <h1>Welcome back, {{ username }}! <span class="wave" aria-hidden="true">👋</span></h1>
+    <p class="welcome-sub">
+      {{ today | date: 'EEEE, d MMMM y' }} · Here's what's happening today
+    </p>
+
+    <div class="welcome-actions">
+      <a class="banner-btn" routerLink="/classrooms">View Classrooms</a>
+      <a class="banner-btn is-solid" routerLink="/programme">
+        <app-icon name="plus" [size]="16" />
+        New Assignment
+      </a>
+    </div>
+  </div>
+
+  <div class="welcome-counts">
+    <!-- Three states, never conflated: still loading, failed, or a real number.
+         A failed read must not render as 0 — that is a plausible-looking wrong
+         answer rather than an obvious error. -->
+    <div class="count-tile">
+      <strong>
+        @if (loading()) {
+          <span class="count-skeleton" aria-label="Loading"></span>
+        } @else if (error()) {
+          &mdash;
+        } @else {
+          {{ counts()?.institutions }}
+        }
+      </strong>
+      <span>Institutions</span>
+    </div>
+
+    <div class="count-tile">
+      <strong>
+        @if (loading()) {
+          <span class="count-skeleton" aria-label="Loading"></span>
+        } @else if (error()) {
+          &mdash;
+        } @else {
+          {{ counts()?.classrooms }}
+        }
+      </strong>
+      <span>Classrooms</span>
+    </div>
+  </div>
+
+</section>
+
+@if (error()) {
+  <div class="load-error" role="alert">
+    <strong>Dashboard counts unavailable.</strong>
+    {{ error() }}
+  </div>
+}

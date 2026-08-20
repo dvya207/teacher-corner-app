@@ -1,0 +1,404 @@
+<!-- The backdrop dismisses on click, and Escape dismisses from the keyboard —
+     bound on the host as a document listener, because a div cannot receive a
+     keydown it never has focus for. The two rules disabled below ask for a
+     keyboard equivalent on this element; the equivalent exists, it just cannot
+     live on a backdrop that is deliberately not focusable. -->
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="modal-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="isEdit() ? 'Edit learning unit' : 'Add a new learning unit or version'"
+    (click)="$event.stopPropagation()"
+  >
+
+    <header class="modal-head">
+      <h2>{{ isEdit() ? 'Edit Learning Unit' : 'Add a New Learning Unit or Version' }}</h2>
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">
+        <app-icon name="close" [size]="18" />
+      </button>
+    </header>
+
+    <div class="modal-body">
+
+      @if (error()) {
+        <div class="modal-error" role="alert">{{ error() }}</div>
+      }
+
+      <!-- ==================================================================
+           Name — and the route to "or Version"
+           ==================================================================
+           Typing here searches the units that already exist. Picking one adopts
+           its code, type and categorisation, so what gets saved is the next
+           version of that unit rather than a new one. -->
+      <div class="field field-suggest">
+        <label for="lu-name">Learning Unit Name <span class="req" aria-hidden="true">*</span></label>
+        <input
+          id="lu-name"
+          type="text"
+          placeholder="Enter the learning unit name"
+          autocomplete="off"
+          maxlength="60"
+          [value]="name()"
+          (input)="setName(valueOf($event))"
+        />
+
+        @if (suggestions().length > 0) {
+          <ul class="suggest-list" role="listbox" aria-label="Existing learning units">
+            @for (match of suggestions(); track match.docId) {
+              <li>
+                <button type="button" class="suggest-row" (click)="pickExisting(match)">
+                  {{ suggestionLabel(match) }}
+                </button>
+              </li>
+            }
+          </ul>
+        }
+
+        @if (pickedExisting()) {
+          <!-- The copy is ONE span, not bare text. The hint is a flex row so the
+               icon aligns with the first line, and flex makes every child a
+               separate item — leaving the code and the full stop after it
+               stranded on their own baselines. -->
+          <span class="field-hint is-locked">
+            <app-icon name="lock" [size]="13" />
+            <span>
+              Adding a new version of <strong>{{ code() }}</strong>. The code and
+              categorisation are inherited; pick a language to number it.
+            </span>
+          </span>
+        } @else if (!isEdit()) {
+          <span class="field-hint">
+            Start typing to add a version of an existing unit instead of a new one.
+          </span>
+        }
+      </div>
+
+      <!-- Display name. Locked after picking an existing unit, because a version
+           should carry its family's name — the pencil is the override. -->
+      <div class="field">
+        <label for="lu-display">
+          Learning Unit Display Name <span class="req" aria-hidden="true">*</span>
+        </label>
+        <div class="input-with-action">
+          <input
+            id="lu-display"
+            type="text"
+            placeholder="Enter the learning unit display name"
+            autocomplete="off"
+            [value]="displayName()"
+            [disabled]="!displayNameEnabled() || displayNameLocked()"
+            (input)="setDisplayName(valueOf($event))"
+          />
+          @if (pickedExisting()) {
+            <button
+              type="button"
+              class="input-action"
+              [class.is-on]="displayNameUnlocked()"
+              (click)="toggleDisplayNameEdit()"
+              [attr.aria-pressed]="displayNameUnlocked()"
+              aria-label="Edit the display name"
+              title="Edit the display name"
+            >
+              <app-icon name="edit" [size]="15" />
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="field-row">
+        <!-- Type. Carries a code as well as a name: the code prefixes
+             learningUnitId, so it is stored rather than derived later. -->
+        <div class="field">
+          <label for="lu-type">Learning Unit Type <span class="req" aria-hidden="true">*</span></label>
+          <select
+            id="lu-type"
+            [disabled]="!typeEnabled()"
+            (change)="setType(valueOf($event))"
+          >
+            <option value="" disabled [selected]="type() === ''">Select</option>
+            @for (option of types; track option.code) {
+              <option [value]="option.name" [selected]="option.name === type()">
+                {{ option.name }} ({{ option.code }})
+              </option>
+            }
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="lu-language">Select Language <span class="req" aria-hidden="true">*</span></label>
+          <select
+            id="lu-language"
+            [disabled]="!languageEnabled()"
+            (change)="setIsoCode(valueOf($event))"
+          >
+            <option value="" disabled [selected]="isoCode() === ''">Select a language</option>
+            @for (language of languages; track language.code) {
+              <option [value]="language.code" [selected]="language.code === isoCode()">
+                {{ language.label }} ({{ language.code }})
+              </option>
+            }
+          </select>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <!-- Code. Four characters, two letters then two digits. The letters are
+             the domain and sub-domain and are what fill everything below. -->
+        <div class="field">
+          <label for="lu-code">Learning Unit Code <span class="req" aria-hidden="true">*</span></label>
+          <input
+            id="lu-code"
+            type="text"
+            placeholder="Enter the learning unit code (CLXY)"
+            autocomplete="off"
+            maxlength="4"
+            [value]="code()"
+            [disabled]="!codeEnabled()"
+            [attr.aria-invalid]="code() !== '' && !codeValid()"
+            (input)="setCode(valueOf($event))"
+          />
+
+          @if (code() !== '' && !codeWellFormed()) {
+            <span class="field-hint is-warn">
+              Two letters then two digits, as in <strong>AE04</strong>.
+            </span>
+          } @else if (codeUnknownPair() && !codeValid()) {
+            <span class="field-hint is-warn">
+              <strong>{{ code()[0] }}{{ code()[1] }}</strong> is not a known
+              domain / sub-domain pair, so this unit cannot be categorised.
+            </span>
+          } @else if (compositeCode()) {
+            <span class="field-hint">
+              Domain <strong>{{ domainCode() }}</strong>, sub-domain
+              <strong>{{ subDomainCode() }}</strong> — categorised below.
+            </span>
+          }
+        </div>
+
+        <!-- Version. Computed per code + language + type; V10 is the first.
+             The pencil unlocks it for the rare manual correction. -->
+        <div class="field">
+          <label for="lu-version">Version Number <span class="req" aria-hidden="true">*</span></label>
+          <div class="input-with-action">
+            <input
+              id="lu-version"
+              type="text"
+              placeholder="Enter the version number"
+              autocomplete="off"
+              [value]="versionLabel()"
+              [disabled]="!versionUnlocked()"
+              (input)="setVersion(valueOf($event))"
+            />
+            <button
+              type="button"
+              class="input-action"
+              [class.is-on]="versionUnlocked()"
+              (click)="toggleVersionEdit()"
+              [attr.aria-pressed]="versionUnlocked()"
+              aria-label="Edit the version number"
+              title="Set the version number by hand"
+            >
+              <app-icon name="edit" [size]="15" />
+            </button>
+          </div>
+          @if (!versionUnlocked() && versionLabel()) {
+            <span class="field-hint">Assigned automatically. {{ learningUnitId() }}</span>
+          }
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="lu-maturity">Learning Unit Maturity <span class="req" aria-hidden="true">*</span></label>
+          <select
+            id="lu-maturity"
+            [disabled]="!maturityEnabled()"
+            (change)="setMaturity(valueOf($event))"
+          >
+            <option value="" disabled [selected]="maturity() === ''">Select maturity</option>
+            @for (level of maturities; track level) {
+              <option [value]="level" [selected]="level === maturity()">{{ level }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="lu-status">Status <span class="req" aria-hidden="true">*</span></label>
+          <select id="lu-status" (change)="setStatus(valueOf($event))">
+            <!-- A status this form does not offer is rendered as itself, so what
+                 is shown is what will be saved. -->
+            @if (unknownStatus()) {
+              <option [value]="unknownStatus()" selected>{{ unknownStatus() }}</option>
+            }
+            @for (option of statuses; track option.value) {
+              <option [value]="option.value" [selected]="option.value === status()">
+                {{ option.label }}
+              </option>
+            }
+          </select>
+        </div>
+      </div>
+
+      <!-- ==================================================================
+           Categorisation — DERIVED, never typed
+           ==================================================================
+           All seven come from the code's letter pair. They are rendered as
+           read-only selects rather than hidden so the user can see what the code
+           resolved to before saving, which is the only feedback that a mistyped
+           code was still a valid one. -->
+      <fieldset class="field-group" [disabled]="true">
+        <legend>
+          Categorisation
+          <span class="legend-note">filled from the code</span>
+        </legend>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="lu-subject-code">Subject Code</label>
+            <select id="lu-subject-code">
+              <option value="" [selected]="subjectCode() === ''">Select subject code</option>
+              @for (option of subjectCodeOptions(); track option) {
+                <option [value]="option" [selected]="option === subjectCode()">{{ option }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="lu-subject-name">Subject Name</label>
+            <select id="lu-subject-name">
+              <option value="" [selected]="subjectName() === ''">Select subject name</option>
+              @for (option of subjectNameOptions(); track option) {
+                <option [value]="option" [selected]="option === subjectName()">{{ option }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="lu-domain-code">Domain Code</label>
+            <select id="lu-domain-code">
+              <option value="" [selected]="domainCode() === ''">Select domain code</option>
+              @for (option of domainCodeOptions(); track option) {
+                <option [value]="option" [selected]="option === domainCode()">{{ option }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="lu-domain-name">Domain Name</label>
+            <select id="lu-domain-name">
+              <option value="" [selected]="domainName() === ''">Select domain name</option>
+              @for (option of domainNameOptions(); track option) {
+                <option [value]="option" [selected]="option === domainName()">{{ option }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="lu-subdomain-code">Sub-Domain Code</label>
+            <select id="lu-subdomain-code">
+              <option value="" [selected]="subDomainCode() === ''">Select sub-domain code</option>
+              @for (option of subDomainCodeOptions(); track option) {
+                <option [value]="option" [selected]="option === subDomainCode()">{{ option }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="lu-subdomain-name">Sub-Domain Name</label>
+            <select id="lu-subdomain-name">
+              <option value="" [selected]="subDomainName() === ''">Select sub-domain name</option>
+              @for (option of subDomainNameOptions(); track option) {
+                <option [value]="option" [selected]="option === subDomainName()">{{ option }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="lu-composite">Composite Code</label>
+          <input
+            id="lu-composite"
+            type="text"
+            placeholder="Composite Code"
+            [value]="compositeCode()"
+          />
+        </div>
+      </fieldset>
+
+      <!-- ==================================================================
+           Details — EDIT ONLY
+           ==================================================================
+           Production's Add dialog does not collect these; it writes '' / 0 / 45
+           and the unit's own editor fills them in afterwards. Showing them on
+           create would be three fields of parity debt for no gain, and hiding
+           them on edit would mean this app could no longer set them at all. -->
+      @if (isEdit()) {
+        <fieldset class="field-group">
+          <legend>Details</legend>
+
+          <div class="field">
+            <label for="lu-desc">Short Description</label>
+            <textarea
+              id="lu-desc"
+              rows="3"
+              placeholder="What the learner does"
+              [value]="shortDescription()"
+              (input)="setShortDescription(valueOf($event))"
+            ></textarea>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="lu-difficulty">Difficulty</label>
+              <select id="lu-difficulty" (change)="setDifficulty(valueOf($event))">
+                <option value="" disabled [selected]="difficultyLevel() === ''">Select</option>
+                @for (level of difficulties; track level) {
+                  <option [value]="level" [selected]="level === difficultyLevel()">{{ level }}</option>
+                }
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="lu-time">Total time <span class="optional">minutes</span></label>
+              <input
+                id="lu-time"
+                type="number"
+                min="0"
+                step="5"
+                autocomplete="off"
+                [value]="totalTime()"
+                (input)="setTotalTime(valueOf($event))"
+              />
+            </div>
+          </div>
+        </fieldset>
+      }
+
+    </div>
+
+    <footer class="modal-foot">
+      <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
+      <button
+        type="button"
+        class="btn btn-primary save-btn"
+        [disabled]="!valid() || !dirty() || saving()"
+        (click)="save()"
+      >
+        @if (saving()) {
+          {{ isEdit() ? 'Saving…' : 'Creating…' }}
+        } @else {
+          {{ isEdit() ? 'Save Changes' : 'Save' }}
+        }
+      </button>
+    </footer>
+
+  </div>
+</div>

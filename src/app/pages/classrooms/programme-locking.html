@@ -1,0 +1,143 @@
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="modal-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="lock-title"
+    (click)="$event.stopPropagation()"
+  >
+
+    <header class="modal-head">
+      <h2 id="lock-title">Edit locking details for this programme’s learning units</h2>
+      <button type="button" class="modal-close" aria-label="Close" (click)="close()">
+        <app-icon name="close" [size]="16" />
+      </button>
+    </header>
+
+    <div class="modal-body">
+
+      <p class="lock-context">{{ programme().displayName }}</p>
+
+      <!-- Programme-wide, so it sits above the unit tabs rather than inside one. -->
+      <div class="toggle-row">
+        <span class="toggle-label" id="seq-label">Is sequentially locked?</span>
+        <button
+          type="button"
+          class="switch"
+          role="switch"
+          aria-labelledby="seq-label"
+          [attr.aria-checked]="sequentiallyLocked()"
+          [class.is-on]="sequentiallyLocked()"
+          (click)="toggleSequential()"
+        >
+          <span class="switch-knob"></span>
+        </button>
+      </div>
+
+      @if (hasUnits()) {
+
+        <!-- One tab per learning unit, in the programme's own order. Scrolls
+             rather than wrapping: the order is the sequence, and a wrapped strip
+             reads as groups. -->
+        <div class="unit-tabs" role="tablist" aria-label="Learning units">
+          @for (unit of units(); track unit.learningUnitId; let i = $index) {
+            <button
+              type="button"
+              class="unit-tab"
+              role="tab"
+              [class.is-active]="activeIndex() === i"
+              [attr.aria-selected]="activeIndex() === i"
+              (click)="select(i)"
+            >
+              {{ unit.name }}
+            </button>
+          }
+        </div>
+
+        @if (activeRow(); as row) {
+          <div class="unit-panel" role="tabpanel">
+
+            <!-- The dates are disabled, not hidden, when the sequence is in
+                 charge: production says why in a tooltip and so does this. -->
+            <div
+              class="date-group"
+              [class.is-disabled]="sequentiallyLocked()"
+              [attr.title]="sequentiallyLocked()
+                ? 'Date unlock disabled as sequential lock is enabled'
+                : null"
+            >
+              <div class="field">
+                <label for="lock-openAt">Open At Date</label>
+                <input
+                  id="lock-openAt"
+                  type="datetime-local"
+                  [value]="row.openAt"
+                  [disabled]="sequentiallyLocked()"
+                  (input)="setOpenAt(valueOf($event))"
+                />
+              </div>
+
+              <div class="field">
+                <label for="lock-closeAt">Close At Date</label>
+                <input
+                  id="lock-closeAt"
+                  type="datetime-local"
+                  [value]="row.closeAt"
+                  [disabled]="sequentiallyLocked()"
+                  (input)="setCloseAt(valueOf($event))"
+                />
+              </div>
+
+              @if (sequentiallyLocked()) {
+                <p class="field-hint">
+                  Date unlock disabled as sequential lock is enabled.
+                </p>
+              }
+            </div>
+
+            <div class="toggle-row toggle-row-inner">
+              <span class="toggle-label" id="wf-label">Is workflow locked?</span>
+              <button
+                type="button"
+                class="switch"
+                role="switch"
+                aria-labelledby="wf-label"
+                [attr.aria-checked]="row.workflowLocked"
+                [class.is-on]="row.workflowLocked"
+                (click)="toggleWorkflowLocked()"
+              >
+                <span class="switch-knob"></span>
+              </button>
+            </div>
+
+          </div>
+        }
+
+      } @else {
+        <!-- Honest about why there is nothing here, rather than an empty strip:
+             the locks are per learning unit, and this programme has none. -->
+        <p class="lock-empty">
+          This programme has no learning units yet, so there is nothing to lock
+          per unit. The sequential lock above still applies.
+        </p>
+      }
+
+    </div>
+
+    <footer class="modal-foot">
+      <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="!dirty()"
+        [attr.title]="dirty() ? null : 'No changes to save yet'"
+        (click)="save()"
+      >
+        Save
+      </button>
+    </footer>
+
+  </div>
+</div>

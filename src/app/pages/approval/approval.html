@@ -1,0 +1,33 @@
+<div class="approval-layout">
+
+  <app-logo class="brand" [size]="34" />
+
+  <div class="notice-card animate-fade-up" role="status">
+    @if (named()) {
+      <p>
+        Your request to join the <strong>{{ classroomName() }}</strong> classroom in the
+        <strong>{{ institutionName() }}</strong> institution on ThinkTac's Teacher Corner
+        platform has been sent for approval.
+      </p>
+    } @else {
+      <!-- Same sentence without the specifics, for the moment before the profile
+           read lands or if it fails outright. -->
+      <p>
+        Your request to join ThinkTac's Teacher Corner platform has been sent for
+        approval.
+      </p>
+    }
+
+    <!-- No WhatsApp: this app sends none, and the only outbound channel wired up is
+         the OTP SMS. The second sentence is now literally true rather than a
+         promise — the page watches users/{uid} and moves on by itself. -->
+    <p>
+      You will be approved within 24 hours. You do not need to refresh this page:
+      it will take you to your dashboard as soon as your account is approved.
+    </p>
+  </div>
+
+  <!-- The only action on the page. Bottom right, matching production. -->
+  <button type="button" class="btn btn-ghost logout-btn" (click)="logout()">Logout</button>
+
+</div>

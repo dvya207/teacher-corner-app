@@ -1,0 +1,150 @@
+/* ==========================================================================
+   Sign-out confirmation — centred card on the brand purple.
+   ========================================================================== */
+
+/* Colours here are literals rather than the global tokens on purpose. This
+   page is matched pixel-for-pixel against the live teachercorner.thinktac.com
+   sign-out screen, whose palette is a deeper, more saturated violet and a
+   lighter cyan-leaning blue than this app's brand and accent scales. Editing
+   the tokens would drag every other page along with it, so the tokens are
+   left alone and only this page departs from them. */
+
+.signout-page {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 32px 20px;
+  /* No radial highlight. The reference has none — its background is a flat
+     diagonal sweep with the green channel at ~0, which is what makes it read
+     as deep violet rather than the lilac a soft-light bloom produces.
+     Over that sweep sits a dot grid: 2px dots of white at ~7.8% on a 28px
+     pitch, measured off the reference. The dots are the first layer because
+     background-image paints its first layer nearest the viewer. */
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.078) 1px, transparent 1px),
+    linear-gradient(135deg, var(--brand-900) 0%, var(--brand-950) 46%, var(--brand-800) 100%);
+  background-size: 28px 28px, auto;
+}
+
+.signout-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 52px 40px 44px;
+  /* 20px, not --radius-lg (16px): measured off the reference. */
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+  text-align: center;
+}
+
+.brand {
+  display: block;
+  margin-bottom: 27px;
+}
+
+/* ---- Confirmation mark ---------------------------------------------------
+   A mint disc with a 2px ring one step deeper than its fill, and nothing
+   outside it — the reference is clean white a pixel past the ring, so the
+   soft box-shadow halo that used to sit here does not belong.
+
+   border-box (set globally) keeps the ring inside the 68px, so the disc still
+   measures 68px across and the icon stays centred in what is left. */
+
+.check-badge {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 21px;
+  border: 2px solid #b7efdc;
+  border-radius: 50%;
+  background: var(--tint-green);
+  color: var(--on-green);
+}
+
+.signout-card h1 {
+  font-size: 26px;
+  color: var(--ink-900);
+}
+
+.subtitle {
+  margin: 7px auto 0;
+  /* Wide enough that "See you again" stays on the first line and "soon."
+     drops alone, which is how the reference breaks. At 320px "again" wraps
+     with it and the second line reads "again soon." instead. */
+  max-width: 330px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.countdown {
+  margin-top: 23px;
+  font-size: 13.5px;
+  color: var(--ink-500);
+}
+
+.countdown strong {
+  /* Tabular figures so the line does not jog sideways as the digit changes.
+     Single-digit counts here, but the rule costs nothing and survives a
+     longer countdown. */
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--accent-500);
+}
+
+/* ---- Button -------------------------------------------------------------- */
+
+.signin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 29px;
+  padding: 13px 28px;
+  /* 8px, not --radius-md (10px): measured off the reference. */
+  border-radius: 8px;
+  /* Blue into brand violet, not blue into blue. The reference's right end is
+     almost the page background, which is what gives the button its depth —
+     the previous two-blue ramp read as a flat fill at this size. */
+  background: linear-gradient(135deg, var(--accent-500), var(--brand-900));
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--white);
+  /* Fitted against the reference's falloff below the button: the old
+     0 8px 22px carried roughly twice the ink and trailed ~8px further. */
+  box-shadow: 0 7px 12px rgba(41, 140, 220, 0.25);
+  transition: filter 0.15s var(--ease), transform 0.12s var(--ease),
+              box-shadow 0.15s var(--ease);
+}
+
+.signin-btn:hover {
+  /* brightness rather than a second gradient: one declaration, and it cannot
+     drift out of step with the base colours above. */
+  filter: brightness(1.08);
+  /* Same lift as before, re-based on the resting shadow above so hover stays a
+     step up from it rather than a jump to a different blue. */
+  box-shadow: 0 9px 16px rgba(41, 140, 220, 0.32);
+}
+
+.signin-btn:active {
+  transform: translateY(1px);
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 480px) {
+  .signout-card {
+    padding: 34px 24px 30px;
+  }
+
+  .signout-card h1 {
+    font-size: 23px;
+  }
+
+  .signin-btn {
+    width: 100%;
+  }
+}

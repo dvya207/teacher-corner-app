@@ -1,0 +1,322 @@
+<!-- SELECTS BIND [selected] ON THE OPTIONS, not [value] on the <select>. [value]
+     alone is discarded while @for is still building the option list and the
+     browser falls back to the first option — which on the Country select would
+     silently store Afghanistan against a form showing India. Same reason it is
+     done this way on the Add Institution form. -->
+
+<!-- ======================================================================
+     Stepper
+     ====================================================================== -->
+<ol class="stepper">
+  @for (item of steps; track item.index) {
+    <li
+      class="step"
+      [class.is-current]="step() === item.index"
+      [class.is-done]="step() > item.index"
+      [attr.aria-current]="step() === item.index ? 'step' : null"
+    >
+      <!-- A COMPLETED step is a button; the current and unreached ones are not.
+           The reference draws a pencil on the finished step, which is an
+           invitation to go back and change it — so it is made actually
+           clickable rather than drawn as though it were. -->
+      @if (step() > item.index) {
+        <button
+          type="button"
+          class="step-hit"
+          (click)="goToStep(item.index)"
+          [attr.aria-label]="'Go back to ' + item.label"
+        >
+          <span class="step-num"><app-icon name="edit" [size]="13" [strokeWidth]="2.2" /></span>
+          <span class="step-label">{{ item.label }}</span>
+        </button>
+      } @else {
+        <span class="step-hit">
+          <span class="step-num">{{ item.index }}</span>
+          <span class="step-label">{{ item.label }}</span>
+        </span>
+      }
+    </li>
+  }
+</ol>
+
+<!-- ======================================================================
+     Step 1 — Institution Selection
+     ====================================================================== -->
+@if (step() === 1) {
+
+  <section class="wizard-card animate-fade-up">
+
+    <!-- Top-right, above the form, as in the reference. -->
+    <div class="bulk-row">
+      <span class="toggle-label" id="bulk-label">Bulk Upload Schools</span>
+      <button
+        type="button"
+        class="switch"
+        role="switch"
+        aria-labelledby="bulk-label"
+        [attr.aria-checked]="bulkUpload()"
+        [class.is-on]="bulkUpload()"
+        (click)="toggleBulkUpload()"
+      >
+        <span class="switch-knob"></span>
+      </button>
+    </div>
+
+    @if (loadError()) {
+
+      <p class="load-error" role="alert">{{ loadError() }}</p>
+
+    } @else {
+
+      <!-- Country ------------------------------------------------------- -->
+      <div class="field">
+        <label for="sw-country">Select Country</label>
+        <select
+          id="sw-country"
+          [class.is-error]="isMissing('country')"
+          [disabled]="locked('country')"
+          (blur)="markBlurred('country')"
+          (change)="setCountry(valueOf($event))"
+        >
+          <option value="" disabled [selected]="!country()">Select country</option>
+          @for (name of countries; track name) {
+            <option [value]="name" [selected]="name === country()">{{ name }}</option>
+          }
+        </select>
+        @if (isMissing('country')) {
+          <span class="field-error">{{ errorFor('country') }}</span>
+        }
+      </div>
+
+      <!-- ================================================================
+           The two modes are ALTERNATIVES. A run of the wizard either finds one
+           existing school by pincode or imports a sheet of them, so one set of
+           controls REPLACES the other rather than sitting beside it.
+           ================================================================ -->
+      @if (bulkUpload()) {
+
+        <!-- Bulk: Board comes straight after Country, because there is no
+             pincode to search with — the board applies to the whole file. -->
+        <ng-container [ngTemplateOutlet]="boardField" />
+
+        <app-bulk-upload-schools [boardChosen]="!!board()" />
+
+      } @else {
+
+      <!-- Pincode ------------------------------------------------------- -->
+        <div class="field">
+          <label for="sw-pincode">
+            Search a school from pincode <span class="req" aria-hidden="true">*</span>
+          </label>
+          <input
+            id="sw-pincode"
+            type="text"
+            inputmode="numeric"
+            autocomplete="postal-code"
+            placeholder="Enter pincode"
+            [value]="pincode()"
+            [class.is-error]="isMissing('pincode')"
+            [disabled]="locked('pincode')"
+            (blur)="markBlurred('pincode')"
+            (input)="setPincode(valueOf($event))"
+          />
+          @if (isMissing('pincode')) {
+            <span class="field-error">{{ errorFor('pincode') }}</span>
+          }
+        </div>
+
+        <ng-container [ngTemplateOutlet]="boardField" />
+
+      <!-- School -------------------------------------------------------- -->
+        <div class="field">
+          <label for="sw-school">
+            Select School <span class="req" aria-hidden="true">*</span>
+          </label>
+          <!-- NOT disabled when the search found nothing. That is precisely when
+               the teacher needs the "Add a New Institution" entry below, and a
+               disabled control would put the only way forward out of reach. -->
+          <select
+            id="sw-school"
+            [class.is-error]="isMissing('school')"
+            [disabled]="locked('school')"
+            (blur)="markBlurred('school')"
+            (change)="onSchoolChange($event)"
+          >
+            <option value="" disabled [selected]="!school()">Select School form the list</option>
+            @for (option of matchingSchools(); track option.docId) {
+              <option [value]="option.docId" [selected]="option.docId === school()">
+                {{ option.institutionName }}
+              </option>
+            }
+
+            <!-- Not a school: a reserved value that opens the inline form. A native
+                 <select> cannot hold a button, and the reference puts this entry
+                 inside the dropdown too. -->
+            @if (!locked('school')) {
+              <option [value]="addInstitutionValue">+ Add a New Institution</option>
+            }
+          </select>
+
+          @if (isMissing('school')) {
+            <span class="field-error">{{ errorFor('school') }}</span>
+          }
+
+          <!-- Three states, never conflated: not searched yet, searched and found
+               nothing, searched and found some. The way out of the empty case is
+               the entry in the dropdown above — deliberately no second button for
+               it here, because one affordance in two places is one too many. -->
+          @if (noMatches()) {
+            <span class="field-hint is-warn">
+              No institution of yours is registered at this pincode and board. Choose
+              <strong>+ Add a New Institution</strong> above to register one.
+            </span>
+          }
+        </div>
+
+        <!-- What was chosen, echoed back. A school name alone is easy to misread
+             when several branches share it, so the address confirms which one. -->
+        @if (selectedSchool(); as chosen) {
+          <p class="chosen">
+            <app-icon name="map-pin" [size]="15" />
+            {{ chosen.institutionAddress.city }}, {{ chosen.institutionAddress.state }}
+            — {{ chosen.institutionAddress.pincode }}
+          </p>
+        }
+
+      }
+
+    }
+
+    <!-- ONE DEFINITION, TWO POSITIONS. Board sits after the pincode when a single
+         school is being searched for, and immediately after Country in bulk mode
+         where there is no pincode. Declared once so the two cannot drift apart. -->
+    <ng-template #boardField>
+      <div class="field">
+        <label for="sw-board">
+          Select Board <span class="req" aria-hidden="true">*</span>
+        </label>
+        <select
+          id="sw-board"
+          [class.is-error]="isMissing('board')"
+          [disabled]="locked('board')"
+          (blur)="markBlurred('board')"
+          (change)="setBoard(valueOf($event))"
+        >
+          <option value="" disabled [selected]="!board()">Select Board</option>
+          @for (option of boards; track option.code) {
+            <option [value]="option.code" [selected]="option.code === board()">
+              {{ option.label }}
+            </option>
+          }
+        </select>
+        @if (isMissing('board')) {
+          <span class="field-error">{{ errorFor('board') }}</span>
+        }
+      </div>
+    </ng-template>
+
+    <div class="wizard-foot">
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="!canPressContinue()"
+        (click)="next()"
+      >
+        @if (loading()) {
+          <span class="spinner"></span>
+          Loading
+        } @else {
+          Continue
+        }
+      </button>
+    </div>
+
+  </section>
+
+}
+
+<!-- ======================================================================
+     Steps 2–5 — not built
+     ====================================================================== -->
+@if (step() > 1) {
+
+  <section class="wizard-card wizard-card-wide animate-fade-up">
+
+    @if (teacherError()) {
+      <p class="load-error" role="alert">{{ teacherError() }}</p>
+    }
+
+    <app-add-teachers
+      [dial]="dialCode()"
+      [saving]="savingTeachers()"
+      [programmes]="assignableProgrammes()"
+      [known]="registered()"
+      (submitted)="addTeachers($event)"
+    />
+
+  </section>
+
+  <!-- OUTSIDE the card, spanning the page, as in the reference. These move
+       between steps; the card's own Submit acts on the step's contents. Keeping
+       them apart is what stops "save these teachers" and "go to students" from
+       looking like the same button. -->
+  <nav class="step-nav">
+    <button type="button" class="btn btn-primary" (click)="back()">
+      <app-icon name="chevron-left" [size]="16" />
+      Previous Step
+    </button>
+
+    <!-- HIDDEN on the last step rather than disabled. Add Teachers is now the
+         end of the wizard, and a permanently dead button next to it reads as
+         something broken rather than as something finished. -->
+    @if (step() < steps.length) {
+      <button type="button" class="btn btn-primary" (click)="next()">
+        Next Step
+        <app-icon name="arrow-right" [size]="16" />
+      </button>
+    }
+  </nav>
+
+}
+
+<!-- ======================================================================
+     Add a New Institution — NESTED over the wizard.
+
+     Rendered last so its own overlay stacks above the page: step 1 stays
+     underneath with the search already typed, and closing this returns to it
+     rather than restarting it.
+
+     The SAME component Add Classroom opens from its own School dropdown.
+     Country and board arrive read-only because they are what the failed search
+     was made of; pincode arrives prefilled but editable, since a mistyped one is
+     the likeliest reason nothing matched.
+     ====================================================================== -->
+@if (creatingInstitution()) {
+  <app-add-institution-inline
+    [country]="country()"
+    [board]="board()"
+    [pincode]="pincode()"
+    [saving]="saving()"
+    [error]="saveError()"
+    (closed)="closeInstitutionForm()"
+    (submitted)="createInstitution($event)"
+  />
+}
+
+<!-- ======================================================================
+     Success toast.
+
+     role="status" rather than "alert": it is confirmation, and an assertive live
+     region would cut across whatever the user is reading. Fixed to the viewport
+     rather than in the flow, so it cannot shift the form underneath as it comes
+     and goes — the same treatment Institutions and Classrooms give theirs.
+     ====================================================================== -->
+@if (notice()) {
+  <div class="toast" role="status">
+    <span class="toast-icon"><app-icon name="check-circle" [size]="18" /></span>
+    {{ notice() }}
+    <button type="button" class="toast-close" (click)="dismissNotice()" aria-label="Dismiss">
+      <app-icon name="close" [size]="14" />
+    </button>
+  </div>
+}

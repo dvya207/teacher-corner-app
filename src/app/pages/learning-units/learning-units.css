@@ -1,0 +1,915 @@
+/* ==========================================================================
+   Learning Units — page head, stat cards, filter toolbar, table, trash
+
+   The fourth table built to these rules, after institutions.css,
+   classrooms.css and programme.css. Identical where the behaviour is identical,
+   on purpose: four admin tables that differ for no reason are four things to
+   learn instead of one.
+   ========================================================================== */
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.page-head-copy h1 {
+  font-size: 27px;
+  color: var(--ink-900);
+}
+
+.page-head-copy p {
+  margin-top: 5px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.page-head-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.add-btn,
+.trash-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 20px;
+  border-radius: var(--radius-md);
+  font-size: 14.5px;
+  font-weight: 600;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              transform 0.12s var(--ease);
+}
+
+.add-btn {
+  background: var(--accent-600);
+  color: var(--white);
+  box-shadow: var(--shadow-btn);
+}
+
+.add-btn:hover {
+  background: var(--accent-800);
+}
+
+.add-btn:active,
+.trash-btn:active {
+  transform: translateY(1px);
+}
+
+.trash-btn {
+  border: 1px solid var(--tint-red);
+  background: var(--white);
+  color: var(--on-red);
+}
+
+.trash-btn:hover {
+  background: var(--tint-red);
+  border-color: var(--on-red);
+}
+
+/* ---- Stat cards ---------------------------------------------------------- */
+
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  /* Tighter than the table panel below it, as measured in the reference. */
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.sc-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+}
+
+/* Blue, green, amber — the same three tints and the same order as the other
+   two pages, so a total is always blue and a warning state always amber. */
+.sc-total  { background: var(--tint-blue); color: var(--on-blue); }
+.sc-live { background: var(--tint-green); color: var(--on-green); }
+.sc-draft  { background: var(--tint-amber); color: var(--on-amber); }
+
+.sc-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.sc-copy strong {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.sc-copy > span {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---- Load failure -------------------------------------------------------- */
+
+.load-error {
+  margin-bottom: 18px;
+  padding: 13px 16px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--on-red);
+}
+
+.load-error strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* ---- Table panel --------------------------------------------------------- */
+
+.table-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+}
+
+.filter-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  padding: 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--white);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.pill:hover {
+  border-color: var(--accent-400);
+  color: var(--accent-600);
+}
+
+/* A TINTED CHIP, not a solid fill. Production's own active pill is
+   $accent-light inside a 1px $accent border with $accent text — the same recipe
+   its dialog tabs use — which reads as a selected chip rather than a button and
+   keeps a row of them from looking like four competing calls to action. This was
+   a solid fill with white text. */
+.pill.is-active {
+  background: var(--tint-blue);
+  border-color: var(--accent-500);
+  color: var(--accent-500);
+  font-weight: 600;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.loaded-count {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.hide-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease);
+}
+
+.hide-btn:hover {
+  background: var(--ink-050);
+}
+
+/* ---- Table ---------------------------------------------------------------
+   Eleven columns, so the min-width is the widest of the three tables. It
+   scrolls inside its own container rather than widening the page, which would
+   drag the sidebar and topbar with it. */
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.lu-table {
+  width: 100%;
+  min-width: 1280px;
+  border-collapse: collapse;
+}
+
+.lu-table th {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--ink-050);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  /* --ink-400, the reference's #9da1b0. Used directly rather than through
+     --text-muted: these are structural column labels, not prose, so the
+     lighter grey is safe here where it would not be for hint text. */
+  color: var(--ink-400);
+  white-space: nowrap;
+}
+
+.lu-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ink-100);
+  font-size: 13.5px;
+  color: var(--ink-700);
+  vertical-align: middle;
+}
+
+.lu-table tbody tr:hover {
+  background: var(--ink-050);
+}
+
+.lu-table tbody tr.is-busy {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.col-name {
+  max-width: 230px;
+  font-weight: 600;
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.truncate {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.cell-muted {
+  color: var(--ink-400);
+}
+
+/* Ids and codes are machine values; a monospace face makes a truncated one
+   comparable at a glance against the full value in the tooltip. */
+.cell-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent-600);
+  white-space: nowrap;
+}
+
+.cell-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--ink-500);
+  white-space: nowrap;
+}
+
+/* ---- Status badge --------------------------------------------------------
+   Two states only, and everything that is not live is a draft — including a
+   status this app has never seen, which is the safe direction to be wrong in. */
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 11px;
+  border-radius: var(--radius-full);
+  background: var(--tint-amber);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--on-amber);
+  white-space: nowrap;
+}
+
+.status-badge.is-active {
+  background: var(--tint-green);
+  color: var(--on-green);
+}
+
+/* ---- Row actions --------------------------------------------------------- */
+
+.col-actions {
+  width: 92px;
+  white-space: nowrap;
+}
+
+.row-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.row-btn:hover {
+  background: var(--ink-100);
+  color: var(--accent-600);
+}
+
+.row-btn.is-danger:hover {
+  background: var(--tint-red);
+  color: var(--danger);
+}
+
+/* ---- Table states -------------------------------------------------------- */
+
+.table-state {
+  padding: 44px 20px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .stat-cards {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .page-head-actions {
+    width: 100%;
+  }
+
+  .add-btn,
+  .trash-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .toolbar-right {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+}
+
+/* ==========================================================================
+   Trash — full-screen overlay
+   ========================================================================== */
+
+.trash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  padding: 22px 26px 26px;
+  background: var(--page-bg);
+}
+
+.trash-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+}
+
+.trash-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 24px;
+  color: var(--ink-900);
+}
+
+.trash-count {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  background: var(--tint-red);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--on-red);
+}
+
+.trash-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.empty-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 18px;
+  border: 1px solid var(--tint-red);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-red);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.empty-btn:hover:not(:disabled) {
+  background: var(--tint-red);
+  border-color: var(--on-red);
+}
+
+.empty-btn.is-confirming {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--white);
+}
+
+.empty-btn.is-confirming:hover:not(:disabled) {
+  background: var(--on-red);
+  border-color: var(--on-red);
+}
+
+.empty-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trash-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.trash-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.trash-body {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: auto;
+}
+
+.trash-table {
+  min-width: 720px;
+}
+
+.deleted-date {
+  color: var(--ink-400);
+  white-space: nowrap;
+}
+
+.row-btn.is-boxed {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+}
+
+.row-btn.is-boxed:hover {
+  border-color: var(--accent-300);
+}
+
+.row-btn.is-boxed.is-danger:hover {
+  border-color: var(--on-red);
+}
+
+.trash-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 340px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.trash-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: var(--ink-100);
+  color: var(--ink-400);
+}
+
+.trash-empty h3 {
+  font-size: 18px;
+  color: var(--ink-900);
+}
+
+.trash-empty p {
+  max-width: 340px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.trash-state {
+  padding: 48px 20px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.trash-state.is-error {
+  color: var(--on-red);
+}
+
+@media (max-width: 620px) {
+  .trash-overlay {
+    padding: 16px;
+  }
+
+  .trash-head h2 {
+    font-size: 20px;
+  }
+
+  .empty-btn {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+}
+
+/* ==========================================================================
+   Success toast
+   ========================================================================== */
+
+.toast {
+  position: fixed;
+  z-index: 80;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(460px, calc(100vw - 48px));
+  padding: 13px 14px 13px 16px;
+  border: 1px solid var(--tint-green);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-900);
+  box-shadow: var(--shadow-lg);
+  animation: fade-up 0.25s var(--ease) both;
+}
+
+.toast-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--on-green);
+}
+
+.toast-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.toast-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+@media (max-width: 560px) {
+  .toast {
+    right: 16px;
+    left: 16px;
+    bottom: 16px;
+    max-width: none;
+  }
+}
+
+/* ==========================================================================
+   Export
+   ==========================================================================
+   Outlined in the accent, between the solid Add and the red-tinted Trash. The
+   three buttons are one row of decreasing weight: create, take a copy, destroy. */
+
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 20px;
+  border: 1px solid var(--accent-500);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--accent-600);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              transform 0.12s var(--ease);
+}
+
+.export-btn:hover:not(:disabled) {
+  background: var(--tint-blue);
+  border-color: var(--accent-600);
+}
+
+.export-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.export-btn:disabled {
+  border-color: var(--ink-200);
+  color: var(--ink-400);
+  cursor: progress;
+}
+
+/* ==========================================================================
+   View toggle
+   ==========================================================================
+   One bordered pair rather than two buttons with a gap: the active half is read
+   against the inactive half sitting next to it, and a gap between them loses
+   that comparison. */
+
+.view-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--ink-050);
+}
+
+.vt-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 26px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease),
+              box-shadow 0.15s var(--ease);
+}
+
+.vt-btn:hover {
+  color: var(--ink-900);
+}
+
+.vt-btn.is-on {
+  background: var(--white);
+  color: var(--accent-600);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ==========================================================================
+   Card view
+   ==========================================================================
+   auto-fill rather than a fixed column count, so the grid reflows with the
+   sidebar collapsed instead of needing a breakpoint per width. 244px is the
+   narrowest a card can be while the code badge, a two-line name and three
+   badges all still fit without wrapping the badge row. */
+
+.lu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(244px, 1fr));
+  gap: 18px;
+  padding: 18px;
+}
+
+.lu-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  overflow: hidden;
+  transition: box-shadow 0.16s var(--ease), transform 0.16s var(--ease),
+              border-color 0.16s var(--ease);
+}
+
+.lu-card:hover {
+  border-color: var(--ink-300);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.lu-card.is-busy {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* ---- Banner -------------------------------------------------------------- */
+
+.card-banner {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 132px;
+}
+
+/* The code over the artwork, as production shows it. A translucent slab rather
+   than plain text: the gradients run light in places and unbacked white text
+   disappears on the amber one. */
+.card-banner-code {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  background: rgb(17 24 39 / 55%);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #fff;
+}
+
+.card-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+
+/* Revealed on hover AND on focus-within — a keyboard user tabs straight to
+   these buttons, at which point hover has never fired and the actions would
+   otherwise be invisible while focused. */
+.lu-card:hover .card-actions,
+.lu-card:focus-within .card-actions {
+  opacity: 1;
+}
+
+.card-act {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: rgb(255 255 255 / 92%);
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.card-act:hover {
+  background: #fff;
+  color: var(--ink-900);
+}
+
+.card-act.is-danger:hover {
+  background: var(--tint-red);
+  color: var(--on-red);
+}
+
+/* ---- Body ---------------------------------------------------------------- */
+
+.card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px 15px 15px;
+}
+
+.card-code {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+/* Two lines then an ellipsis. Names run long ("2D Algebraic Tiles (Tool TAC)")
+   and a single clamped line loses the parenthetical that distinguishes the
+   variants from each other. */
+.card-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  min-height: 2.8em;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink-900);
+  overflow: hidden;
+}
+
+.card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.cb {
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.cb-ver {
+  background: var(--tint-blue);
+  color: var(--on-blue);
+}
+
+.cb-lang {
+  background: var(--ink-100);
+  color: var(--ink-700);
+}
+
+/* Amber by default and green when live — the same two tints the table's status
+   badge uses, so a unit reads the same in both views. */
+.cb-status {
+  background: var(--tint-amber);
+  color: var(--on-amber);
+}
+
+.cb-status.is-live {
+  background: var(--tint-green);
+  color: var(--on-green);
+}
+
+/* ==========================================================================
+   Trash — the two-line name cell
+   ========================================================================== */
+
+.cell-title {
+  display: block;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.cell-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 560px) {
+  .lu-grid {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+}

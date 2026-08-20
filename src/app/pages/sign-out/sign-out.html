@@ -1,0 +1,31 @@
+<div class="signout-page">
+
+  <div class="signout-card animate-fade-up">
+
+    <app-logo class="brand" [size]="32" />
+
+    <span class="check-badge" aria-hidden="true">
+      <app-icon name="check-circle" [size]="32" [strokeWidth]="2.4" />
+    </span>
+
+    <h1>You've signed out</h1>
+    <p class="subtitle">Thanks for using Teacher Corner. See you again soon.</p>
+
+    <!-- No aria-live: this changes every second, and announcing each tick
+         would talk over everything else on the page. It is read once on load
+         like any other static text. -->
+    @if (secondsLeft() > 0) {
+      <p class="countdown">
+        Redirecting in <strong>{{ secondsLeft() }}</strong>
+        {{ secondsLeft() === 1 ? 'second' : 'seconds' }}
+      </p>
+    }
+
+    <button type="button" class="signin-btn" (click)="goToLogin()">
+      <app-icon name="login" [size]="18" />
+      Sign in again
+    </button>
+
+  </div>
+
+</div>

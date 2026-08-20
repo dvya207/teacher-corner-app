@@ -1,0 +1,428 @@
+<!-- SELECTS BIND [selected] ON THE OPTIONS, not [value] on the <select>.
+     [value] alone is discarded while @for is still building the option list, so
+     the browser fell back to the FIRST option. Country rendered blank against a
+     draft holding India, and worse, the dial code rendered +93 — the first entry
+     alphabetically — against a draft holding +91, so a wrong country code could be
+     stored against a real number without anyone touching the control. -->
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+
+  <!-- Stop the backdrop handler firing for clicks inside the card. -->
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="modal-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Add institution"
+    (click)="$event.stopPropagation()"
+  >
+
+    <header class="modal-head">
+      <h2>Add Institution</h2>
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">
+        <app-icon name="close" [size]="18" />
+      </button>
+    </header>
+
+    <!-- Stepper -->
+    <ol class="stepper">
+      @for (item of steps; track item.index) {
+        <li
+          class="step"
+          [class.is-current]="step() === item.index"
+          [class.is-done]="step() > item.index"
+        >
+          <span class="step-num">
+            @if (step() > item.index) {
+              <app-icon name="check" [size]="14" [strokeWidth]="2.4" />
+            } @else {
+              {{ item.index }}
+            }
+          </span>
+          <span class="step-label">{{ item.label }}</span>
+        </li>
+      }
+    </ol>
+
+    <div class="modal-body">
+
+      <!-- ================================================================
+           Step 1 — Institution Info
+           ================================================================ -->
+      @if (step() === 1) {
+
+        <!-- Said once, at the top: nineteen fields each carrying "waiting on the
+             one above" would be nineteen lines of the same sentence. -->
+        <p class="flow-note">
+          Fields unlock one at a time, top to bottom, as you fill them in.
+        </p>
+
+        <!-- Country leads the step, as in the reference, and defaults to India. -->
+        <div class="field">
+          <label for="country">Country <span class="req" aria-hidden="true">*</span></label>
+          <select id="country" [value]="draft().institutionAddress.country"
+                  [class.is-error]="isAddressMissing('country')"
+                  [disabled]="locked('country')"
+                  (blur)="markBlurred('country')"
+                  (change)="setCountry(valueOf($event))">
+            <option value="" disabled [selected]="!draft().institutionAddress.country">Select country</option>
+            @for (name of countries; track name) {
+              <option [value]="name" [selected]="name === draft().institutionAddress.country">{{ name }}</option>
+            }
+          </select>
+          @if (isAddressMissing('country')) {
+            <span class="field-error">Country is required.</span>
+          }
+        </div>
+
+        <div class="field">
+          <label for="board">Board <span class="req" aria-hidden="true">*</span></label>
+          <select id="board" [value]="draft().board"
+                  [class.is-error]="isMissing('board')"
+                  [disabled]="locked('board')"
+                  (blur)="markBlurred('board')"
+                  (change)="update('board', valueOf($event))">
+            <option value="" disabled [selected]="!draft().board">Select</option>
+            @for (option of boards(); track option.code) {
+              <option [value]="option.code" [selected]="option.code === draft().board">{{ option.label }}</option>
+            }
+          </select>
+          @if (isMissing('board')) {
+            <span class="field-error">Board is required.</span>
+          }
+        </div>
+
+        <div class="field">
+          <label for="registrationNumber">
+            School Affiliation Number or UDISE Code <span class="req" aria-hidden="true">*</span>
+          </label>
+          <input id="registrationNumber" type="text" [value]="draft().registrationNumber"
+                 placeholder="Enter school affiliation number or UDISE code"
+                 [class.is-error]="isMissing('registrationNumber')"
+                 [disabled]="locked('registrationNumber')"
+                  (blur)="markBlurred('registrationNumber')"
+                 (input)="update('registrationNumber', valueOf($event))" />
+          @if (isMissing('registrationNumber')) {
+            <span class="field-error">Registration number is required.</span>
+          }
+        </div>
+
+        <div class="field">
+          <label for="institutionName">School Name <span class="req" aria-hidden="true">*</span></label>
+          <input id="institutionName" type="text" [value]="draft().institutionName"
+                 placeholder="Enter the complete name of your school"
+                 [class.is-error]="isMissing('institutionName')"
+                 [disabled]="locked('institutionName')"
+                  (blur)="markBlurred('institutionName')"
+                 (input)="update('institutionName', valueOf($event))" />
+          @if (isMissing('institutionName')) {
+            <span class="field-error">School name is required.</span>
+          }
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="medium">Medium of Instruction <span class="req" aria-hidden="true">*</span></label>
+            <select id="medium" [value]="draft().medium"
+                    [class.is-error]="isMissing('medium')"
+                    [disabled]="locked('medium')"
+                  (blur)="markBlurred('medium')"
+                    (change)="update('medium', valueOf($event))">
+              <option value="" disabled [selected]="!draft().medium">Select</option>
+              @for (option of mediums(); track option.code) {
+                <option [value]="option.code" [selected]="option.code === draft().medium">{{ option.label }}</option>
+              }
+            </select>
+            @if (isMissing('medium')) {
+              <span class="field-error">Medium is required.</span>
+            }
+          </div>
+
+          <div class="field">
+            <label for="typeofSchool">Type of School <span class="req" aria-hidden="true">*</span></label>
+            <select id="typeofSchool" [value]="draft().typeofSchool"
+                    [class.is-error]="isMissing('typeofSchool')"
+                    [disabled]="locked('typeofSchool')"
+                  (blur)="markBlurred('typeofSchool')"
+                    (change)="update('typeofSchool', valueOf($event))">
+              <option value="" disabled [selected]="!draft().typeofSchool">Select type of school</option>
+              @for (option of schoolTypes(); track option.value) {
+                <option [value]="option.value" [selected]="option.value === draft().typeofSchool">{{ option.value }}</option>
+              }
+            </select>
+            @if (isMissing('typeofSchool')) {
+              <span class="field-error">Type of school is required.</span>
+            }
+          </div>
+        </div>
+
+        <!-- Full width, not paired: the reference gives this row to itself.
+             Institution Code and Chain Name used to sit here and are gone —
+             neither appears on the reference form. institutionCode is still on
+             the document and still editable from the edit modal's Basic Info. -->
+        <div class="field">
+          <label for="genderType">Boys / Girls / Co-ed <span class="req" aria-hidden="true">*</span></label>
+          <select id="genderType" [value]="draft().genderType"
+                  [class.is-error]="isMissing('genderType')"
+                  [disabled]="locked('genderType')"
+                  (blur)="markBlurred('genderType')"
+                  (change)="update('genderType', valueOf($event))">
+            <option value="" disabled [selected]="!draft().genderType">Select gender type</option>
+            @for (option of genderTypes(); track option) {
+              <option [value]="option" [selected]="option === draft().genderType">{{ option }}</option>
+            }
+          </select>
+          @if (isMissing('genderType')) {
+            <span class="field-error">Gender type is required.</span>
+          }
+        </div>
+
+        <div class="field">
+          <label for="pincode">School Pincode <span class="req" aria-hidden="true">*</span></label>
+          <input id="pincode" type="text" inputmode="numeric"
+                 [value]="draft().institutionAddress.pincode"
+                 placeholder="Enter school pincode"
+                 [class.is-error]="isAddressMissing('pincode')"
+                 [disabled]="locked('pincode')"
+                  (blur)="markBlurred('pincode')"
+                 (input)="updateAddress('pincode', valueOf($event))" />
+          @if (isAddressMissing('pincode')) {
+            <span class="field-error">Pincode is required.</span>
+          }
+        </div>
+
+        <div class="field">
+          <label for="street">Street Name <span class="req" aria-hidden="true">*</span></label>
+          <input id="street" type="text" [value]="draft().institutionAddress.street"
+                 placeholder="Enter street name"
+                 [class.is-error]="isAddressMissing('street')"
+                 [disabled]="locked('street')"
+                  (blur)="markBlurred('street')"
+                 (input)="updateAddress('street', valueOf($event))" />
+          @if (isAddressMissing('street')) {
+            <span class="field-error">Street is required.</span>
+          }
+        </div>
+
+        <!-- "Locality Name" on this form, "Village Name" on the edit modal's
+             Address tab. One stored field, institutionAddress.village — the two
+             labels are the reference's, not a second field. -->
+        <div class="field">
+          <label for="village">Locality Name <span class="req" aria-hidden="true">*</span></label>
+          <input id="village" type="text" [value]="draft().institutionAddress.village"
+                 placeholder="Enter locality name"
+                 [class.is-error]="isAddressMissing('village')"
+                 [disabled]="locked('village')"
+                  (blur)="markBlurred('village')"
+                 (input)="updateAddress('village', valueOf($event))" />
+          @if (isAddressMissing('village')) {
+            <span class="field-error">Locality is required.</span>
+          }
+        </div>
+
+        <!-- The one OPTIONAL field on this step. Requiring a landmark would
+             block a save on something the reference's edit view does not even
+             display, so it carries no asterisk and no error. -->
+        <div class="field">
+          <label for="landmark">Landmark</label>
+          <input id="landmark" type="text" [value]="draft().institutionAddress.landmark"
+                 placeholder="Enter landmark"
+                 [disabled]="locked('landmark')"
+                 (input)="updateAddress('landmark', valueOf($event))" />
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="city">City <span class="req" aria-hidden="true">*</span></label>
+            <input id="city" type="text" [value]="draft().institutionAddress.city"
+                   placeholder="Enter city"
+                   [class.is-error]="isAddressMissing('city')"
+                   [disabled]="locked('city')"
+                  (blur)="markBlurred('city')"
+                   (input)="updateAddress('city', valueOf($event))" />
+            @if (isAddressMissing('city')) {
+              <span class="field-error">City is required.</span>
+            }
+          </div>
+
+          <div class="field">
+            <label for="subDistrict">Sub District <span class="req" aria-hidden="true">*</span></label>
+            <input id="subDistrict" type="text" [value]="draft().institutionAddress.subDistrict"
+                   placeholder="Enter sub district"
+                   [class.is-error]="isAddressMissing('subDistrict')"
+                   [disabled]="locked('subDistrict')"
+                  (blur)="markBlurred('subDistrict')"
+                   (input)="updateAddress('subDistrict', valueOf($event))" />
+            @if (isAddressMissing('subDistrict')) {
+              <span class="field-error">Sub district is required.</span>
+            }
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="district">District <span class="req" aria-hidden="true">*</span></label>
+            <input id="district" type="text" [value]="draft().institutionAddress.district"
+                   placeholder="Enter district"
+                   [class.is-error]="isAddressMissing('district')"
+                   [disabled]="locked('district')"
+                  (blur)="markBlurred('district')"
+                   (input)="updateAddress('district', valueOf($event))" />
+            @if (isAddressMissing('district')) {
+              <span class="field-error">District is required.</span>
+            }
+          </div>
+
+          <div class="field">
+            <label for="state">State <span class="req" aria-hidden="true">*</span></label>
+            <input id="state" type="text" [value]="draft().institutionAddress.state"
+                   placeholder="Enter state"
+                   [class.is-error]="isAddressMissing('state')"
+                   [disabled]="locked('state')"
+                  (blur)="markBlurred('state')"
+                   (input)="updateAddress('state', valueOf($event))" />
+            @if (isAddressMissing('state')) {
+              <span class="field-error">State is required.</span>
+            }
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="repPhone">
+            School Representative Contact Number <span class="req" aria-hidden="true">*</span>
+          </label>
+          <div class="phone-control">
+            <!-- The dial code is a SEPARATE stored field, not a prefix folded
+                 into the number, so it is a real select rather than a span. It
+                 follows the Country choice but stays overridable, because the
+                 representative need not have a number in the school's country. -->
+            <select class="dial-select" [value]="draft().representativeCountryCode"
+                    [disabled]="locked('representativePhoneNumber')"
+                    (change)="update('representativeCountryCode', valueOf($event))"
+                    aria-label="Country dial code">
+              @for (dial of dialCodes; track dial.code) {
+                <option [value]="dial.code" [selected]="dial.code === draft().representativeCountryCode">{{ dial.flag }} {{ dial.code }}</option>
+              }
+            </select>
+            <input id="repPhone" type="tel" inputmode="tel"
+                   [value]="draft().representativePhoneNumber"
+                   placeholder="Enter the representative's phone"
+                   [class.is-error]="isMissing('representativePhoneNumber')"
+                   [disabled]="locked('representativePhoneNumber')"
+                   (blur)="markBlurred('representativePhoneNumber')"
+                   (input)="update('representativePhoneNumber', valueOf($event))" />
+          </div>
+          @if (isMissing('representativePhoneNumber')) {
+            <span class="field-error">Contact number is required.</span>
+          }
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="repFirstName">
+              Representative First Name <span class="req" aria-hidden="true">*</span>
+            </label>
+            <input id="repFirstName" type="text" [value]="draft().representativeFirstName"
+                   placeholder="First name"
+                   [class.is-error]="isMissing('representativeFirstName')"
+                   [disabled]="locked('representativeFirstName')"
+                   (blur)="markBlurred('representativeFirstName')"
+                   (input)="update('representativeFirstName', valueOf($event))" />
+            @if (isMissing('representativeFirstName')) {
+              <span class="field-error">First name is required.</span>
+            }
+          </div>
+
+          <div class="field">
+            <label for="repLastName">
+              Representative Last Name <span class="req" aria-hidden="true">*</span>
+            </label>
+            <input id="repLastName" type="text" [value]="draft().representativeLastName"
+                   placeholder="Last name"
+                   [class.is-error]="isMissing('representativeLastName')"
+                   [disabled]="locked('representativeLastName')"
+                   (blur)="markBlurred('representativeLastName')"
+                   (input)="update('representativeLastName', valueOf($event))" />
+            @if (isMissing('representativeLastName')) {
+              <span class="field-error">Last name is required.</span>
+            }
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="repEmail">Representative Email <span class="req" aria-hidden="true">*</span></label>
+          <input id="repEmail" type="email" [value]="draft().representativeEmail"
+                 placeholder="e.g. something123@gmail.com"
+                 [class.is-error]="isMissing('representativeEmail')"
+                 [disabled]="locked('representativeEmail')"
+                   (blur)="markBlurred('representativeEmail')"
+                 (input)="update('representativeEmail', valueOf($event))" />
+          @if (isMissing('representativeEmail')) {
+            <span class="field-error">Email is required.</span>
+          }
+        </div>
+      }
+
+      <!-- ================================================================
+           Step 2 — Programme Template
+           ================================================================ -->
+      @if (step() === 2) {
+        <div class="step-stub">
+          <span class="stub-icon"><app-icon name="programme" [size]="24" /></span>
+          <h3>Programme Template</h3>
+          <p>
+            Choosing a programme template for this institution will live here.
+            You can continue to Review and save without one.
+          </p>
+        </div>
+      }
+
+      <!-- ================================================================
+           Step 3 — Review
+           ================================================================ -->
+      @if (step() === 3) {
+        <div class="review">
+          <p class="review-intro">Check the details before saving.</p>
+
+          <dl class="review-list">
+            @for (row of reviewRows(); track row.label) {
+              <div class="review-row">
+                <dt>{{ row.label }}</dt>
+                <dd>{{ row.value }}</dd>
+              </div>
+            }
+          </dl>
+        </div>
+      }
+
+    </div>
+
+    <footer class="modal-foot">
+      @if (step() > 1) {
+        <button type="button" class="btn btn-outline" (click)="back()" [disabled]="saving()">
+          Back
+        </button>
+      }
+
+      @if (step() < steps.length) {
+        <button type="button" class="btn btn-primary next-btn" (click)="next()"
+                [disabled]="!stepOneValid()">
+          Next
+          <app-icon name="arrow-right" [size]="16" />
+        </button>
+      } @else {
+        <button type="button" class="btn btn-primary next-btn" (click)="save()"
+                [disabled]="saving() || !stepOneValid()">
+          @if (saving()) {
+            <span class="spinner" aria-hidden="true"></span>
+            Saving...
+          } @else {
+            <app-icon name="check" [size]="16" />
+            Save Institution
+          }
+        </button>
+      }
+    </footer>
+
+  </div>
+</div>

@@ -1,0 +1,226 @@
+<!-- ======================================================================
+     The class structure every uploaded school will be given.
+
+     Shown only once a board is chosen, as in the reference: the rows describe
+     what the schools in the file will teach, and that is not a question worth
+     asking before the board they belong to.
+     ====================================================================== -->
+@if (boardChosen()) {
+
+  <div class="bulk-classes">
+
+    @for (row of rows(); track $index) {
+
+      <div class="bulk-row" [class.is-locked]="locked($index)">
+
+        <div class="field">
+          <label [attr.for]="'bu-grade-' + $index">
+            Grade
+            @if (!locked($index)) {
+              <span class="req" aria-hidden="true">*</span>
+            }
+          </label>
+          <select
+            [id]="'bu-grade-' + $index"
+            [disabled]="locked($index)"
+            [class.is-error]="missing($index, 'grade')"
+            (change)="update($index, 'grade', valueOf($event))"
+          >
+            <option value="" [selected]="!row.grade">Select Grade</option>
+            @for (option of grades; track option) {
+              <option [value]="option" [selected]="option === row.grade">
+                {{ gradeLabel(option) }}
+              </option>
+            }
+          </select>
+        </div>
+
+        <div class="field">
+          <label [attr.for]="'bu-section-' + $index">Section</label>
+          <select
+            [id]="'bu-section-' + $index"
+            [disabled]="locked($index)"
+            [class.is-error]="missing($index, 'section')"
+            (change)="update($index, 'section', valueOf($event))"
+          >
+            <option value="" [selected]="!row.section">Select</option>
+            @for (option of sections; track option) {
+              <option [value]="option" [selected]="option === row.section">{{ option }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="field">
+          <label [attr.for]="'bu-subject-' + $index">Subject</label>
+          <select
+            [id]="'bu-subject-' + $index"
+            [disabled]="locked($index)"
+            [class.is-error]="missing($index, 'subject')"
+            (change)="update($index, 'subject', valueOf($event))"
+          >
+            <option value="" [selected]="!row.subject">Select</option>
+            @for (option of subjects; track option) {
+              <option [value]="option" [selected]="option === row.subject">{{ option }}</option>
+            }
+          </select>
+        </div>
+
+        <!-- DISABLED THROUGHOUT. This app has no programme templates — no
+             collection, no model, no service — so the control is shown and
+             explained rather than filled with something invented. -->
+        <div class="field">
+          <label [attr.for]="'bu-template-' + $index">Programme Template</label>
+          <select [id]="'bu-template-' + $index" disabled>
+            <option value="">Select Programme Template</option>
+          </select>
+        </div>
+
+        <!-- Hidden on a lone row, exactly as step 2's is: with one row there is
+             nothing to remove, and the two panels are deliberately the same
+             control with the same behaviour. -->
+        @if (rows().length > 1) {
+          <button
+            type="button"
+            class="bulk-remove"
+            (click)="removeRow($index)"
+            [attr.aria-label]="'Remove class ' + ($index + 1)"
+          >
+            <app-icon name="trash" [size]="18" />
+          </button>
+        }
+
+      </div>
+
+    }
+
+    <!-- Said once for the whole panel, not once per row. -->
+    <p class="field-hint is-warn">
+      Programme templates are not available in this app yet, so that column stays
+      empty. Everything else on these rows is kept.
+    </p>
+
+    <div class="add-row">
+      <button type="button" class="add-entry" (click)="addRow()" aria-label="Add another class">
+        <app-icon name="plus-circle" [size]="26" />
+      </button>
+    </div>
+
+  </div>
+
+}
+
+<!-- ======================================================================
+     The file
+     ====================================================================== -->
+<div class="upload-block">
+
+  <p class="upload-label">Bulk Upload Institutes</p>
+
+  <div class="upload-row">
+
+    <!-- A LABEL WRAPPING A HIDDEN INPUT, not a button that clicks one: the
+         native file input cannot be styled, and a button that forwards a click
+         to it is a second thing that can fall out of step with the disabled
+         state. -->
+    <label
+      class="file-pick"
+      [class.is-disabled]="!boardChosen()"
+      [class.has-file]="fileName()"
+    >
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        [disabled]="!boardChosen()"
+        (change)="chooseFile($event)"
+      />
+      <app-icon name="download" [size]="17" />
+      @if (reading()) {
+        Reading…
+      } @else if (fileName()) {
+        {{ fileName() }}
+      } @else {
+        Select CSV file
+      }
+    </label>
+
+    <button
+      type="button"
+      class="btn btn-primary upload-btn"
+      [disabled]="!canUpload()"
+      (click)="upload()"
+    >
+      Upload
+    </button>
+
+  </div>
+
+  @if (fileName()) {
+    <button type="button" class="clear-file" (click)="clearFile()">
+      <app-icon name="close" [size]="13" />
+      Choose a different file
+    </button>
+  }
+
+  @if (!boardChosen()) {
+    <span class="field-hint">Choose a board first — it applies to every school in the file.</span>
+  }
+
+  @if (readError()) {
+    <p class="load-error" role="alert">{{ readError() }}</p>
+  }
+
+  <!-- ====================================================================
+       What the file holds. NOTHING HAS BEEN WRITTEN — creating institutions
+       from these rows is not built, and the panel says so rather than
+       implying a save that did not happen.
+       ==================================================================== -->
+  @if (report(); as found) {
+
+    <div class="report" role="status">
+
+      @if (found.missingColumns.length > 0) {
+
+        <p class="report-head is-bad">
+          <app-icon name="close" [size]="15" />
+          <span>
+            <strong>{{ found.fileName }}</strong> is missing
+            {{ found.missingColumns.length === 1 ? 'a required column' : 'required columns' }}:
+            {{ found.missingColumns.join(', ') }}. Download the template and use its headings.
+          </span>
+        </p>
+
+      } @else {
+
+        <p class="report-head" [class.is-bad]="found.valid === 0">
+          <app-icon [name]="found.valid > 0 ? 'check-circle' : 'close'" [size]="15" />
+          <span>
+            <strong>{{ found.valid }}</strong> of {{ found.total }}
+            {{ found.total === 1 ? 'row' : 'rows' }} in
+            <strong>{{ found.fileName }}</strong> can be read as a school.
+          </span>
+        </p>
+
+        @if (found.problems.length > 0) {
+          <ul class="report-problems">
+            @for (problem of found.problems; track problem.line) {
+              <li>Line {{ problem.line }} — {{ problem.message }}</li>
+            }
+          </ul>
+        }
+
+      }
+
+      <p class="report-foot">
+        Nothing has been saved. Creating the schools from this file is not built yet.
+      </p>
+
+    </div>
+
+  }
+
+  <button type="button" class="template-link" (click)="downloadTemplate()">
+    Download Template
+    <app-icon name="download" [size]="15" />
+  </button>
+
+</div>

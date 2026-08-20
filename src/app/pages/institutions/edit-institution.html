@@ -1,0 +1,367 @@
+<!-- SELECTS BIND [selected] ON THE OPTIONS, not [value] on the <select>.
+     [value] alone opened every dropdown on its placeholder: Angular sets it as a
+     DOM property, and a <select> discards a value matching none of its current
+     options — which is its state while @for is still building the list. The
+     inputs looked right, so the modal appeared populated while every dropdown had
+     silently reset, and saving would have written the placeholder over real data. -->
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="edit-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Edit institution"
+    (click)="$event.stopPropagation()"
+  >
+
+    <header class="edit-head">
+      <span class="edit-title">
+        <app-icon name="building" [size]="19" />
+        {{ current().institutionName }}
+      </span>
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">
+        <app-icon name="close" [size]="19" />
+      </button>
+    </header>
+
+    <nav class="edit-tabs" role="tablist">
+      @for (item of tabs; track item.key) {
+        <button
+          type="button"
+          role="tab"
+          class="edit-tab"
+          [class.is-active]="tab() === item.key"
+          [attr.aria-selected]="tab() === item.key"
+          (click)="setTab(item.key)"
+        >
+          {{ item.label }}
+        </button>
+      }
+    </nav>
+
+    <div class="edit-body">
+
+      <!-- ================================================================
+           Basic Info
+           ================================================================ -->
+      @if (tab() === 'basic') {
+        <div class="grid-2">
+
+          <div class="field">
+            <label for="e-name">Institution Name <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="building" [size]="16" /></span>
+              <input id="e-name" type="text" [value]="current().institutionName"
+                     (input)="update('institutionName', valueOf($event))" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="e-repFirst">Representative First Name <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="users" [size]="16" /></span>
+              <input id="e-repFirst" type="text" [value]="current().representativeFirstName"
+                     (input)="update('representativeFirstName', valueOf($event))" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="e-gender">Gender Types <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="venus" [size]="16" /></span>
+              <select id="e-gender" [value]="current().genderType"
+                      (change)="update('genderType', valueOf($event))">
+                <option value="" disabled [selected]="!current().genderType">Select</option>
+                @for (option of genderTypes(); track option) {
+                  <option [value]="option" [selected]="option === current().genderType">{{ option }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="e-repLast">Representative Last Name <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="users" [size]="16" /></span>
+              <input id="e-repLast" type="text" [value]="current().representativeLastName"
+                     (input)="update('representativeLastName', valueOf($event))" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="e-medium">Medium of Instruction <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="translate" [size]="16" /></span>
+              <select id="e-medium" [value]="current().medium"
+                      (change)="update('medium', valueOf($event))">
+                <option value="" disabled [selected]="!current().medium">Select</option>
+                @for (option of mediums(); track option.code) {
+                  <option [value]="option.code" [selected]="option.code === current().medium">{{ option.label }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="e-repEmail">Representative Email <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="mail" [size]="16" /></span>
+              <input id="e-repEmail" type="email" [value]="current().representativeEmail"
+                     (input)="update('representativeEmail', valueOf($event))" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="e-type">Type of School</label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="translate" [size]="16" /></span>
+              <select id="e-type" [value]="current().typeofSchool"
+                      (change)="update('typeofSchool', valueOf($event))">
+                <option value="" disabled [selected]="!current().typeofSchool">Select</option>
+                @for (option of schoolTypes(); track option.value) {
+                  <option [value]="option.value" [selected]="option.value === current().typeofSchool">{{ option.value }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="e-repPhone">Representative Phone <span class="req">*</span></label>
+            <div class="control phone">
+              <select class="dial-select" [value]="current().representativeCountryCode"
+                      (change)="update('representativeCountryCode', valueOf($event))"
+                      aria-label="Country dial code">
+                @for (dial of dialCodes; track dial.code) {
+                  <option [value]="dial.code" [selected]="dial.code === current().representativeCountryCode">{{ dial.flag }} {{ dial.code }}</option>
+                }
+              </select>
+              <input id="e-repPhone" type="tel" inputmode="tel"
+                     [value]="current().representativePhoneNumber"
+                     placeholder="9876543210"
+                     (input)="update('representativePhoneNumber', valueOf($event))" />
+            </div>
+          </div>
+
+          <!-- Row 5, left. Chain Name used to be here; it is gone from the UI
+               and from the document, because nothing filled it. Institution Code
+               also moved off this row — it is now in row 6, beside Registration
+               Number. -->
+          <div class="field">
+            <label for="e-customer">Customer School</label>
+            <!-- data-state drives the red / green marker on the control, which
+                 is how the reference distinguishes No from Yes at a glance. -->
+            <select id="e-customer" class="with-state"
+                    [attr.data-state]="current().customerSchool ? 'yes' : 'no'"
+                    [value]="current().customerSchool ? 'Yes' : 'No'"
+                    (change)="setCustomerSchool(valueOf($event))">
+              <option value="No" [selected]="!current().customerSchool">No</option>
+              <option value="Yes" [selected]="current().customerSchool">Yes</option>
+            </select>
+          </div>
+
+          <!-- Row 5, right. -->
+          <div class="field">
+            <label for="e-id">Institution ID</label>
+            <!--
+              BLANK VALUE, id shown as the PLACEHOLDER.
+
+              The id is the Firestore document id: it cannot be edited, because
+              changing it would mean a different document. Carrying it as the
+              input's value made it look like editable content that happened to be
+              greyed out, and it was selectable and deletable on screen for no
+              purpose. As a placeholder the field is genuinely empty, reads as
+              informational, and the value comes out through the button instead.
+
+              That button was a decorative <span> with aria-hidden and
+              pointer-events:none — it looked like a copy affordance and did
+              nothing at all.
+            -->
+            <div class="control">
+              <input id="e-id" type="text" value="" [placeholder]="current().docId" readonly />
+              <button
+                type="button"
+                class="control-copy"
+                (click)="copyId()"
+                [attr.aria-label]="copied() ? 'Institution ID copied' : 'Copy institution ID'"
+              >
+                <app-icon [name]="copied() ? 'check' : 'clipboard'" [size]="15" />
+              </button>
+            </div>
+            @if (copyFailed()) {
+              <span class="field-note" role="status">
+                Could not reach the clipboard. The ID is {{ current().docId }}
+              </span>
+            }
+          </div>
+
+          <!-- Row 6, left. Not span-2: the reference does not stretch this across
+               both columns. -->
+          <div class="field">
+            <label for="e-regNo">Registration Number <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="edit" [size]="16" /></span>
+              <input id="e-regNo" type="text" [value]="current().registrationNumber"
+                     (input)="update('registrationNumber', valueOf($event))" />
+            </div>
+          </div>
+
+        </div>
+      }
+
+      <!-- ================================================================
+           Address
+           ================================================================ -->
+      @if (tab() === 'address') {
+        <div class="grid-2">
+
+          <!-- No Country control here: the reference keeps it on the Board tab,
+               which is where it is now edited. The value still travels with this
+               tab's save, because the whole institutionAddress map is the unit of
+               change and the draft carries country through untouched. -->
+          <div class="field">
+            <label for="a-street">Street <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="map-pin" [size]="16" /></span>
+              <input id="a-street" type="text" [value]="address().street"
+                     (input)="updateAddress('street', valueOf($event))" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="a-district">District Name <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="map-pin" [size]="16" /></span>
+              <input id="a-district" type="text" [value]="address().district"
+                     (input)="updateAddress('district', valueOf($event))" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="a-city">City Name <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="map-pin" [size]="16" /></span>
+              <input id="a-city" type="text" [value]="address().city"
+                     (input)="updateAddress('city', valueOf($event))" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="a-state">State <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="map-pin" [size]="16" /></span>
+              <input id="a-state" type="text" [value]="address().state"
+                     (input)="updateAddress('state', valueOf($event))" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="a-village">Village Name</label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="map-pin" [size]="16" /></span>
+              <input id="a-village" type="text" [value]="address().village"
+                     (input)="updateAddress('village', valueOf($event))" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="a-pincode">Pincode <span class="req">*</span></label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="map-pin" [size]="16" /></span>
+              <input id="a-pincode" type="text" inputmode="numeric" [value]="address().pincode"
+                     (input)="updateAddress('pincode', valueOf($event))" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="a-sub">Sub District Name</label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="map-pin" [size]="16" /></span>
+              <input id="a-sub" type="text" [value]="address().subDistrict"
+                     (input)="updateAddress('subDistrict', valueOf($event))" />
+            </div>
+          </div>
+
+          <!-- The ONE field here the reference does not show. The Add form
+               collects a Landmark, so without this it could be typed once at
+               creation and never corrected. It fills the cell the reference
+               leaves blank. -->
+          <div class="field">
+            <label for="a-landmark">Landmark</label>
+            <div class="control">
+              <span class="control-icon"><app-icon name="map-pin" [size]="16" /></span>
+              <input id="a-landmark" type="text" [value]="address().landmark"
+                     (input)="updateAddress('landmark', valueOf($event))" />
+            </div>
+          </div>
+
+        </div>
+      }
+
+      <!-- ================================================================
+           Board
+           ================================================================ -->
+      @if (tab() === 'board') {
+        <div class="board-pane">
+          <div class="field">
+            <label for="b-country">Select Country</label>
+            <!-- The same COUNTRIES list the Address tab and the create form use,
+                 so the three surfaces can never disagree about which countries
+                 exist. The value lives in institutionAddress.country; this tab
+                 writes that map, which is why `institutionAddress` is in the
+                 board tab's save list. -->
+            <select id="b-country" [value]="address().country"
+                    (change)="updateAddress('country', valueOf($event))">
+              <option value="" disabled [selected]="!address().country">Select</option>
+              @for (name of countries; track name) {
+                <option [value]="name" [selected]="name === address().country">{{ name }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="b-board">Select Board</label>
+            <!-- Full names here, short codes in the table. One stored value. -->
+            <select id="b-board" [value]="current().board"
+                    (change)="update('board', valueOf($event))">
+              <option value="" disabled [selected]="!current().board">Select</option>
+              @for (option of boards(); track option.code) {
+                <option [value]="option.code" [selected]="option.code === current().board">{{ option.label }}</option>
+              }
+            </select>
+          </div>
+        </div>
+      }
+
+    </div>
+
+    <!-- Every tab has its own Save Changes, and its own dirty state: Cancel and
+         Save Changes are laid out as the classroom modal lays them out, so the
+         two detail modals in this app end the same way. -->
+    <footer class="edit-foot">
+      @if (error()) {
+        <p class="edit-error" role="alert">{{ error() }}</p>
+      }
+
+      <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
+
+      <!-- Shut until THIS tab has an unsaved change, so the button never offers
+           to write the document back exactly as it was found. -->
+      <button
+        type="button"
+        class="save-btn"
+        [disabled]="saving() || !dirty()"
+        [attr.title]="dirty() ? null : 'No changes to save yet'"
+        (click)="save()"
+      >
+        @if (saving()) {
+          <span class="spinner" aria-hidden="true"></span>
+          Saving...
+        } @else {
+          Save Changes
+        }
+      </button>
+    </footer>
+
+  </div>
+</div>

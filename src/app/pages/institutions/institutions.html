@@ -1,0 +1,332 @@
+<header class="page-head">
+  <div class="page-head-copy">
+    <h1>Institutions</h1>
+    <p>Manage all registered institutions and schools</p>
+  </div>
+
+  <div class="page-head-actions">
+    <button type="button" class="add-btn" (click)="openAdd()">
+      <app-icon name="plus-circle" [size]="18" />
+      Add Institution
+    </button>
+
+    <button type="button" class="trash-btn" (click)="openTrash()">
+      <app-icon name="trash" [size]="17" />
+      Trash
+    </button>
+  </div>
+</header>
+
+<!-- Stat cards -->
+<section class="stat-cards">
+  <div class="stat-card">
+    <span class="sc-icon sc-total"><app-icon name="building" [size]="20" /></span>
+    <span class="sc-copy">
+      <strong>{{ totalCount() }}</strong>
+      <span>Total Institutions</span>
+    </span>
+  </div>
+
+  <div class="stat-card">
+    <span class="sc-icon sc-govt"><app-icon name="bank" [size]="20" /></span>
+    <span class="sc-copy">
+      <strong>{{ governmentCount() }}</strong>
+      <span>Government Schools</span>
+    </span>
+  </div>
+
+  <div class="stat-card">
+    <span class="sc-icon sc-pvt"><app-icon name="box" [size]="20" /></span>
+    <span class="sc-copy">
+      <strong>{{ privateCount() }}</strong>
+      <span>Private Schools</span>
+    </span>
+  </div>
+</section>
+
+@if (error()) {
+  <div class="load-error" role="alert">
+    <strong>Institutions unavailable.</strong>
+    {{ error() }}
+  </div>
+}
+
+<!-- Success toast. role="status" rather than "alert": it is confirmation, and an
+     assertive live region would cut across whatever the user is reading. -->
+@if (notice()) {
+  <div class="toast" role="status">
+    <span class="toast-icon"><app-icon name="check-circle" [size]="18" /></span>
+    {{ notice() }}
+    <button type="button" class="toast-close" (click)="dismissNotice()" aria-label="Dismiss">
+      <app-icon name="close" [size]="14" />
+    </button>
+  </div>
+}
+
+<!-- Table panel -->
+<section class="table-panel">
+
+  <div class="table-toolbar">
+    <div class="filter-pills">
+      @for (filter of filters; track filter) {
+        <button
+          type="button"
+          class="pill"
+          [class.is-active]="activeFilter() === filter"
+          (click)="setFilter(filter)"
+        >
+          {{ filter }}
+        </button>
+      }
+    </div>
+
+    <div class="toolbar-right">
+      <span class="loaded-count">
+        Loaded {{ filtered().length }} of {{ totalCount() }} entries
+      </span>
+
+      <button type="button" class="hide-btn" (click)="toggleTable()">
+        <app-icon [name]="tableHidden() ? 'plus' : 'minus'" [size]="15" />
+        {{ tableHidden() ? 'Show' : 'Hide' }}
+      </button>
+    </div>
+  </div>
+
+  @if (!tableHidden()) {
+    <div class="table-scroll">
+      <table class="inst-table">
+        <thead>
+          <tr>
+            <th class="col-name">School Name</th>
+            <th>Type</th>
+            <th>Reg. No.</th>
+            <th>Representative</th>
+            <th>Phone</th>
+            <th>Board</th>
+            <th>Created</th>
+            <th>Pincode</th>
+            <th>Verified</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          @for (institution of filtered(); track institution.docId) {
+            <tr [class.is-busy]="busyRow() === institution.docId">
+              <td class="col-name" [title]="institution.institutionName">{{ institution.institutionName }}</td>
+
+              <td>
+                <span class="type-badge" [attr.data-type]="typeBadge(institution)">
+                  {{ typeBadge(institution) }}
+                </span>
+              </td>
+
+              <td class="truncate" [title]="institution.registrationNumber">{{ institution.registrationNumber }}</td>
+              <td class="truncate">{{ representative(institution) }}</td>
+              <td class="nowrap">{{ institution.representativeCountryCode }}{{ institution.representativePhoneNumber }}</td>
+              <td>{{ institution.board }}</td>
+              <td class="nowrap">{{ toDate(institution.createdAt) | date: 'dd/MM' }}</td>
+              <td class="truncate">{{ institution.institutionAddress.pincode }}</td>
+
+              <td>
+                <button
+                  type="button"
+                  class="toggle"
+                  [class.is-on]="institution.verified"
+                  (click)="toggleVerified(institution)"
+                  [attr.aria-pressed]="institution.verified"
+                  [attr.aria-label]="
+                    institution.verified ? 'Mark as unverified' : 'Mark as verified'
+                  "
+                  [title]="institution.verified ? 'Verified' : 'Unverified'"
+                >
+                  <span class="toggle-knob"></span>
+                </button>
+              </td>
+
+              <td class="col-actions">
+                <button type="button" class="row-btn" aria-label="Edit" title="Edit"
+                        (click)="openEdit(institution)">
+                  <app-icon name="edit" [size]="16" />
+                </button>
+                <button
+                  type="button"
+                  class="row-btn is-danger"
+                  aria-label="Move to Trash"
+                  title="Move to Trash"
+                  (click)="askDelete(institution)"
+                >
+                  <app-icon name="trash" [size]="16" />
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+
+      <!-- Three states, never conflated: loading, failed, genuinely empty. -->
+      @if (loading()) {
+        <div class="table-state">Loading institutions…</div>
+      } @else if (filtered().length === 0) {
+        <div class="table-state">
+          @if (institutions().length === 0 && !error()) {
+            No institutions yet. Use <strong>Add Institution</strong> to register one.
+          } @else if (error()) {
+            Nothing could be loaded.
+          } @else {
+            No institutions match this filter.
+          }
+        </div>
+      }
+    </div>
+  }
+</section>
+
+@if (editing(); as target) {
+  <app-edit-institution
+    [institution]="target"
+    [saving]="saving()"
+    [error]="editError()"
+    (closed)="closeEdit()"
+    (saved)="saveEdit($event)"
+  />
+}
+
+@if (showAdd()) {
+  <app-add-institution
+    [saving]="saving()"
+    (closed)="closeAdd()"
+    (submitted)="saveInstitution($event)"
+  />
+}
+
+<!-- ======================================================================
+     Trash — full-screen overlay, matching the reference
+     ====================================================================== -->
+@if (trashOpen()) {
+  <div class="trash-overlay animate-fade-up">
+
+    <header class="trash-head">
+      <h2>
+        Deleted Institutions
+        <span class="trash-count">{{ trashed().length }}</span>
+      </h2>
+
+      <div class="trash-head-actions">
+        <button
+          type="button"
+          class="empty-btn"
+          [class.is-confirming]="confirmingEmpty()"
+          [disabled]="trashed().length === 0 || busyRow() === '__all__'"
+          (click)="emptyTrash()"
+        >
+          <app-icon name="trash" [size]="16" />
+          @if (busyRow() === '__all__') {
+            Emptying...
+          } @else if (confirmingEmpty()) {
+            Confirm — delete {{ trashed().length }} permanently
+          } @else {
+            Empty Trash
+          }
+        </button>
+
+        <button type="button" class="trash-close" (click)="closeTrash()" aria-label="Close">
+          <app-icon name="close" [size]="19" />
+        </button>
+      </div>
+    </header>
+
+    <div class="trash-body">
+      @if (trashLoading()) {
+        <div class="trash-state">Loading Trash…</div>
+      } @else if (trashError()) {
+        <div class="trash-state is-error" role="alert">{{ trashError() }}</div>
+      } @else if (trashed().length > 0) {
+        <table class="inst-table trash-table">
+          <thead>
+            <tr>
+              <th class="col-name">School Name</th>
+              <th>Reg. No.</th>
+              <th>Representative</th>
+              <th>Deleted Date</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            @for (institution of trashed(); track institution.docId) {
+              <tr [class.is-busy]="busyRow() === institution.docId">
+                <td class="col-name" [title]="institution.institutionName">{{ institution.institutionName }}</td>
+                <td class="truncate">{{ institution.registrationNumber }}</td>
+                <td class="truncate">{{ representative(institution) }}</td>
+                <td class="deleted-date">
+                  {{ toDate(institution.trashAt) ? (toDate(institution.trashAt) | date: 'dd/MM/yyyy') : '—' }}
+                </td>
+
+                <td class="col-actions">
+                  <button
+                    type="button"
+                    class="row-btn is-boxed"
+                    aria-label="Restore"
+                    title="Restore"
+                    (click)="restore(institution)"
+                  >
+                    <app-icon name="restore" [size]="15" />
+                  </button>
+
+                  <button
+                    type="button"
+                    class="row-btn is-boxed is-danger"
+                    aria-label="Delete permanently"
+                    title="Delete permanently"
+                    (click)="purge(institution)"
+                  >
+                    <app-icon name="trash" [size]="15" />
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <div class="trash-empty">
+          <span class="trash-empty-icon"><app-icon name="trash" [size]="26" /></span>
+          <h3>Trash is empty</h3>
+          <p>Institutions you delete will appear here, and can be restored.</p>
+        </div>
+      }
+    </div>
+
+  </div>
+}
+
+<!-- ==========================================================================
+     Delete confirmation
+
+     A trash icon one pixel from the edit icon is too easy to hit, and the move
+     is only recoverable if the user knows to look in the Trash. So it names the
+     row it is about, says where the document goes, and Cancel changes nothing.
+     ========================================================================== -->
+@if (confirmingDelete(); as target) {
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+  <div class="confirm-overlay" (click)="cancelDelete()">
+    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+    <div class="confirm-card animate-fade-up" (click)="$event.stopPropagation()" role="alertdialog">
+      <span class="confirm-icon"><app-icon name="trash" [size]="22" /></span>
+
+      <h2>Are you sure you want to delete “{{ target.institutionName }}”?</h2>
+
+      <div class="confirm-actions">
+        <button type="button" class="btn btn-ghost" (click)="cancelDelete()">Cancel</button>
+        <button
+          type="button"
+          class="btn btn-danger"
+          [disabled]="busyRow() === target.docId"
+          (click)="confirmDelete()"
+        >
+          {{ busyRow() === target.docId ? 'Deleting…' : 'Delete institution' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

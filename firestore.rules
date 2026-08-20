@@ -1,0 +1,425 @@
+rules_version = '2';
+
+// ============================================================================
+// teacher-corner — rules for the NAMED 'teacher-corner-dev' database.
+//
+// SCOPE. This file governs 'teacher-corner-dev' and nothing else. Firestore
+// rules are per-database, so it cannot affect:
+//
+// any other database in the project.
+//
+// That is the point of the separate database. This app previously shared one,
+// where a single rules file had to serve two apps in two repositories and
+// either could revoke the other's access by deploying. Isolation was
+// maintained by discipline; now it is maintained by the platform.
+//
+// Collection names carry no prefix. A prefix existed only to avoid colliding
+// inside a shared database; with a dedicated one it buys nothing.
+//
+// DEPLOY:
+//
+//     firebase deploy --only firestore:teacher-corner-dev
+//
+// The database id is not decoration. firebase.json pins it so the scoped form
+// is what runs, and a bare `--only firestore` cannot reach another database.
+//
+// TESTED BY: tests/rules/*.mjs via `npm run test:rules`, which loads
+// THIS file into a local emulator. Every "owner can" assertion is paired with
+// the same operation attempted by a second signed-in user.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    /*
+     * CURRENTLY UNUSED, and kept deliberately.
+     *
+     * Every rule below now authorises on authentication alone, so neither of these
+     * is called. They are left in place because this repository has no version
+     * control: deleting them would make restoring ownership a rewrite rather than
+     * swapping `signedIn()` back for `ownsExisting()` on the lines that want it.
+     * Unused functions in a ruleset are inert and cost nothing to evaluate.
+     *
+     * Ownership for collections that have no uid in their path to compare against.
+     * Reads a field on the document rather than doing a get(), so it costs nothing
+     * extra.
+     */
+    // COMMENTED OUT, NOT DELETED. Nothing calls these any more: every rule below
+    // authorises on authentication alone. Left here as the restore path, because
+    // this repository has no version control — putting ownership back means
+    // uncommenting these two and swapping `signedIn()` for them on the lines that
+    // want it.
+    //
+    // Commented rather than merely unused because the rules compiler warns on every
+    // deploy otherwise ("Invalid variable name: request"): it cannot validate
+    // `resource` inside a function no rule invokes.
+    //
+    // function ownsIncoming() {
+    //   return signedIn() && request.resource.data.ownerId == request.auth.uid;
+    // }
+    //
+    // function ownsExisting() {
+    //   return signedIn() && resource.data.ownerId == request.auth.uid;
+    // }
+
+    /*
+     * A NOTE ON THE `trash` SENTINEL, because its absence from the read rules
+     * looks like an omission.
+     *
+     * Each of the five active collections holds a container document literally
+     * named 'trash'. Creates exclude it, so nothing can overwrite the container.
+     * READS DO NOT, and cannot: a read rule that tests the document id
+     * (`institutionId != 'trash'`) is unprovable for an unfiltered LIST query, so
+     * adding it makes the collection unlistable and the dashboard stops loading.
+     * These sentinels are empty containers carrying no fields, so a readable one
+     * discloses nothing. Asserted both ways in the rules suite.
+     */
+
+    // ========================================================================
+    // Teacher profiles — ownership by PATH
+    // ========================================================================
+    //
+    // The uid IS the document id, so the rule is a single comparison with no
+    // get() lookup, and a document cannot be written without an owner.
+    //
+    // Two blocks, not one: `tcdev_users/{uid}/{document=**}` matches documents
+    // BELOW tcdev_users/{uid} but not that document itself.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid}/{document=**} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ========================================================================
+    // Institutions — ACTIVE
+    // ========================================================================
+    //
+    //   institutions/{institutionId}
+    //
+    // Top level, with the institution documents directly inside — no wrapper
+    // collection, no container document, no extra nesting. This is the shape
+    // that makes the console behave like the `posts` reference: click the
+    // collection, click a document, read its fields on the right.
+    //
+    // FULLY SHARED, on instruction. read, create, update and delete all authorise on
+    // authentication alone, for the five active collections AND their trash. There is
+    // no ownership check anywhere below, and `ownerId` is now data the app writes and
+    // reads but which grants nothing.
+    //
+    // The one condition left on create is `!= 'trash'`, which is INTEGRITY rather
+    // than authorization: that id is the container document for deleted rows, and a
+    // document created with it would overwrite the container. Anyone may create
+    // anything else.
+    //
+    // KNOW WHAT `signedIn()` MEANS HERE, because it is wider than it reads. Firebase
+    // Auth is per-PROJECT rather than per-app, so authentication alone is a broader
+    // check than it appears in a project that hosts more than one application.
+    // Narrowing it is tracked separately.
+    //
+    // Raised and accepted as a deliberate staging decision, in three steps: reads
+    // narrowed by a users/{uid} check, then reads on authentication alone, then every
+    // operation. If Teacher Corner moves to its own project or to production this
+    // must be revisited rather than inherited. ownsIncoming() and ownsExisting() are
+    // still defined above for exactly that: restoring ownership means swapping
+    // `signedIn()` back on the lines that want it.
+    match /institutions/{institutionId} {
+      allow read:   if signedIn();
+      // `trash` is the container document for deleted institutions and sits in
+      // this same collection. Excluding it here stops an institution being
+      // created with that id and overwriting the container. Reads and updates
+      // need no exclusion: the sentinel carries no ownerId, so every ownership
+      // check already fails for it.
+      allow create: if signedIn() && institutionId != 'trash';
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Institutions — DELETED
+    // ========================================================================
+    //
+    //   institutions/trash/DeletedInstitutes/{institutionId}
+    //
+    // `trash` is a DOCUMENT alongside the active institutions, with the deleted
+    // ones in a subcollection beneath it, the same shape production uses, down
+    // to the DeletedInstitutes name. Both segments are PINNED rather than
+    // wildcards, so nobody can invent institutions/anything/DeletedInstitutes/
+    // and get an unaudited tree.
+    //
+    // The `trash` document itself gets no rule of its own, so it stays
+    // unreadable. It holds no fields and need not exist.
+    //
+    // create is what a DELETE does (the document moves here) and delete is what
+    // a RESTORE does, so both halves of each transaction are permitted for the
+    // owner and nobody else. ownerId rides along unchanged, which is what lets
+    // ownsIncoming() succeed on the way in.
+    //
+    // update is NOT granted: nothing legitimately edits a document while it is
+    // in the trash. Restoring it first is the only way to change it.
+    match /institutions/trash/DeletedInstitutes/{institutionId} {
+      allow read:   if signedIn();
+      allow create: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Classrooms — ACTIVE
+    // ========================================================================
+    //
+    //   classrooms/{classroomId}
+    //
+    // The SAME shape as institutions above, for the same reasons. Deletion is a
+    // move into the trash subcollection rather than a flag, so this collection
+    // holds live classrooms and STEM clubs only.
+    match /classrooms/{classroomId} {
+      allow read:   if signedIn();
+      // `trash` is the container document for deleted classrooms and sits in
+      // this same collection. Excluding it here stops a classroom being created
+      // with that id and overwriting the container. Reads and updates need no
+      // exclusion: the sentinel carries no ownerId, so every ownership check
+      // already fails for it.
+      allow create: if signedIn() && classroomId != 'trash';
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Classrooms — DELETED
+    // ========================================================================
+    //
+    //   classrooms/trash/DeletedClassrooms/{classroomId}
+    //
+    // Both segments are PINNED rather than wildcards, so nobody can invent
+    // classrooms/anything/DeletedClassrooms/ and get an unaudited tree. The
+    // `trash` document itself gets no rule, so it stays unreadable; it holds no
+    // fields and need not exist.
+    //
+    // create is what a DELETE does (the document moves here) and delete is what
+    // a RESTORE does, so both halves of each transaction are permitted for the
+    // owner and nobody else. update is NOT granted: nothing legitimately edits
+    // a document while it is in the trash — restoring it first is the only way.
+    match /classrooms/trash/DeletedClassrooms/{classroomId} {
+      allow read:   if signedIn();
+      allow create: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Programmes
+    // ========================================================================
+    //
+    //   programmes/{programmeId}
+    //
+    // The catalogue a classroom's programmes are chosen from. Owner-scoped like
+    // every other top-level collection here: a teacher sees their own
+    // programmes and nobody else's, and the client always filters by ownerId
+    // because Firestore rejects a list query it cannot prove is fully permitted.
+    //
+    // Deletion is a MOVE into the trash subcollection below, the same as it is
+    // for institutions and classrooms.
+    match /programmes/{programmeId} {
+      allow read:   if signedIn();
+      // `trash` is the container document for deleted programmes and sits in
+      // this same collection. Excluding it here stops a programme being created
+      // with that id and overwriting the container.
+      allow create: if signedIn() && programmeId != 'trash';
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Programmes — DELETED
+    // ========================================================================
+    //
+    //   programmes/trash/DeletedProgrammes/{programmeId}
+    //
+    // Both segments PINNED, as with the other two trashes. update is NOT
+    // granted: nothing legitimately edits a programme while it is in the trash.
+    match /programmes/trash/DeletedProgrammes/{programmeId} {
+      allow read:   if signedIn();
+      allow create: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Learning units — ACTIVE
+    // ========================================================================
+    //
+    //   learningUnits/{learningUnitId}
+    //
+    // The activities a programme is built from. The SAME shape a fourth time:
+    // active documents directly inside, deletion a move into the trash below.
+    match /learningUnits/{learningUnitId} {
+      allow read:   if signedIn();
+      // `trash` is the container document for deleted learning units and sits in
+      // this same collection. Excluding it here stops a unit being created with
+      // that id and overwriting the container.
+      allow create: if signedIn() && learningUnitId != 'trash';
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Learning units — DELETED
+    // ========================================================================
+    //
+    //   learningUnits/trash/DeletedLearningUnits/{learningUnitId}
+    //
+    // Named to match ThinkTac production, which uses
+    // `LearningUnits/--trash--/DeletedLearningUnits/{docId}`. Both segments
+    // PINNED, as with the other three trashes. update is NOT granted: nothing
+    // legitimately edits a unit while it is in the trash.
+    match /learningUnits/trash/DeletedLearningUnits/{learningUnitId} {
+      allow read:   if signedIn();
+      allow create: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ------------------------------------------------------------------------
+    // The programme-code counter lives at users/{uid}/counters/programmes and
+    // needs NO rule of its own — the `users/{uid}/{document=**}` block above
+    // already covers it, and covers it by PATH rather than by a field.
+    //
+    // That is why it is there rather than in a shared Configuration document,
+    // which is where ThinkTac production keeps it. Rules cannot express "you
+    // may only increment this by one", so a global counter would have to grant
+    // write to every authenticated user — the only griefable surface in an
+    // otherwise entirely owner-scoped ruleset. See programmeCounterDoc() in
+    // core/firestore-paths.ts for the trade that buys.
+    // ------------------------------------------------------------------------
+
+    // ========================================================================
+    // Teachers — ACTIVE
+    // ========================================================================
+    //
+    //   teachers/{teacherId}
+    //
+    // A teacher registered by an admin, NOT a signed-in user. No Firebase Auth
+    // account exists behind one of these documents, so nothing here is ever the
+    // caller — `ownerId` is the ADMIN who registered them, never the teacher
+    // themselves, and `institutionId` is the school they belong to.
+    //
+    // That is worth stating because the obvious-looking rule is wrong: matching
+    // request.auth.uid against a field on a teacher document would grant access
+    // to nobody, since no teacher can sign in. Ownership is the admin's.
+    //
+    // The SAME four rules as institutions, for the same reasons:
+    //
+    //   read    only the owner's own rows. Firestore rejects any LIST query it
+    //           cannot prove returns permitted documents only, so an unfiltered
+    //           list is denied outright rather than leaking another admin's
+    //           teachers. The client always filters by ownerId.
+    //   create  ownerId on the incoming document must be the caller.
+    //   update  caller must own the EXISTING row and ownerId must be unchanged,
+    //           or ownership could be handed away, or taken, by one field write.
+    //   delete  caller must own the existing row.
+    match /teachers/{teacherId} {
+      allow read:   if signedIn();
+      // `trash` is the container document for deleted teachers and sits in this
+      // same collection. Excluding it here stops a teacher being created with
+      // that id and overwriting the container. Reads and updates need no
+      // exclusion: the sentinel carries no ownerId, so every ownership check
+      // already fails for it.
+      allow create: if signedIn() && teacherId != 'trash';
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Teachers — DELETED
+    // ========================================================================
+    //
+    //   teachers/trash/DeletedTeachers/{teacherId}
+    //
+    // Both segments are PINNED rather than wildcards, so nobody can invent
+    // teachers/anything/DeletedTeachers/ and get an unaudited tree. The `trash`
+    // document itself gets no rule, so it stays unreadable; it holds no fields
+    // and need not exist.
+    //
+    // create is what a DELETE does (the document moves here) and delete is what
+    // a RESTORE does, so both halves of each transaction are permitted for the
+    // owner and nobody else. update is NOT granted: nothing legitimately edits a
+    // document while it is in the trash.
+    match /teachers/trash/DeletedTeachers/{teacherId} {
+      allow read:   if signedIn();
+      allow create: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Configuration — the option lists every dropdown reads
+    // ========================================================================
+    //
+    //   Configuration/{document}
+    //
+    // Countries, boards, languages, school types, grades, sections, programme
+    // statuses and the rest: everything the app used to hardcode. One document per
+    // list, following thinktac-india-production's own Configuration collection.
+    //
+    //   read    any authenticated user. Every signed-in teacher needs these to render
+    //           a form, and they are option vocabularies rather than anyone's data.
+    //   write   NOBODY, through a client.
+    //
+    // WHY WRITES ARE CLOSED while the five data collections are wide open. Those hold
+    // rows a teacher creates and may reasonably edit. This holds the vocabulary every
+    // OTHER user's forms are built from: one client write to GradeList changes what
+    // every teacher in the app can select, and an empty array would blank a dropdown
+    // for all of them. Editing goes through the Firestore console or
+    // scripts/seed-configuration.mjs, both of which use the Admin SDK and bypass these
+    // rules, so closing this costs no functionality.
+    //
+    // The service that reads this falls back to the built-in lists when a document is
+    // missing, absent or empty, so a denied read degrades to the app's shipped
+    // behaviour rather than to empty selects.
+    match /Configuration/{document} {
+      allow read:  if signedIn();
+      allow write: if false;
+    }
+
+    // ========================================================================
+    // OTP challenge material — SERVER-OWNED, no client access at all
+    // ========================================================================
+    //
+    //   OTPVerifications/{phone}
+    //
+    // Holds `salt` and `hashedOtp` for a live login challenge, plus the
+    // requestCount / windowStart send counters. Written and read ONLY by
+    // tcDevSendOtp and tcDevVerifyOtp through the Admin SDK, which bypasses
+    // these rules entirely, so denying every client costs the functions nothing.
+    //
+    // WHY THIS IS NOT HYGIENE. Grant a client READ and it can lift salt and
+    // hashedOtp and brute-force a six-digit code offline at no rate limit, then
+    // call verifyOtp with the answer. Grant it WRITE and it can store a hash of
+    // a code it chose and verify against that, receiving a login token for ANY
+    // phone number with no action by the number's owner. Both are complete
+    // authentication bypasses, and the second needs no cryptography at all.
+    //
+    // Denied to AUTHENTICATED clients too, not just anonymous ones: every
+    // signed-in teacher in this project would otherwise be able to take over any
+    // other account.
+    //
+    // The guide additionally excludes this collection from a permissive
+    // catch-all, because Firestore OR-combines matching rules and an `if false`
+    // block cannot subtract from a broader allow. That step is a no-op HERE and
+    // is deliberately not copied: the catch-all below is already `if false`, so
+    // there is nothing to subtract from. If that catch-all is ever loosened, the
+    // exclusion becomes required — see the guide's step 7.
+    match /OTPVerifications/{phone} {
+      allow read, write: if false;
+    }
+
+    // Everything else in THIS database is denied. Safe to state explicitly now
+    // that the database belongs to this app alone — unlike a shared one, where
+    // a catch-all would break whoever else lived there.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

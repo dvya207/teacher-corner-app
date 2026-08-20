@@ -1,0 +1,540 @@
+/* ==========================================================================
+   Create Account — same split layout as sign-in: white form left, hero right.
+
+   The shared pieces (.form-panel, .hero-panel, .ring, .hero-copy, .hero-pill-top,
+   .hero-modules) are duplicated from login.css rather than imported, because
+   Angular scopes component styles and a component cannot reach another's file.
+   The COLOURS are not duplicated: --hero-surface and --hero-glass are the single
+   definition, so a change there moves both pages together.
+   ========================================================================== */
+
+.register-layout {
+  display: grid;
+  /* Wider than login's 29%: this form has ten controls and a three-up row, and
+     at 29% the Grade/Section/Programme row wraps to one per line. */
+  grid-template-columns: minmax(460px, 36%) 1fr;
+
+  /* EXACTLY the viewport, not `min-height`, and this is the whole fix for the
+     scrolling. With min-height the grid row grew to fit the form, the PAGE scrolled,
+     and the hero scrolled away with it — so its centred content drifted off screen
+     and the panel showed empty violet at the bottom. Pinning the height makes each
+     panel exactly one viewport tall, so the form scrolls inside itself and the hero
+     cannot move at all. */
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   Left — the form
+   ========================================================================== */
+
+.form-panel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px;
+  background: var(--white);
+  /* THE ONLY THING ON THIS PAGE THAT SCROLLS. flex-start rather than centre because
+     the form is taller than the viewport on most laptops, and centring it would hide
+     Create Account below the fold with nothing to suggest it was there. */
+  overflow-y: auto;
+}
+
+.form-inner {
+  width: 100%;
+  max-width: 480px;
+}
+
+.brand {
+  display: block;
+  margin-bottom: 34px;
+}
+
+.eyebrow {
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--accent-500);
+}
+
+.form-inner h1 {
+  font-size: 27px;
+  color: var(--ink-900);
+}
+
+.subtitle {
+  margin: 9px 0 26px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.form-error {
+  margin-bottom: 18px;
+  padding: 11px 13px;
+  border: 1px solid var(--tint-red);
+  border-radius: var(--radius-sm);
+  background: var(--tint-red);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--on-red);
+}
+
+/* ---- Selects -------------------------------------------------------------
+   styles.css styles `.field input` but gives select only a font reset, so these
+   rendered as native controls next to styled inputs: different height, different
+   border, different corner radius. Matched here rather than globally, because
+   other pages already lay out their own selects and a global change would move
+   all of them at once.
+
+   min-width: 0 is load-bearing. A select's intrinsic width is its LONGEST option,
+   and "Indian Certificate Of Secondary Education" is wide enough to push the
+   Search button out of the panel entirely. Grid children default to auto, which
+   respects that intrinsic width; zero lets the column win instead.
+   ------------------------------------------------------------------------- */
+.field select {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  color: var(--ink-900);
+  cursor: pointer;
+  /* Native arrow removed and redrawn, so the control is the same height in every
+     browser. appearance:none alone leaves no affordance at all. */
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 38px;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.field select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+.field select:disabled {
+  background-color: var(--ink-050);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+/* An unchosen select should read like a placeholder, not like a value. */
+.field select:invalid,
+.field select:has(option[value='']:checked) {
+  color: var(--ink-400);
+}
+
+/* ---- Layout of the controls --------------------------------------------- */
+
+/* Two fields sharing a row. Collapses to one per line before the columns get
+   narrow enough to truncate a label. */
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 14px;
+}
+
+.field-row.three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+/* Board picker and its Search button, sized so the button never shrinks below
+   its label. */
+.board-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.search-btn {
+  padding: 12px 22px;
+  white-space: nowrap;
+}
+
+/* Fixed prefix beside the verified number, matching the login page's country
+   box so the two forms read as one flow. */
+.phone-row {
+  display: flex;
+  gap: 8px;
+}
+
+.dial {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 12px 15px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink-700);
+  user-select: none;
+}
+
+.phone-row input {
+  min-width: 0;
+  flex: 1;
+}
+
+/* The number is already verified, so it is shown rather than offered for edit.
+   Greyed so that reads as deliberate instead of as a broken field. */
+.phone-row input[readonly] {
+  background: var(--ink-050);
+  color: var(--ink-700);
+  cursor: default;
+}
+
+.field-hint {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ---- Actions ------------------------------------------------------------- */
+
+.create-btn {
+  height: 46px;
+  margin-top: 6px;
+  font-size: 15px;
+}
+
+/* Separated from Create Account, because the two do opposite things and sitting
+   flush together invites hitting the wrong one at the end of a long form. */
+.logout-btn {
+  height: 44px;
+  margin-top: 12px;
+}
+
+.foot {
+  margin-top: 22px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.foot strong {
+  color: var(--accent-600);
+}
+
+/* ==========================================================================
+   Right — the hero
+   ========================================================================== */
+
+.hero-panel {
+  position: relative;
+  display: grid;
+  /* Centred both ways and fixed: the panel is exactly the viewport, so this content
+     sits in the middle of the screen however long the form beside it grows. */
+  place-items: center;
+  padding: 56px 64px;
+  overflow: hidden;
+  /* The single definition, shared with login. */
+  background: var(--hero-surface);
+  color: var(--white);
+}
+
+/* Decoration, duplicated from login.css because Angular scopes component styles
+   and one component cannot reach another's file. The COLOURS are not duplicated:
+   --hero-surface and --hero-glass are the single definition. */
+
+.ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.ring-lg { width: 549px; height: 549px; border: 1px solid rgba(255, 255, 255, 0.10); }
+.ring-md { width: 410px; height: 410px; border: 1px solid rgba(255, 255, 255, 0.07); }
+.ring-sm { width: 272px; height: 272px; border: 1px solid rgba(255, 255, 255, 0.05); }
+
+.deco-blob {
+  position: absolute;
+  width: 620px;
+  height: 620px;
+  border-radius: 50%;
+  filter: blur(90px);
+  pointer-events: none;
+}
+
+.deco-blob--tr {
+  top: -190px;
+  right: -170px;
+  background: radial-gradient(circle, rgba(41, 134, 214, 0.30) 0%, transparent 70%);
+}
+
+.deco-blob--bl {
+  bottom: -220px;
+  left: -160px;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.26) 0%, transparent 70%);
+}
+
+.deco-dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.11) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 30%, transparent 78%);
+  pointer-events: none;
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 520px;
+  text-align: center;
+}
+
+.hero-pill-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 26px;
+  padding: 7px 16px;
+  border: 1px solid var(--hero-glass-line);
+  border-radius: var(--radius-full);
+  background: var(--hero-glass);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Green rather than the accent blue: "Free to Join" is a positive status, and
+   production draws its dot the same way. */
+.hero-pill-top .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.hero-copy h2 {
+  font-size: clamp(28px, 1.9vw, 36px);
+  line-height: 1.18;
+}
+
+.hero-copy h2 .accent {
+  display: block;
+  color: var(--accent-500);
+  text-shadow: 0 0 28px rgba(41, 134, 214, 0.38);
+}
+
+.hero-copy > p {
+  margin: 20px auto 0;
+  max-width: 430px;
+  font-size: 15px;
+  line-height: 1.65;
+  /* Production's own declared value for this line. */
+  color: #ffffff8c;
+}
+
+/* ---- Signup progress ---------------------------------------------------- */
+
+/* Left aligned inside the centred hero: three rows of two lines each read as a
+   column, and centring them would leave every line starting at a different x. */
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: fit-content;
+  margin: 30px auto 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+/* The connecting line, drawn from each marker down to the next. Not on the last
+   row, which would leave a stub hanging below the final step. */
+.step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 32px;
+  left: 10px;
+  width: 1px;
+  height: calc(100% - 22px);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.step-mark {
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--hero-glass-line);
+  background: var(--hero-glass);
+  color: var(--white);
+}
+
+/* Done: filled, so the tick reads as an achievement rather than an option. */
+.step.is-done .step-mark {
+  border-color: transparent;
+  background: var(--success);
+}
+
+/* Current: ringed in the accent, which is the one thing on this panel drawing the
+   eye to where the teacher actually is. */
+.step.is-current .step-mark {
+  border-color: var(--accent-500);
+  background: rgba(41, 134, 214, 0.22);
+  box-shadow: 0 0 0 4px rgba(41, 134, 214, 0.14);
+}
+
+.step-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step-copy strong {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--white);
+}
+
+.step-copy span {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #ffffff8c;
+}
+
+/* The steps still to come sit back, so the current one leads. */
+.step.is-next .step-copy strong {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.hero-modules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  max-width: 560px;
+  margin: 30px auto 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hero-module app-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.hero-module {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px 9px 14px;
+  border: 1px solid var(--hero-glass-line);
+  border-radius: var(--radius-full);
+  background: var(--hero-glass);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--white);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Responsive — the hero is decorative, so it goes rather than stacking above a
+   ten-field form on the devices with least room for it.
+   ========================================================================== */
+
+/* ==========================================================================
+   Short viewports.
+
+   The hero is pinned to the viewport and clips its overflow, which is what keeps it
+   still while the form scrolls — but it also means content taller than the panel
+   would be CUT rather than scrolled, with nothing to indicate it. Rather than give
+   the hero a scrollbar it is not supposed to have, the panel carries less on a short
+   screen: the step detail lines go first, then the paragraph, since the step titles
+   and the headline are what actually inform.
+
+   Measured against the tallest arrangement: pill, two-line headline, paragraph,
+   three steps and three chips comes to roughly 590px with padding, so 760px is where
+   it starts getting tight rather than where it breaks.
+   ========================================================================== */
+
+@media (max-height: 760px) {
+  .hero-panel {
+    padding: 36px 56px;
+  }
+
+  .steps {
+    margin-top: 22px;
+  }
+
+  .step {
+    padding: 7px 0;
+  }
+
+  /* The titles stay; only the second line goes. */
+  .step-copy span {
+    display: none;
+  }
+
+  .hero-modules {
+    margin-top: 22px;
+  }
+}
+
+@media (max-height: 620px) {
+  /* The paragraph is the most expendable thing left: the headline says the same in
+     fewer words, and the steps carry the information the teacher needs. */
+  .hero-copy > p {
+    display: none;
+  }
+
+  .hero-pill-top {
+    margin-bottom: 18px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .register-layout {
+    grid-template-columns: 1fr;
+    /* Hand scrolling BACK to the page. With the hero gone there is no second panel
+       to hold still, and a pinned height would simply clip the form. */
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .form-panel {
+    overflow-y: visible;
+  }
+
+  .hero-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .form-panel {
+    padding: 32px 20px;
+  }
+
+  /* One control per line. Two 50% columns at this width truncate "Official Email
+     Address" and stack the Grade/Section/Programme labels onto two lines each. */
+  .field-row,
+  .field-row.three {
+    grid-template-columns: 1fr;
+  }
+}

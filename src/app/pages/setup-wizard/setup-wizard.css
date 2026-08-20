@@ -1,0 +1,465 @@
+/* ==========================================================================
+   Set Up Wizard
+
+   The stepper, the switch and the field treatments are all deliberately the
+   SAME rules the Add Institution modal and the classroom programme-locking
+   panel already use, restated here rather than reached for across pages —
+   component styles are scoped, so there is nothing to import. Where a value
+   below looks arbitrary it was copied from that existing rule, so the two
+   surfaces cannot drift apart.
+   ========================================================================== */
+
+/* ---- Stepper -------------------------------------------------------------
+   Five steps rather than the modal's three, and on a full-width page rather
+   than inside a 640px dialog, so it scrolls sideways on a narrow viewport
+   instead of crushing five labels into it. */
+
+/* CENTRED, not spread. `space-between` was right when there were five steps and
+   they filled the card; with two it pinned one to each far edge with a rail
+   running across the empty middle. Centring keeps the pair together whatever the
+   step count, which is also what makes adding a step back a list edit and
+   nothing more. */
+.stepper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0 0 22px;
+  padding: 22px 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  list-style: none;
+  overflow-x: auto;
+}
+
+.step {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  font-size: 13.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* THE CONNECTOR, one segment per gap rather than one rail behind everything.
+   A rail spanning the whole row has to be inset by a guess at the first and last
+   circles' width; a segment before each step after the first is correct for any
+   number of steps and needs no masking behind the labels. */
+.step:not(:first-child)::before {
+  content: '';
+  flex-shrink: 0;
+  width: clamp(32px, 9vw, 140px);
+  height: 1px;
+  margin: 0 18px;
+  background: var(--border);
+}
+
+/* The segment LEADING INTO a reached step is drawn as travelled. */
+.step.is-current::before,
+.step.is-done::before {
+  background: var(--accent-300);
+}
+
+/* The hit area, whether it is a button (completed) or inert (current, unreached).
+   Both are styled identically so the pencil does not make a finished step jump. */
+.step-hit {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: inherit;
+  font: inherit;
+  background: none;
+}
+
+.step-hit:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--focus-ring);
+}
+
+button.step-hit {
+  cursor: pointer;
+}
+
+button.step-hit:hover .step-num {
+  background: var(--accent-800);
+  border-color: var(--accent-800);
+}
+
+.step-num {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: 1px solid var(--ink-300);
+  border-radius: 50%;
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.step.is-current {
+  color: var(--accent-600);
+  font-weight: 600;
+}
+
+.step.is-current .step-num {
+  border-color: var(--accent-600);
+  background: var(--accent-600);
+  color: var(--white);
+}
+
+/* The reference draws a finished step in the SAME accent as the current one,
+   with a pencil rather than a number — it reads as "done, and still yours to
+   change" rather than as a separate success state. */
+.step.is-done .step-num {
+  border-color: var(--accent-500);
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+.step.is-done {
+  color: var(--accent-600);
+}
+
+/* ---- Card ----------------------------------------------------------------
+   NARROW AND CENTRED, not full-bleed. Step 1 is four short controls; stretched
+   across a 1440px page they become four very wide boxes with the labels miles
+   from their values. The reference centres it for the same reason. */
+
+.wizard-card {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 24px 28px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Steps after the first hold two-column rows and repeat, so they get more room
+   than step 1's four short controls need. */
+.wizard-card-wide {
+  max-width: 860px;
+}
+
+/* ---- Page-level step navigation ------------------------------------------
+   OUTSIDE the card and spanning the content width, as in the reference: these
+   move between steps, while the card's own Submit acts on the step's contents. */
+
+.step-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1400px;
+  margin: 22px auto 0;
+}
+
+.step-nav .btn {
+  min-width: 168px;
+}
+
+/* ---- Bulk upload row ----------------------------------------------------- */
+
+.bulk-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.toggle-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-900);
+}
+
+/* A real switch: role=switch on a button, so it is operable and announced
+   without a checkbox that would need its own label plumbing. */
+.switch {
+  position: relative;
+  width: 42px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--ink-300);
+  transition: background 0.16s var(--ease);
+}
+
+.switch.is-on {
+  background: var(--accent-500);
+}
+
+.switch:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: 0 1px 2px rgba(19, 20, 40, 0.3);
+  transition: transform 0.16s var(--ease);
+}
+
+.switch.is-on .switch-knob {
+  transform: translateX(20px);
+}
+
+/* ---- Fields --------------------------------------------------------------
+   .field, .field input and .field-error come from styles.css. Selects do NOT —
+   a bare <select> keeps the platform's own border and height — so they are
+   matched to inputs here, as the Add Institution modal does. */
+
+select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  appearance: none;
+  /* Chevron drawn as a background image so no extra element is needed and the
+     control stays a single focusable node. */
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5l5-5' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 38px;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+select.is-error {
+  border-color: var(--danger);
+}
+
+/* A LOCKED FIELD, greyed rather than hidden. Fields unlock top to bottom as
+   they are filled, so the ones below the cursor are disabled. Hiding them would
+   make the form appear to grow with every keystroke. */
+input:disabled,
+select:disabled {
+  background: var(--ink-050);
+  border-color: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+select:disabled {
+  opacity: 1;
+}
+
+.req {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* An empty search is not an error — the dropdown still has a way forward — so
+   it is amber rather than the red a missing required field gets. */
+.field-hint.is-warn {
+  color: var(--on-amber);
+}
+
+.load-error {
+  margin-bottom: 18px;
+  padding: 13px 16px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--on-red);
+}
+
+/* ---- The chosen school --------------------------------------------------- */
+
+.chosen {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -6px 0 18px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--tint-green);
+  font-size: 12.5px;
+  color: var(--on-green);
+}
+
+/* ---- Stub steps ---------------------------------------------------------- */
+
+.step-stub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 240px;
+  padding: 32px 24px;
+  border: 1px dashed var(--ink-300);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.step-stub .stub-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-lg);
+  background: var(--tint-blue);
+  color: var(--accent-600);
+}
+
+.step-stub h2 {
+  font-size: 18px;
+  color: var(--ink-900);
+}
+
+.step-stub p {
+  max-width: 380px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* ---- Footer --------------------------------------------------------------
+   Continue is CENTRED under the form, which is where the reference puts it —
+   not right-aligned like a modal's footer, because there is no Cancel beside it
+   to balance against. */
+
+.wizard-foot {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+/* Steps 2–5 do have a Back, so those two sit apart. */
+.wizard-foot-split {
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.wizard-foot .btn {
+  min-width: 132px;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 720px) {
+
+  /* Labels are dropped, not wrapped: five of them cannot fit, and a stepper
+     that scrolls sideways hides the steps the user has not reached. The
+     numbered circles alone still convey position. */
+  .step-label {
+    display: none;
+  }
+
+  .stepper {
+    padding: 18px 14px;
+    overflow-x: visible;
+  }
+
+  .step:not(:first-child)::before {
+    width: clamp(24px, 12vw, 60px);
+    margin: 0 12px;
+  }
+
+  .wizard-card {
+    padding: 20px 18px 18px;
+  }
+}
+
+/* ==========================================================================
+   Success toast
+
+   Copied from institutions.css rather than re-chosen, so a confirmation in the
+   wizard is the same object a confirmation on the tables is. Fixed to the
+   viewport: it reports something already done and must not move the form.
+   ========================================================================== */
+
+.toast {
+  position: fixed;
+  z-index: 60;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 48px));
+  padding: 13px 14px 13px 16px;
+  border: 1px solid var(--tint-green);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-900);
+  box-shadow: var(--shadow-lg);
+  animation: fade-up 0.25s var(--ease) both;
+}
+
+.toast-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--on-green);
+}
+
+.toast-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.toast-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+@media (max-width: 560px) {
+  /* Full width at the bottom, where a floating card would leave no room for the
+     message beside its own padding. */
+  .toast {
+    right: 12px;
+    left: 12px;
+    bottom: 12px;
+    max-width: none;
+  }
+}

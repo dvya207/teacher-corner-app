@@ -1,0 +1,303 @@
+<div class="register-layout">
+
+  <!-- ====================================================================
+       Left: the form
+       ==================================================================== -->
+  <section class="form-panel">
+    <div class="form-inner animate-fade-up">
+
+      <app-logo class="brand" [size]="30" />
+
+      <p class="eyebrow">Teacher Corner</p>
+      <h1>Create Account</h1>
+      <p class="subtitle">Please provide the following details to set up your profile.</p>
+
+      @if (errorMessage()) {
+        <div class="form-error" role="alert">{{ errorMessage() }}</div>
+      }
+
+      <form (submit)="$event.preventDefault(); submit()">
+
+        <!-- ---- The school ------------------------------------------------ -->
+
+        <div class="field">
+          <label for="country">Country</label>
+          <!-- [selected] on the option, not [value] on the select. Angular applies
+               the select's value property before @for has rendered its options, so
+               the assignment finds nothing to match and the browser falls back to
+               the first entry - which is why this showed Afghanistan rather than
+               the DEFAULT_COUNTRY it was given. -->
+          <select id="country" (change)="onCountryChange($any($event.target).value)">
+            @for (name of countries; track name) {
+              <option [value]="name" [selected]="name === country()">{{ name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="pincode">School Pincode</label>
+          <input
+            id="pincode"
+            type="text"
+            inputmode="numeric"
+            list="known-pincodes"
+            placeholder="Enter School Pincode"
+            [value]="pincode()"
+            (input)="onPincodeInput($any($event.target).value)"
+          />
+          <!-- Suggestions only. The teacher can still type a pincode they have
+               never used, which is the normal case on a first registration. -->
+          <datalist id="known-pincodes">
+            @for (code of knownPincodes(); track code) {
+              <option [value]="code"></option>
+            }
+          </datalist>
+        </div>
+
+        <div class="field">
+          <label for="board">Board</label>
+          <!-- Picker plus Search, matching production: choosing a board does not
+               itself run the lookup, so a teacher can set country, pincode and
+               board before anything is fetched. -->
+          <div class="board-row">
+            <select id="board" (change)="onBoardChange($any($event.target).value)">
+              <option value="" disabled [selected]="!board()">Select Board Name</option>
+              @for (item of boards(); track item.code) {
+                <option [value]="item.code" [selected]="item.code === board()">{{ item.label }}</option>
+              }
+            </select>
+
+            <!-- The lookup runs as the pincode is typed; this refreshes the list so
+                 a school added in another tab or in the setup wizard shows up. -->
+            <button type="button" class="btn btn-outline search-btn" (click)="search()" [disabled]="!canSearch()">
+              @if (refreshing()) {
+                <span class="spinner" aria-hidden="true"></span>
+              } @else {
+                Search
+              }
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="school">School / Institution</label>
+          <select
+            id="school"
+            (change)="school.set($any($event.target).value)"
+            [disabled]="schools().length === 0"
+          >
+            <option value="" disabled [selected]="!school()">
+              @if (!pincodeComplete()) {
+                Enter a pincode first
+              } @else {
+                Select School from the list
+              }
+            </option>
+            @for (item of schools(); track item.id) {
+              <option [value]="item.id" [selected]="item.id === school()">{{ item.name }}</option>
+            }
+          </select>
+
+          @if (noMatches()) {
+            <!-- Distinguished from "not searched yet", so an empty list reads as a
+                 result rather than a broken lookup.
+
+                 A first-time teacher ALWAYS lands here: the school list is
+                 owner-scoped, so someone who has just registered owns none. The
+                 "Add a New Institution" action that used to sit under this was
+                 removed on instruction, so this now reports the absence and stops.
+                 See the note in register.ts. -->
+            <p class="field-hint">
+              @if (board()) {
+                No schools found at {{ pincode() }} for that board. Clear the board to
+                see every school at this pincode.
+              } @else {
+                No schools recorded at {{ pincode() }} yet.
+              }
+            </p>
+
+          }
+        </div>
+
+        <!-- ---- The teacher ---------------------------------------------- -->
+
+        <div class="field-row">
+          <div class="field">
+            <label for="firstName">First Name</label>
+            <input
+              id="firstName"
+              type="text"
+              autocomplete="given-name"
+              placeholder="First name"
+              [value]="firstName()"
+              (input)="firstName.set($any($event.target).value)"
+            />
+          </div>
+
+          <div class="field">
+            <label for="lastName">Last Name</label>
+            <input
+              id="lastName"
+              type="text"
+              autocomplete="family-name"
+              placeholder="Last name"
+              [value]="lastName()"
+              (input)="lastName.set($any($event.target).value)"
+            />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="phone">Phone Number</label>
+          <!-- READ ONLY. This is the number the teacher just proved they hold by
+               entering a code sent to it; letting them edit it here would register
+               an unverified one. -->
+          <div class="phone-row">
+            <span class="dial" aria-hidden="true">{{ dial }}</span>
+            <input id="phone" type="tel" [value]="phoneDigits" readonly aria-readonly="true" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="email">Official Email Address</label>
+          <input
+            id="email"
+            type="email"
+            autocomplete="email"
+            placeholder="you@school.edu.in"
+            [class.is-error]="!emailValid()"
+            [value]="email()"
+            (input)="email.set($any($event.target).value)"
+          />
+          @if (!emailValid()) {
+            <p class="field-error">That does not look like a valid email address.</p>
+          }
+        </div>
+
+        <!-- ---- The class ------------------------------------------------- -->
+
+        <div class="field-row three">
+          <div class="field">
+            <label for="grade">Grade</label>
+            <select id="grade" (change)="grade.set($any($event.target).value)">
+              <option value="" disabled [selected]="!grade()">Select</option>
+              @for (item of grades(); track item) {
+                <option [value]="item" [selected]="item === grade()">{{ item }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="section">Section</label>
+            <select id="section" (change)="section.set($any($event.target).value)">
+              <option value="" disabled [selected]="!section()">Select</option>
+              @for (item of sections(); track item) {
+                <option [value]="item" [selected]="item === section()">{{ item }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="programme">Programme</label>
+            <select
+              id="programme"
+              (change)="programme.set($any($event.target).value)"
+              [disabled]="programmes().length === 0"
+            >
+              <option value="" disabled [selected]="!programme()">Programme</option>
+              @for (item of programmes(); track item.id) {
+                <option [value]="item.id" [selected]="item.id === programme()">{{ item.name }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block create-btn" [disabled]="!canSubmit()">
+          @if (pending()) {
+            <span class="spinner" aria-hidden="true"></span>
+            Creating your account...
+          } @else {
+            <app-icon name="plus" [size]="16" />
+            Create Account
+          }
+        </button>
+
+      </form>
+
+      <button type="button" class="btn btn-outline btn-block logout-btn" (click)="logout()">
+        Logout
+      </button>
+
+      <p class="foot">Secure sign-up powered by <strong>ThinkTac</strong></p>
+
+
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       Right: the hero.
+
+       Same surface as the login page, deliberately: the two signed-out screens
+       are one product and --hero-surface is the single place that colour lives.
+       aria-hidden because it repeats nothing the form needs.
+       ==================================================================== -->
+  <section class="hero-panel" aria-hidden="true">
+
+    <!-- Same layered set as the login hero: three rings, two blurred washes and a
+         dot field. Decoration only, inside an aria-hidden panel. -->
+    <span class="deco-dots"></span>
+    <span class="deco-blob deco-blob--tr"></span>
+    <span class="deco-blob deco-blob--bl"></span>
+    <span class="ring ring-lg"></span>
+    <span class="ring ring-md"></span>
+    <span class="ring ring-sm"></span>
+
+    <div class="hero-copy">
+      <span class="hero-pill-top"><i class="dot"></i> Free to Join</span>
+
+      <h2>
+        Join Educators
+        <span class="accent">Across India</span>
+      </h2>
+
+      <p>
+        Access teaching resources, collaborate with peers, and set up your
+        classrooms in one place.
+      </p>
+
+      <!-- Where they are in signing up. Real state rather than decoration: the number
+           above the form is already verified, so step one is genuinely complete. -->
+      <ol class="steps">
+        @for (step of steps; track step.title) {
+          <li class="step" [class]="'is-' + step.state">
+            <span class="step-mark" aria-hidden="true">
+              @if (step.state === 'done') {
+                <app-icon name="check" [size]="13" />
+              }
+            </span>
+            <span class="step-copy">
+              <strong>{{ step.title }}</strong>
+              <span>{{ step.detail }}</span>
+            </span>
+          </li>
+        }
+      </ol>
+
+      <!-- NO STATISTICS. Production's panel carries "17K+ Educators",
+           "480+ Schools" and "95% Satisfaction". Those are hardcoded marketing
+           figures with no source behind them, and this app removed the equivalent
+           cards from the login hero for exactly that reason — see hero-content.ts.
+           The chips below name capabilities instead, which the app can keep true. -->
+      <ul class="hero-modules">
+        @for (feature of features; track feature.name) {
+          <li class="hero-module">
+            <app-icon [name]="feature.icon" [size]="15" />
+            {{ feature.name }}
+          </li>
+        }
+      </ul>
+    </div>
+
+  </section>
+
+</div>

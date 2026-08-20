@@ -1,0 +1,164 @@
+/* ==========================================================================
+   Welcome splash — the first thing a cold load paints, held on screen while
+   Firebase rehydrates the session.
+
+   Colours are literals rather than the global tokens, for the same reason as
+   the sign-out page: this screen is matched against the live
+   teachercorner.thinktac.com welcome screen, whose violet is deeper and whose
+   accent is a lighter, cyan-leaning blue than this app's own scales.
+   ========================================================================== */
+
+.welcome-page {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 32px 20px;
+  /* Two layers. The dot grid sits ON TOP of the sweep, so it must come first —
+     background-image paints its first layer nearest the viewer. Measured off
+     the reference: 2px dots of white at ~3.7% on a 36px pitch. Faint by
+     design; it reads as texture rather than as a pattern. */
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.037) 1px, transparent 1px),
+    linear-gradient(160deg, var(--brand-900) 0%, var(--brand-950) 100%);
+  background-size: 36px 36px, auto;
+}
+
+.welcome-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  /* Centring the BOX leaves the INK 3px high, because the box carries the h1's
+     line-box leading at the top and nothing matching it at the bottom. Grid
+     centres the margin box, so 6px here moves the ink down 3px. Not a
+     transform: .animate-fade-up animates transform to none and would drop it. */
+  margin-top: 6px;
+}
+
+.brand {
+  display: block;
+  margin-bottom: 40px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2.1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.welcome-block h1 {
+  margin: 10px 0 0;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.45px;
+  line-height: 1.1;
+  color: #fff;
+}
+
+.tagline {
+  margin: 10px 0 0;
+  font-size: 15.6px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* ---- Rule ----------------------------------------------------------------
+   A fixed 48x3 bar, not a full-width divider: it is a mark under the tagline
+   rather than a separator, so it does not stretch with the viewport. */
+
+.rule {
+  display: block;
+  width: 48px;
+  height: 3px;
+  margin-top: 22px;
+  background: linear-gradient(90deg, var(--accent-500), var(--accent-400));
+}
+
+/* ---- Loading dots -------------------------------------------------------
+   All three pulse together rather than in sequence. The reference frame caught
+   all three at an identical opacity, which a staggered wave could not produce,
+   so a synchronised breath is what that screen is doing. */
+
+.loading {
+  margin: 34px 0 0;
+}
+
+.dots {
+  display: flex;
+  /* 21px pitch on 6px dots, so 15px of gap. */
+  gap: 15px;
+}
+
+.dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-500);
+  opacity: 0.5;
+  animation: welcome-pulse 1.4s var(--ease) infinite;
+}
+
+@keyframes welcome-pulse {
+  0%, 100% { opacity: 0.32; }
+  50%      { opacity: 0.68; }
+}
+
+/* ---- Footer -------------------------------------------------------------
+   Pinned to the page rather than appended to the block above, so the block
+   stays optically centred in the viewport. */
+
+.footer {
+  position: absolute;
+  bottom: 40px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 3.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* The separators are generated rather than typed into the template, so the
+   three words stay three plain words for anything reading the DOM. */
+.footer span:not(:last-child)::after {
+  content: '·';
+  margin-left: 9px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .welcome-block h1 {
+    font-size: 30px;
+  }
+
+  .tagline {
+    font-size: 14.5px;
+  }
+
+  .brand {
+    margin-bottom: 36px;
+  }
+}

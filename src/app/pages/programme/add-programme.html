@@ -1,0 +1,310 @@
+<!-- SELECTS BIND [selected] ON THE OPTIONS, not [value] on the <select>. See the
+     note at the top of add-institution.html for what that cost the first time. -->
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="modal-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Create programme"
+    (click)="$event.stopPropagation()"
+  >
+
+    <header class="modal-head">
+      <h2>Create Programme</h2>
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">
+        <app-icon name="close" [size]="18" />
+      </button>
+    </header>
+
+    <ol class="stepper">
+      @for (item of steps; track item.index) {
+        <li
+          class="step"
+          [class.is-current]="step() === item.index"
+          [class.is-done]="step() > item.index"
+        >
+          <span class="step-num">
+            @if (step() > item.index) {
+              <app-icon name="check" [size]="14" [strokeWidth]="2.4" />
+            } @else {
+              {{ item.index }}
+            }
+          </span>
+          <span class="step-label">{{ item.label }}</span>
+        </li>
+      }
+    </ol>
+
+    <div class="modal-body">
+
+      @if (error()) {
+        <div class="modal-error" role="alert">{{ error() }}</div>
+      }
+
+      <!-- ================================================================
+           Step 1 — Institution
+           ================================================================ -->
+      @if (step() === 1) {
+
+        <div class="field">
+          <label for="pg-country">Country <span class="req" aria-hidden="true">*</span></label>
+          <select id="pg-country" (change)="setCountry(valueOf($event))">
+            @for (name of countries; track name) {
+              <option [value]="name" [selected]="name === country()">{{ name }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="pg-pincode">
+            Search a school from pincode <span class="req" aria-hidden="true">*</span>
+          </label>
+          <input
+            id="pg-pincode"
+            type="text"
+            placeholder="Enter school pincode"
+            autocomplete="off"
+            [value]="pincode()"
+            [disabled]="!pincodeUnlocked()"
+            (input)="setPincode(valueOf($event))"
+          />
+          <span class="field-hint">Enter a 6-digit pincode to search nearby schools</span>
+        </div>
+
+        <div class="search-row">
+          <div class="field">
+            <label for="pg-board">Board <span class="req" aria-hidden="true">*</span></label>
+            <select id="pg-board" [disabled]="!boardUnlocked()" (change)="setBoard(valueOf($event))">
+              <option value="" disabled [selected]="board() === ''">Select board</option>
+              @for (option of boards(); track option.code) {
+                <option [value]="option.code" [selected]="option.code === board()" [title]="option.label">
+                  {{ option.code }}
+                </option>
+              }
+            </select>
+          </div>
+
+          <button type="button" class="search-btn" [disabled]="!searchUnlocked()" (click)="search()">
+            <app-icon name="search" [size]="15" />
+            Search
+          </button>
+        </div>
+
+        <div class="field">
+          <label for="pg-school">School <span class="req" aria-hidden="true">*</span></label>
+          <select id="pg-school" [disabled]="!schoolUnlocked()" (change)="setInstitution(valueOf($event))">
+            <option value="" disabled [selected]="institutionId() === ''">Select school from the list</option>
+            @for (school of matchingSchools(); track school.docId) {
+              <option [value]="school.docId" [selected]="school.docId === institutionId()">
+                {{ school.institutionName }}
+              </option>
+            }
+          </select>
+
+          @if (searched() && matchingSchools().length === 0) {
+            <span class="field-hint is-warn">
+              No school of yours matches board <strong>{{ board() }}</strong> at pincode
+              <strong>{{ pincode() }}</strong>. Register it under Institutions first.
+            </span>
+          }
+        </div>
+      }
+
+      <!-- ================================================================
+           Step 2 — Create Programme
+           ================================================================ -->
+      @if (step() === 2) {
+
+        <div class="field">
+          <label for="pg-name">Programme Name <span class="req" aria-hidden="true">*</span></label>
+          <input
+            id="pg-name"
+                [disabled]="locked('name')"
+            type="text"
+            autocomplete="off"
+            [value]="programmeName()"
+            [placeholder]="suggestedName()"
+            (input)="programmeName.set(valueOf($event))"
+          />
+        </div>
+
+        <div class="field">
+          <label for="pg-display">
+            Display Name <span class="optional">defaults to the programme name</span>
+          </label>
+          <input
+            id="pg-display"
+                [disabled]="locked('display')"
+            type="text"
+            autocomplete="off"
+            [value]="displayName()"
+            [placeholder]="programmeName()"
+            (input)="displayName.set(valueOf($event))"
+          />
+        </div>
+
+        <div class="field">
+          <label for="pg-desc">Description <span class="req" aria-hidden="true">*</span></label>
+          <textarea
+            id="pg-desc"
+                [disabled]="locked('desc')"
+            rows="3"
+            [value]="description()"
+            placeholder="What this programme covers"
+            (input)="description.set(valueOf($event))"
+          ></textarea>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="pg-status">Status <span class="req" aria-hidden="true">*</span></label>
+            <select id="pg-status"
+                [disabled]="locked('status')" (change)="status.set(valueOf($event))">
+              @for (option of statuses(); track option.value) {
+                <option [value]="option.value" [selected]="option.value === status()">
+                  {{ option.label }}
+                </option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="pg-type">Type <span class="req" aria-hidden="true">*</span></label>
+            <select id="pg-type"
+                [disabled]="locked('type')" (change)="type.set(valueOf($event))">
+              @for (option of types(); track option.value) {
+                <option [value]="option.value" [selected]="option.value === type()">
+                  {{ option.label }}
+                </option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <!-- Grade OR age, never both — flipping clears the other side. -->
+        <div class="scope-block">
+          <div class="scope-head">
+            <div class="scope-toggle" role="group" aria-label="Scope by grade or age">
+              <button
+                type="button"
+                class="scope-btn"
+                [class.is-active]="isGradeScoped()"
+                (click)="setScope('grade')"
+              >
+                By grade
+              </button>
+              <button
+                type="button"
+                class="scope-btn"
+                [class.is-active]="!isGradeScoped()"
+                (click)="setScope('age')"
+              >
+                By age
+              </button>
+            </div>
+
+            <label class="range-toggle">
+              <input type="checkbox" [checked]="isRange()" (change)="toggleRange()" />
+              Range
+            </label>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="pg-from">
+                {{ isRange() ? 'From' : (isGradeScoped() ? 'Grade' : 'Age') }}
+                <span class="req" aria-hidden="true">*</span>
+              </label>
+              <select id="pg-from"
+                [disabled]="locked('scope')" (change)="setScopeFrom(valueOf($event))">
+                <option value="" disabled [selected]="scopeFrom() === ''">Select</option>
+                @for (value of scopeValues(); track value) {
+                  <option [value]="value" [selected]="value === scopeFrom()">{{ value }}</option>
+                }
+              </select>
+            </div>
+
+            @if (isRange()) {
+              <div class="field">
+                <label for="pg-to">To <span class="req" aria-hidden="true">*</span></label>
+                <select id="pg-to"
+                [disabled]="locked('scope')" (change)="setScopeTo(valueOf($event))">
+                  <option value="" disabled [selected]="scopeTo() === ''">Select</option>
+                  @for (value of scopeValues(); track value) {
+                    <option [value]="value" [selected]="value === scopeTo()">{{ value }}</option>
+                  }
+                </select>
+              </div>
+            }
+          </div>
+
+          @if (scopeValuesChosen().length > 1) {
+            <span class="field-hint">
+              Stored as {{ scopeValuesChosen().join(', ') }} — every value in the range.
+            </span>
+          }
+        </div>
+
+        <!-- Production has two more steps here. Saying so beats a silently
+             shorter wizard that looks like a different product. -->
+        <p class="step-note">
+          Learning Units and Assignments are selected in two further steps in
+          ThinkTac production. Neither is available in this app yet, so a new
+          programme is created with none attached.
+        </p>
+      }
+
+      <!-- ================================================================
+           Step 3 — Review
+           ================================================================ -->
+      @if (step() === 3) {
+        <p class="review-intro">
+          Check the programme before creating it. The programme code is allocated
+          automatically when it is saved.
+        </p>
+
+        <dl class="review-list">
+          @for (row of reviewRows(); track row.label) {
+            <div class="review-row">
+              <dt>{{ row.label }}</dt>
+              <dd>{{ row.value }}</dd>
+            </div>
+          }
+        </dl>
+      }
+
+    </div>
+
+    <footer class="modal-foot">
+      @if (step() > 1) {
+        <button type="button" class="btn btn-ghost" (click)="back()">Back</button>
+      } @else {
+        <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
+      }
+
+      @if (step() < 3) {
+        <button
+          type="button"
+          class="btn btn-primary next-btn"
+          [disabled]="step() === 1 ? !stepOneValid() : !stepTwoValid()"
+          (click)="next()"
+        >
+          Continue
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="btn btn-primary next-btn"
+          [disabled]="saving()"
+          (click)="save()"
+        >
+          {{ saving() ? 'Creating…' : 'Create Programme' }}
+        </button>
+      }
+    </footer>
+
+  </div>
+</div>

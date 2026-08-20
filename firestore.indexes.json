@@ -1,0 +1,5 @@
+{
+  "//": "No composite indexes. Every query is a single equality filter on ownerId, which Firestore serves from the automatic single-field indexes. Add entries here the moment a query combines a filter with an orderBy on a different field.",
+  "indexes": [],
+  "fieldOverrides": []
+}

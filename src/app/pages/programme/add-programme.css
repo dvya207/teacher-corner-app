@@ -1,0 +1,447 @@
+/* ==========================================================================
+   Create Programme — modal wizard
+
+   The shell and the stepper are the same rules add-institution.css uses. The
+   two wizards sit in the same app and any drift between them reads as a bug.
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  display: flex;
+  flex-direction: column;
+  width: min(680px, 100%);
+  max-height: min(860px, calc(100dvh - 48px));
+  border-radius: var(--radius-dialog);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+  overflow: hidden;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 18px;
+}
+
+.modal-head h2 {
+  font-size: 21px;
+  color: var(--ink-900);
+}
+
+.modal-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--slate-100);
+  color: var(--slate-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.modal-close:hover {
+  background: var(--ink-200);
+  color: var(--ink-900);
+}
+
+/* ---- Stepper -------------------------------------------------------------
+   The connecting rule is drawn by the list itself rather than per item, so it
+   cannot end up misaligned when a label wraps. */
+
+.stepper {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 0 26px 22px;
+  list-style: none;
+}
+
+.stepper::before {
+  content: '';
+  position: absolute;
+  top: 13px;
+  left: 60px;
+  right: 60px;
+  height: 1px;
+  background: var(--border);
+}
+
+.step {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 6px;
+  background: var(--surface);
+  font-size: 13.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.step-num {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: 1px solid var(--ink-300);
+  border-radius: 50%;
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.step.is-current {
+  color: var(--accent-600);
+  font-weight: 600;
+}
+
+.step.is-current .step-num {
+  border-color: var(--accent-600);
+  background: var(--accent-600);
+  color: var(--white);
+}
+
+.step.is-done .step-num {
+  border-color: var(--success);
+  background: var(--success);
+  color: var(--white);
+}
+
+/* ---- Body ---------------------------------------------------------------- */
+
+.modal-body {
+  flex: 1;
+  padding: 4px 26px 22px;
+  overflow-y: auto;
+}
+
+.modal-error {
+  margin-bottom: 16px;
+  padding: 11px 14px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--on-red);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.modal-body select,
+.modal-body textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.modal-body select {
+  appearance: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5l5-5' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 38px;
+  cursor: pointer;
+}
+
+.modal-body textarea {
+  resize: vertical;
+  min-height: 84px;
+  line-height: 1.55;
+}
+
+.modal-body select:focus,
+.modal-body textarea:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/* A field that has not unlocked is greyed rather than hidden, so the form does
+   not appear to grow as it is filled. */
+.modal-body select:disabled,
+.modal-body input:disabled {
+  background-color: var(--ink-050);
+  border-color: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.modal-body select:disabled {
+  opacity: 1;
+}
+
+/* ---- Board + Search row -------------------------------------------------- */
+
+.search-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  /* Aligns with the select beside it, which sits below its own label. */
+  margin-top: 25px;
+  min-width: 132px;
+  padding: 12px 18px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.search-btn:hover:not(:disabled) {
+  border-color: var(--accent-400);
+  color: var(--accent-600);
+}
+
+.search-btn:disabled {
+  background: var(--ink-050);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+/* ---- Hints --------------------------------------------------------------- */
+
+.field-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.field-hint.is-warn {
+  color: var(--on-amber);
+}
+
+.optional {
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-400);
+}
+
+/* ---- Grade / age scope --------------------------------------------------- */
+
+.scope-block {
+  margin-top: 4px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+}
+
+.scope-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+/* A segmented control: the two scopes are mutually exclusive, and showing them
+   side by side says so more clearly than a select would. */
+.scope-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-full);
+  background: var(--white);
+}
+
+.scope-btn {
+  padding: 6px 15px;
+  border-radius: var(--radius-full);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.scope-btn.is-active {
+  background: var(--accent-600);
+  color: var(--white);
+}
+
+.range-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.range-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-600);
+  cursor: pointer;
+}
+
+.step-note {
+  margin-top: 16px;
+  padding: 11px 14px;
+  border-left: 3px solid var(--ink-300);
+  border-radius: var(--radius-sm);
+  background: var(--ink-050);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* ---- Review -------------------------------------------------------------- */
+
+.review-intro {
+  margin-bottom: 14px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.review-list {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.review-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 34%) 1fr;
+  gap: 14px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--ink-100);
+}
+
+.review-row:last-child {
+  border-bottom: none;
+}
+
+.review-row:nth-child(odd) {
+  background: var(--ink-050);
+}
+
+.review-row dt {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.review-row dd {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-900);
+  overflow-wrap: anywhere;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 26px 22px;
+  border-top: 1px solid var(--border);
+}
+
+.next-btn {
+  min-width: 168px;
+}
+
+.btn-primary:disabled {
+  background: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.req {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 620px) {
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .modal-card {
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .search-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .search-btn {
+    margin-top: 0;
+    margin-bottom: 18px;
+    width: 100%;
+  }
+
+  /* Only the current step's label stays visible; three do not fit. */
+  .step-label {
+    display: none;
+  }
+
+  .step.is-current .step-label {
+    display: inline;
+  }
+
+  .stepper::before {
+    left: 40px;
+    right: 40px;
+  }
+}

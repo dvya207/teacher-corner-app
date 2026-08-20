@@ -1,0 +1,230 @@
+<!-- The backdrop dismisses on click, and Escape dismisses from the keyboard —
+     bound on the host as a document listener, because a div cannot receive a
+     keydown it never has focus for. The rules disabled below ask for a keyboard
+     equivalent on this element; it exists, it just cannot live on a backdrop
+     that is deliberately not focusable. -->
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="modal-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Edit classroom"
+    (click)="$event.stopPropagation()"
+  >
+
+    <header class="modal-head">
+      <div class="head-title">
+        <h2>{{ title() }}</h2>
+        <span class="type-badge" [attr.data-type]="classroom().type">{{ typeLabel() }}</span>
+      </div>
+
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">
+        <app-icon name="close" [size]="18" />
+      </button>
+    </header>
+
+    <div class="modal-body">
+
+      @if (error()) {
+        <div class="modal-error" role="alert">{{ error() }}</div>
+      }
+
+      <!-- ================================================================
+           Manage Programmes
+
+           The only pane. Basic Info was removed on instruction, and production's
+           own classroom dialog is likewise just this, under this same heading.
+           ================================================================ -->
+
+      <h3 class="section-title">Manage Programmes</h3>
+
+      <div class="picker-toolbar">
+        <div class="search-field">
+          <span class="search-icon"><app-icon name="search" [size]="15" /></span>
+          <input
+            type="search"
+            placeholder="Search programmes"
+            autocomplete="off"
+            aria-label="Search programmes"
+            [value]="searchTerm()"
+            (input)="setSearch(valueOf($event))"
+          />
+        </div>
+
+        <label class="show-all">
+          <input type="checkbox" [checked]="showAll()" (change)="toggleShowAll()" />
+          Show all programmes
+        </label>
+        </div>
+
+        <!-- Says the gesture out loud. Drag affordances are invisible until
+           tried, and the buttons remain the accessible equivalent. -->
+        <p class="picker-hint">
+        Drag a programme across, or use the
+        <app-icon name="arrow-right" [size]="12" /> and
+        <app-icon name="close" [size]="11" /> buttons.
+        </p>
+
+        <div class="panes">
+
+        <!-- Dropping HERE removes. preventDefault inside onDragOver is what
+             opts a pane in, so the pane a row came from silently refuses it. -->
+        <section
+          class="pane"
+          [class.is-drop-target]="dropTarget() === 'available'"
+          (dragover)="onDragOver($event, 'available')"
+          (dragleave)="onDragLeave('available')"
+          (drop)="onDrop($event, 'available')"
+        >
+          <header class="pane-head">
+            <span>Available</span>
+            <span class="pane-count">{{ available().length }}</span>
+          </header>
+
+          <div class="pane-body pane-body-cards">
+            @for (programme of available(); track programme.programmeId) {
+              <!-- Same CARD as the Selected side, so a programme looks like
+                   itself before and after it is chosen and the drag has an
+                   obvious target shape. A div, not a button: Firefox will not
+                   start a native drag on a form control, so the card carries
+                   the role and the keyboard handlers itself. -->
+              <div
+                class="prog-card is-offered"
+                role="button"
+                tabindex="0"
+                draggable="true"
+                [class.is-dragging]="dragging()?.programmeId === programme.programmeId"
+                [attr.aria-label]="'Add ' + programme.displayName"
+                (click)="addProgramme(programme)"
+                (keydown.enter)="onRowKey($event, programme)"
+                (keydown.space)="onRowKey($event, programme)"
+                (dragstart)="onDragStart($event, programme.programmeId, 'available')"
+                (dragend)="onDragEnd()"
+              >
+                <span class="prog-grip" aria-hidden="true">
+                  <app-icon name="grip" [size]="14" />
+                </span>
+                <span class="prog-copy">
+                  <strong>{{ programme.displayName }}</strong>
+                  @if (programme.programmeCode) {
+                    <span>{{ programme.programmeCode }}</span>
+                  }
+                </span>
+                <span class="prog-action" aria-hidden="true">
+                  <app-icon name="arrow-right" [size]="15" />
+                </span>
+              </div>
+            } @empty {
+              <!-- Says WHY it is empty. Six different causes used to render as
+                   the same silent "No programmes available". -->
+              <p class="pane-empty">{{ emptyReason() }}</p>
+            }
+          </div>
+        </section>
+
+        <section
+          class="pane is-selected"
+          [class.is-drop-target]="dropTarget() === 'selected'"
+          (dragover)="onDragOver($event, 'selected')"
+          (dragleave)="onDragLeave('selected')"
+          (drop)="onDrop($event, 'selected')"
+        >
+          <header class="pane-head">
+            <span>Selected</span>
+            <span class="pane-count">{{ selectedProgrammes().length }}</span>
+          </header>
+
+          <div class="pane-body pane-body-cards">
+            @for (programme of selectedProgrammes(); track programme.programmeId) {
+              <!-- A CARD, bordered on all four sides, as the reference shows:
+                   the name wraps in full rather than being truncated, because
+                   two programmes at one school differ only in their last
+                   word. -->
+              <div
+                class="prog-card"
+                draggable="true"
+                [class.is-dragging]="dragging()?.programmeId === programme.programmeId"
+                (dragstart)="onDragStart($event, programme.programmeId, 'selected')"
+                (dragend)="onDragEnd()"
+              >
+                <span class="prog-grip" aria-hidden="true">
+                  <app-icon name="grip" [size]="14" />
+                </span>
+
+                <span class="prog-copy">
+                  <strong>{{ programme.displayName }}</strong>
+                  @if (programme.programmeCode) {
+                    <span>{{ programme.programmeCode }}</span>
+                  }
+                </span>
+
+                <span class="prog-tools">
+                  <!-- Locking details for this programme's learning units. -->
+                  <button
+                    type="button"
+                    class="prog-edit"
+                    [class.is-set]="hasLocking(programme)"
+                    [attr.aria-label]="'Edit locking details for ' + programme.displayName"
+                    title="Edit locking details"
+                    (click)="openLocking(programme.programmeId)"
+                  >
+                    <app-icon name="edit" [size]="14" />
+                  </button>
+
+                  <button
+                    type="button"
+                    class="prog-remove"
+                    [attr.aria-label]="'Remove ' + programme.displayName"
+                    title="Remove"
+                    (click)="removeProgramme(programme.programmeId)"
+                  >
+                    <app-icon name="close" [size]="14" />
+                  </button>
+                </span>
+              </div>
+            } @empty {
+              <p class="pane-empty">
+                Nothing selected. Drag a programme here, or use the
+                <app-icon name="arrow-right" [size]="12" /> button.
+              </p>
+            }
+          </div>
+        </section>
+
+        </div>
+
+    </div>
+
+    <footer class="modal-foot">
+      <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
+      <button
+        type="button"
+        class="btn btn-primary save-btn"
+        [disabled]="!dirty() || saving()"
+        (click)="save()"
+      >
+        {{ saving() ? 'Saving…' : 'Save Changes' }}
+      </button>
+    </footer>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     Edit locking details
+
+     Nested, so the pending selection underneath survives: this dialog changes
+     one programme entry and hands it back, and the classroom's own Save Changes
+     is still what writes.
+     ========================================================================== -->
+@if (lockingProgramme(); as target) {
+  <app-programme-locking
+    [programme]="target"
+    [units]="lockingUnits()"
+    (saved)="applyLocking($event)"
+    (closed)="closeLocking()"
+  />
+}

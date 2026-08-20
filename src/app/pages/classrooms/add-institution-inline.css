@@ -1,0 +1,202 @@
+/* ==========================================================================
+   Add a New Institution — the inline school form
+
+   NESTED inside Add Classroom, so its overlay sits one z-index layer above
+   that modal rather than replacing it: the classroom form stays underneath with
+   everything the user already typed, and closing this returns to it.
+
+   The shell is otherwise the same rules add-classroom.css uses. Full-height on
+   purpose — this is the longest form in the app, nineteen fields, and production
+   scrolls it too.
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  /* Above the Add Classroom overlay (60), below the Trash overlay (70). */
+  z-index: 65;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 100%);
+  max-height: min(880px, calc(100dvh - 48px));
+  border-radius: var(--radius-dialog);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+  overflow: hidden;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 16px;
+}
+
+.modal-head h2 {
+  font-size: 20px;
+  color: var(--ink-900);
+}
+
+.modal-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--slate-100);
+  color: var(--slate-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.modal-close:hover {
+  background: var(--ink-200);
+  color: var(--ink-900);
+}
+
+.modal-body {
+  flex: 1;
+  padding: 4px 26px 22px;
+  overflow-y: auto;
+}
+
+.modal-error {
+  margin-bottom: 16px;
+  padding: 11px 14px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--on-red);
+}
+
+/* Match selects to inputs — a bare <select> keeps the platform's own border and
+   height, which is visibly shorter than .field input. */
+.modal-body select {
+  width: 100%;
+  padding: 12px 14px;
+  padding-right: 38px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  appearance: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5l5-5' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.modal-body select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/* A LOCKED FIELD, greyed rather than hidden.
+   Fields unlock top to bottom as they are filled, so the ones below the cursor
+   are disabled. Hiding them would make the form appear to grow with every
+   keystroke; greying them shows what is still to come. */
+.modal-body input:disabled,
+.modal-body select:disabled {
+  background: var(--ink-050);
+  border-color: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.modal-body select:disabled {
+  opacity: 1;
+}
+
+/* Country and board are carried in and shown, not edited — legible rather than
+   greyed to illegibility, because their values are the context for the form. */
+.modal-body input[readonly] {
+  background-color: var(--ink-050);
+  border-color: var(--ink-200);
+  color: var(--ink-700);
+  cursor: default;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ---- Phone control -------------------------------------------------------
+   The dial code is a prefix INSIDE the field rather than a separate control, so
+   the focus ring surrounds the whole thing. Same treatment as the wizard. */
+
+.phone-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.phone-prefix {
+  position: absolute;
+  left: 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.phone-control input {
+  padding-left: 46px;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+
+.modal-foot {
+  display: flex;
+  padding: 16px 26px 22px;
+  border-top: 1px solid var(--border);
+}
+
+/* Full width, as in the reference: Submit is the only action, because Escape,
+   the close button and the backdrop all already cancel. */
+.submit-btn {
+  width: 100%;
+}
+
+.btn-primary:disabled {
+  background: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.req {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 620px) {
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .modal-card {
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+}

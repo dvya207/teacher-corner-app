@@ -1,0 +1,226 @@
+/* ==========================================================================
+   Update Profile — modal
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+  backdrop-filter: blur(2px);
+}
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 48px);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+  overflow: hidden;
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 16px;
+}
+
+.profile-head h2 {
+  font-size: 21px;
+  color: var(--ink-900);
+}
+
+.modal-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.modal-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+/* ---- Body ---------------------------------------------------------------- */
+
+.profile-body {
+  flex: 1;
+  padding: 6px 26px 20px;
+  border-top: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.profile-avatar {
+  display: grid;
+  place-items: center;
+  width: 78px;
+  height: 78px;
+  margin: 22px auto 26px;
+  border: 3px solid var(--accent-400);
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--tint-blue), #d6e9fd);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent-600);
+}
+
+.profile-error {
+  margin-bottom: 16px;
+  padding: 11px 13px;
+  border: 1px solid var(--tint-red);
+  border-radius: var(--radius-sm);
+  background: var(--tint-red);
+  font-size: 13px;
+  color: var(--on-red);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ---- Controls with leading icon and trailing edit affordance -------------- */
+
+.control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.control-icon {
+  position: absolute;
+  left: 13px;
+  display: flex;
+  color: var(--ink-400);
+  pointer-events: none;
+}
+
+.control input {
+  width: 100%;
+  padding: 12px 14px 12px 40px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.control input:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+.control input:disabled {
+  background: var(--ink-050);
+  color: var(--ink-400);
+}
+
+.control input.is-error {
+  border-color: var(--danger);
+}
+
+/* The pencil is an affordance, not a control: the field is already editable,
+   so it must not take focus or intercept a click meant for the input. */
+.control-edit {
+  position: absolute;
+  right: 13px;
+  display: flex;
+  color: var(--ink-400);
+  pointer-events: none;
+}
+
+.control:has(.control-edit) input {
+  padding-right: 40px;
+}
+
+/* ---- Dial-code control ---------------------------------------------------
+   The +91 sits inside the field's border with a divider, matching the
+   reference, so the whole thing reads as one control. */
+
+.control-dial {
+  position: absolute;
+  left: 1px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: calc(100% - 2px);
+  padding: 0 11px;
+  border-right: 1px solid var(--ink-200);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  background: var(--ink-050);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-700);
+  pointer-events: none;
+}
+
+.flag {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.control:has(.control-dial) input {
+  padding-left: 104px;
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+
+.profile-foot {
+  padding: 16px 26px 24px;
+  border-top: 1px solid var(--border);
+}
+
+.profile-save {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 13px 20px;
+  border-radius: var(--radius-md);
+  background: var(--accent-600);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--white);
+  transition: background 0.15s var(--ease), transform 0.12s var(--ease);
+}
+
+.profile-save:hover:not(:disabled) {
+  background: var(--accent-800);
+}
+
+.profile-save:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Grey and inert until something changes, as in the reference. */
+.profile-save:disabled {
+  background: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .field-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .profile-head,
+  .profile-body,
+  .profile-foot {
+    padding-inline: 18px;
+  }
+}

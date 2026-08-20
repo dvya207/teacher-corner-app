@@ -1,0 +1,7 @@
+node_modules/
+lib/
+# TEST_PHONES holds real handset numbers. Not a secret, but not shared either.
+.env
+
+# Emulator-only secret overrides. Placeholders, but keep them out of any repo.
+.secret.local

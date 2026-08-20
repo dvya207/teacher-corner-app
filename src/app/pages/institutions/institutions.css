@@ -1,0 +1,671 @@
+/* ==========================================================================
+   Institutions — page head, stat cards, filter toolbar, table
+   ========================================================================== */
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.page-head-copy h1 {
+  font-size: 27px;
+  color: var(--ink-900);
+}
+
+.page-head-copy p {
+  margin-top: 5px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.page-head-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.add-btn,
+.trash-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 20px;
+  border-radius: var(--radius-md);
+  font-size: 14.5px;
+  font-weight: 600;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              transform 0.12s var(--ease);
+}
+
+.add-btn {
+  /* accent-500: the reference's Add button is the brighter blue, and it is the
+     same primary as Save Changes. */
+  background: var(--accent-500);
+  color: var(--white);
+  box-shadow: var(--shadow-btn);
+}
+
+.add-btn:hover {
+  background: var(--accent-600);
+}
+
+.add-btn:active,
+.trash-btn:active {
+  transform: translateY(1px);
+}
+
+.trash-btn {
+  border: 1px solid var(--tint-red);
+  background: var(--white);
+  color: var(--on-red);
+}
+
+.trash-btn:hover {
+  background: var(--tint-red);
+  border-color: var(--on-red);
+}
+
+/* ---- Stat cards ---------------------------------------------------------- */
+
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  /* Tighter than the table panel below it, as measured in the reference. */
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.sc-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+}
+
+/* One hue per category, matching the reference: indigo, green, amber. */
+.sc-total { background: var(--tint-blue); color: var(--on-blue); }
+.sc-govt  { background: var(--tint-green); color: var(--on-green); }
+.sc-pvt   { background: var(--tint-amber); color: var(--on-amber); }
+
+.sc-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.sc-copy strong {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.sc-copy > span {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---- Load failure -------------------------------------------------------- */
+
+.load-error {
+  margin-bottom: 18px;
+  padding: 13px 16px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--on-red);
+}
+
+.load-error strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* ---- Table panel --------------------------------------------------------- */
+
+.table-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+}
+
+.filter-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  padding: 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--white);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.pill:hover {
+  border-color: var(--accent-400);
+  color: var(--accent-600);
+}
+
+/* A TINTED CHIP, not a solid fill. Production's own active pill is
+   $accent-light inside a 1px $accent border with $accent text — the same recipe
+   its dialog tabs use — which reads as a selected chip rather than a button and
+   keeps a row of them from looking like four competing calls to action. This was
+   a solid fill with white text. */
+.pill.is-active {
+  background: var(--tint-blue);
+  border-color: var(--accent-500);
+  color: var(--accent-500);
+  font-weight: 600;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.loaded-count {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.hide-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease);
+}
+
+.hide-btn:hover {
+  background: var(--ink-050);
+}
+
+/* ---- Table ---------------------------------------------------------------
+   The table scrolls inside its own container rather than widening the page:
+   ten columns cannot fit a narrow viewport, and a horizontally scrolling body
+   would drag the sidebar and topbar with it. */
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.inst-table {
+  width: 100%;
+  min-width: 1080px;
+  border-collapse: collapse;
+}
+
+.inst-table th {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--ink-050);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  /* --ink-400, the reference's #9da1b0. Used directly rather than through
+     --text-muted: these are structural column labels, not prose, so the
+     lighter grey is safe here where it would not be for hint text. */
+  color: var(--ink-400);
+  white-space: nowrap;
+}
+
+.inst-table td {
+  padding: 14px;
+  border-bottom: 1px solid var(--ink-100);
+  font-size: 13.5px;
+  color: var(--ink-700);
+  vertical-align: middle;
+}
+
+.inst-table tbody tr:hover {
+  background: var(--ink-050);
+}
+
+/* Dim a row while its own toggle or delete is in flight, so the feedback is
+   local rather than blanking the whole table. */
+.inst-table tbody tr.is-busy {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.col-name {
+  max-width: 240px;
+  font-weight: 600;
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.truncate {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+/* ---- Type badge ---------------------------------------------------------- */
+
+.type-badge {
+  display: inline-block;
+  padding: 4px 11px;
+  border-radius: var(--radius-full);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.type-badge[data-type='Pvt'] {
+  background: var(--tint-amber);
+  color: var(--on-amber);
+}
+
+.type-badge[data-type='Govt'] {
+  background: var(--tint-green);
+  color: var(--on-green);
+}
+
+/* ---- Status toggle ------------------------------------------------------- */
+
+.toggle {
+  position: relative;
+  width: 38px;
+  height: 21px;
+  border-radius: var(--radius-full);
+  background: var(--ink-300);
+  transition: background 0.18s var(--ease);
+}
+
+.toggle.is-on {
+  background: var(--accent-500);
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.28);
+  transition: translate 0.18s var(--ease);
+}
+
+.toggle.is-on .toggle-knob {
+  translate: 17px 0;
+}
+
+/* ---- Row actions --------------------------------------------------------- */
+
+.col-actions {
+  width: 92px;
+  white-space: nowrap;
+}
+
+.row-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.row-btn:hover {
+  background: var(--ink-100);
+  color: var(--accent-600);
+}
+
+.row-btn.is-danger:hover {
+  background: var(--tint-red);
+  color: var(--danger);
+}
+
+/* ---- Table states -------------------------------------------------------- */
+
+.table-state {
+  padding: 44px 20px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .stat-cards {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .page-head-actions {
+    width: 100%;
+  }
+
+  .add-btn,
+  .trash-btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .toolbar-right {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+}
+
+/* ==========================================================================
+   Trash — full-screen overlay
+
+   Covers the sidebar and topbar too, matching the reference. Trash is a
+   destructive, focused mode; leaving the nav reachable behind it invites
+   navigating away mid-cleanup with rows in an ambiguous state.
+   ========================================================================== */
+
+.trash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  padding: 22px 26px 26px;
+  background: var(--page-bg);
+}
+
+.trash-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+}
+
+.trash-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 24px;
+  color: var(--ink-900);
+}
+
+.trash-count {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  background: var(--tint-red);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--on-red);
+}
+
+.trash-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.empty-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 18px;
+  border: 1px solid var(--tint-red);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-red);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.empty-btn:hover:not(:disabled) {
+  background: var(--tint-red);
+  border-color: var(--on-red);
+}
+
+/* Armed state. The label already says what will happen; the fill makes it
+   unmistakable that this click is the destructive one. */
+.empty-btn.is-confirming {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--white);
+}
+
+.empty-btn.is-confirming:hover:not(:disabled) {
+  background: var(--on-red);
+  border-color: var(--on-red);
+}
+
+.empty-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trash-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.trash-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+/* ---- Body ---------------------------------------------------------------- */
+
+.trash-body {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: auto;
+}
+
+.trash-table {
+  min-width: 780px;
+}
+
+.deleted-date {
+  color: var(--ink-400);
+  white-space: nowrap;
+}
+
+/* Boxed action buttons, as in the reference — outlined squares rather than the
+   bare icons used in the main table. */
+.row-btn.is-boxed {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+}
+
+.row-btn.is-boxed:hover {
+  border-color: var(--accent-300);
+}
+
+.row-btn.is-boxed.is-danger:hover {
+  border-color: var(--on-red);
+}
+
+.trash-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 340px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.trash-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: var(--ink-100);
+  color: var(--ink-400);
+}
+
+.trash-empty h3 {
+  font-size: 18px;
+  color: var(--ink-900);
+}
+
+.trash-empty p {
+  max-width: 340px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 620px) {
+  .trash-overlay {
+    padding: 16px;
+  }
+
+  .trash-head h2 {
+    font-size: 20px;
+  }
+
+  .empty-btn {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+}
+
+/* Trash loading / error, matching the main table's state treatment. */
+.trash-state {
+  padding: 48px 20px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.trash-state.is-error {
+  color: var(--on-red);
+}
+
+/* ==========================================================================
+   Success toast
+
+   Fixed to the viewport, not the page flow: it confirms an action taken in a
+   modal, so it has to sit above the overlay and must not shift the table
+   underneath when it appears and disappears.
+   ========================================================================== */
+
+.toast {
+  position: fixed;
+  z-index: 60;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 48px));
+  padding: 13px 14px 13px 16px;
+  border: 1px solid var(--tint-green);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-900);
+  box-shadow: var(--shadow-lg);
+  animation: fade-up 0.25s var(--ease) both;
+}
+
+.toast-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--on-green);
+}
+
+.toast-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.toast-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+@media (max-width: 560px) {
+  .toast {
+    right: 16px;
+    left: 16px;
+    bottom: 16px;
+    max-width: none;
+  }
+}

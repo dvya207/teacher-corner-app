@@ -1,0 +1,91 @@
+/* ==========================================================================
+   Approval pending.
+
+   A single centred card on the page background, with the logo above it and one
+   Logout in the corner. No shell, no sidebar, nothing else to press.
+   ========================================================================== */
+
+.approval-layout {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 34px;
+  min-height: 100dvh;
+  padding: 40px 24px 96px;
+  /* The app's page grey, not white: the card has to read as a card, and it cannot
+     do that on a surface the same colour as itself. */
+  background: var(--page-bg);
+}
+
+.brand {
+  display: block;
+}
+
+.notice-card {
+  width: 100%;
+  max-width: 780px;
+  padding: 34px 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--white);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+
+.notice-card p {
+  font-size: 15.5px;
+  line-height: 1.6;
+  /* Production sets this copy in the accent blue rather than body ink, which is
+     what makes the card read as a status message and not as an article. */
+  color: var(--accent-600);
+}
+
+/* Space between the two sentences, without a margin on the last child that would
+   unbalance the card's padding. */
+.notice-card p + p {
+  margin-top: 26px;
+}
+
+.notice-card strong {
+  font-weight: 600;
+  color: var(--accent-800);
+}
+
+/* Bottom right of the viewport, as production places it: this is an exit, not a
+   next step, so it sits away from the message rather than under it. */
+.logout-btn {
+  position: absolute;
+  right: 32px;
+  bottom: 28px;
+  padding: 10px 26px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 14px;
+  color: var(--accent-600);
+}
+
+.logout-btn:hover {
+  background: var(--ink-050);
+  border-color: var(--ink-400);
+}
+
+@media (max-width: 640px) {
+  .notice-card {
+    padding: 26px 22px;
+  }
+
+  .notice-card p {
+    font-size: 14.5px;
+  }
+
+  /* Full width at the bottom on a phone, where a floating corner button is easy
+     to miss and easy to hit by accident. */
+  .logout-btn {
+    right: 24px;
+    left: 24px;
+    bottom: 24px;
+  }
+}
