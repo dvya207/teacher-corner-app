@@ -291,10 +291,37 @@ a {
 }
 
 input,
-select,
 textarea {
   font: inherit;
   color: inherit;
+}
+
+/*
+ * SELECTS GET AN EXPLICIT COLOUR, not `inherit`.
+ *
+ * Ten component stylesheets draw their own select and not one of them sets a text
+ * colour, so every dropdown in the app took whatever its surrounding card used.
+ * Where that was muted — which was most places — a perfectly live control read as
+ * a disabled one, on the Set Up Wizard, the classroom and programme modals, the
+ * learning unit form and the bulk upload steps alike.
+ *
+ * Set once here rather than repeated in ten files, and left low-specificity on
+ * purpose: a component that genuinely wants something else still wins.
+ */
+select {
+  font: inherit;
+  color: var(--ink-900);
+}
+
+/*
+ * An unchosen select reads as a placeholder, and still plainly live.
+ *
+ * --ink-700: one step from a chosen value, and deliberately DARKER than the
+ * --ink-500 these components use for :disabled, so the two states can never be
+ * mistaken for each other again.
+ */
+select:has(option[value='']:checked) {
+  color: var(--ink-700);
 }
 
 /* Visible focus for keyboard users only. :focus-visible rather than :focus,
