@@ -666,18 +666,24 @@ describe('Register — resolving the classroom', () => {
   });
 
   /**
-   * A SECONDARY WRITE MUST NOT COST THE REGISTRATION. The request is still filed,
-   * carrying an empty classroomId, rather than the teacher losing their submission.
+   * STRICT: NOTHING IS FILED WITHOUT A CLASSROOM.
+   *
+   * This used to file the request anyway with an empty classroomId, on the
+   * reasoning that a secondary write should not cost somebody their
+   * registration. That produced records nobody could follow and which could not
+   * be told apart from a real class whose data went missing — so it refuses, and
+   * says so, which the teacher can retry.
    */
-  it('still files the request when the classroom could not be created', async () => {
+  it('refuses to file anything when the classroom cannot be created', async () => {
     await render();
     classrooms.createError = new Error('permission-denied');
     fillForm();
 
     await component.submit();
 
-    expect(profile.saved.length).toBe(1);
-    expect(request()['classroomId']).toBe('');
-    expect(request()['classroomName']).toBe('9 B');
+    expect(profile.saved.length).toBe(0);
+    expect(component.errorMessage()).toBe(
+      'Could not complete your registration. Please try again.'
+    );
   });
 });

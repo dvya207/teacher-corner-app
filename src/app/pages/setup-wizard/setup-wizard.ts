@@ -25,7 +25,6 @@ import {
 } from '../../models/teaching.model';
 import { Timestamp } from 'firebase/firestore';
 
-import { generatedKey } from '../../core/firestore-paths';
 import { InstitutionService } from '../../services/institution.service';
 import { ProgrammeService } from '../../services/programme.service';
 import { TeacherService } from '../../services/teacher.service';
@@ -247,11 +246,15 @@ export class SetupWizard implements OnInit, OnDestroy {
    *
    *   matched    an existing classrooms/{id} with that grade and section, whose
    *              name and type are copied onto the entry
-   *   unmatched  one is CREATED, so the entry carries a real reference. If that
-   *              create fails, the entry is keyed by a GENERATED id rather than by
-   *              grade-section: a key built out of the class is not stable — the
-   *              same teacher re-registered after the classroom exists would land
-   *              under a different key and read as a second class.
+   *   unmatched  one is CREATED, so the entry carries a real reference
+   *
+   * STRICT: IT THROWS RATHER THAN WRITING A HALF-ENTRY. If the classroom can
+   * neither be found nor created, this refuses the whole submit instead of
+   * recording a teacher against an empty classroomId and an empty
+   * classroomName. Those entries are unusable — nothing can follow them, and
+   * they are indistinguishable from a real class whose data went missing — so a
+   * visible failure the admin can retry is the better outcome than a quiet one
+   * they discover in the console weeks later.
    *
    * IT DOES CREATE. That was avoided at first, on the reasoning that this step
    * should not quietly populate a collection the form never mentions — but the
@@ -326,8 +329,7 @@ export class SetupWizard implements OnInit, OnDestroy {
       let classroom = find(group.grade, group.section);
 
       if (!classroom) {
-        try {
-          classroom = await this.classroomService.create(
+        classroom = await this.classroomService.create(
             {
               type: 'CLASSROOM',
               classroomName: '',
@@ -344,32 +346,25 @@ export class SetupWizard implements OnInit, OnDestroy {
                * what a class other people already use is running.
                */
               programmes: toProgrammeMap(programmes)
-            },
-            this.classrooms()
-          );
+          },
+          this.classrooms()
+        );
 
-          // Held locally so a later group, or a second teacher in the same submit,
-          // reuses it rather than creating a duplicate.
-          this.classrooms.update(list => [...list, classroom as Classroom]);
-        } catch (error) {
-          console.error('Could not create the classroom for this teacher.', error);
-          classroom = undefined;
-        }
+        // Held locally so a later group, or a second teacher in the same submit,
+        // reuses it rather than creating a duplicate.
+        this.classrooms.update(list => [...list, classroom as Classroom]);
       }
 
-      const key = classroom?.docId ?? generatedKey();
-
-      map[key] = {
+      map[classroom.docId] = {
         activeStatus: true,
-        classroomId: classroom?.docId ?? '',
-        classroomName: classroom
-          ? (classroom.type === 'STEM-CLUB' ? classroom.stemClubName : classroom.classroomName)
-          : `${group.grade} ${group.section}`.trim(),
+        classroomId: classroom.docId,
+        classroomName:
+          classroom.type === 'STEM-CLUB' ? classroom.stemClubName : classroom.classroomName,
         grade: group.grade,
         section: group.section,
         institutionId: schoolId,
         institutionName: school?.institutionName ?? '',
-        type: classroom?.type ?? 'CLASSROOM',
+        type: classroom.type,
         userRole,
         programmes: programmes.map(programme => ({
           programmeId: programme.programmeId,
@@ -757,22 +752,31 @@ export class SetupWizard implements OnInit, OnDestroy {
         fullNameLowerCase: '',
         phone: entry.phone,
         phoneNumber: entry.phone,
-        // EMPTY BY DESIGN: registering a teacher creates no Auth user, so there
-        // is no uid until that person signs in for themselves.
+        // BLANK HERE AND STRIPPED ON WRITE: registering a teacher creates no Auth
+        // user, so there is no uid to record — see withoutEmptyUid, which omits
+        // the field rather than storing '' on the document.
         uid: '',
         updatedAt: null as unknown as Timestamp
       },
       classrooms: {} as Record<string, TeacherClassroom>
     }));
 
-    // Resolved AFTER the drafts are shaped, and sequentially: creating a classroom
-    // is a write, and two rows naming the same class must reuse the first rather
-    // than racing to create it twice.
-    for (const [index, entry] of entries.entries()) {
-      drafts[index].classrooms = await this.classroomsMapFor(entry.classrooms, entry.role);
-    }
-
     try {
+      /*
+       * INSIDE THE TRY, because it WRITES and it THROWS.
+       *
+       * Resolving a classroom creates one when it is missing, and refuses rather
+       * than recording a teacher against a class that does not exist. That
+       * refusal has to land in the same handler as a failed teacher write, or it
+       * escapes the page and the admin sees nothing.
+       *
+       * Sequential, not parallel: two rows naming the same class must reuse the
+       * first classroom rather than racing to create it twice.
+       */
+      for (const [index, entry] of entries.entries()) {
+        drafts[index].classrooms = await this.classroomsMapFor(entry.classrooms, entry.role);
+      }
+
       /**
        * SPLIT BY WHETHER THE PHONE WAS RECOGNISED.
        *

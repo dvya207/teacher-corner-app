@@ -5,7 +5,6 @@ import { Router } from '@angular/router';
 import { Icon } from '../../components/icon/icon';
 import { Logo } from '../../components/logo/logo';
 import { COUNTRIES, DEFAULT_COUNTRY, dialFor } from '../../data/institution-options';
-import { generatedKey } from '../../core/firestore-paths';
 import { HERO_MODULES } from '../../data/hero-content';
 import { isCompletePincode, toPincodeDigits } from '../../data/setup-wizard-options';
 import { Classroom, Institution, Programme } from '../../models/teaching.model';
@@ -365,10 +364,10 @@ export class Register {
    * MATCHES ON type CLASSROOM, because a STEM club has no grade or section to
    * match against and must never be handed back for a class.
    *
-   * Returns undefined only when the create itself failed, which the caller treats
-   * as "file the request anyway".
+   * THROWS if the classroom can neither be found nor created, because the caller
+   * has nothing usable to file without one.
    */
-  private async resolveClassroom(institutionName: string): Promise<Classroom | undefined> {
+  private async resolveClassroom(institutionName: string): Promise<Classroom> {
     const existing = this.classrooms().find(classroom =>
       classroom.institutionId === this.school() &&
       classroom.type === 'CLASSROOM' &&
@@ -380,9 +379,8 @@ export class Register {
       return existing;
     }
 
-    try {
-      const created = await this.classroomService.create(
-        {
+    const created = await this.classroomService.create(
+      {
           type: 'CLASSROOM',
           classroomName: '',
           stemClubName: '',
@@ -405,18 +403,14 @@ export class Register {
             this.allProgrammes().filter(item => item.docId === this.programme())
           )
         },
-        this.classrooms()
-      );
+      this.classrooms()
+    );
 
-      // Kept locally so a second submit in the same session reuses it rather than
-      // creating a duplicate.
-      this.classrooms.update(list => [...list, created]);
+    // Kept locally so a second submit in the same session reuses it rather than
+    // creating a duplicate.
+    this.classrooms.update(list => [...list, created]);
 
-      return created;
-    } catch (error) {
-      console.error('Could not create the classroom for this registration.', error);
-      return undefined;
-    }
+    return created;
   }
 
   // ---- Submit -------------------------------------------------------------
@@ -459,24 +453,18 @@ export class Register {
        * moment the request is filed — an admin reading it can open the classroom
        * they are being asked to approve somebody into.
        *
-       * A FAILED CREATE IS SURVIVABLE. The request is still filed, carrying an
-       * empty classroomId, because losing the registration outright over a
-       * secondary write would be the worse outcome.
+       * STRICT: A FAILED CREATE STOPS THE SUBMIT. Filing a request against an
+       * empty classroomId records somebody as asking to teach a class that does
+       * not exist as a document — unusable, and indistinguishable from a real
+       * class whose data went missing. A visible failure they can retry is better
+       * than a quiet one an admin finds in the console later.
        */
       const classroom = await this.resolveClassroom(chosenSchool?.name ?? '');
 
-      const classroomName = classroom
-        ? (classroom.classroomName?.trim() || classroom.stemClubName?.trim() || '')
-        : `${this.grade()} ${this.section()}`.trim();
+      const classroomName =
+        classroom.classroomName?.trim() || classroom.stemClubName?.trim() || '';
 
-      /*
-       * The classroom's own id, or a generated one if the create failed.
-       *
-       * NOT grade-section: that encoded the class into the key, so the key moved
-       * the moment a real classroom appeared. classroomId is what records whether
-       * the entry is linked; the key is only a key.
-       */
-      const key = classroom?.docId ?? generatedKey();
+      const key = classroom.docId;
 
       await this.profileService.save({
         firstName: this.firstName().trim(),
@@ -516,7 +504,12 @@ export class Register {
       await this.router.navigate(['/approval-page']);
     } catch (error) {
       this.errorMessage.set(
-        this.profileService.describeError(error, 'Could not save your profile. Please try again.')
+        this.profileService.describeError(
+          error,
+          // Covers the classroom resolution too, which now refuses rather than
+          // filing a request against a class that does not exist.
+          'Could not complete your registration. Please try again.'
+        )
       );
     } finally {
       this.pending.set(false);

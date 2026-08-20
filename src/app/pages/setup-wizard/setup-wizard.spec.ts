@@ -1140,12 +1140,14 @@ describe('Set Up Wizard — registering teachers', () => {
    * legitimately has none.
    */
   /**
-   * A class with no classroom gets one created, so the entry is keyed by a real
-   * document id — see the creation tests. This covers the CREATE-FAILED path,
-   * where the entry is still recorded under a generated key rather than under
-   * grade-section, which would move the moment a real classroom appeared.
+   * STRICT: NO TEACHER IS WRITTEN WITHOUT A CLASSROOM.
+   *
+   * This used to record the teacher anyway, keyed by a generated id and carrying
+   * an empty classroomId. Those entries are unusable — nothing can follow them,
+   * and they cannot be told apart from a real class whose data went missing — so
+   * the submit fails visibly and the admin can retry.
    */
-  it('keys a failed create by a generated id, never by grade-section', async () => {
+  it('registers nobody when the classroom cannot be created', async () => {
     await reachStepTwo();
     classroomService.createError = new Error('permission-denied');
 
@@ -1154,16 +1156,8 @@ describe('Set Up Wizard — registering teachers', () => {
       classrooms: [{ grade: '9', section: 'Z', programmeId: 'prog-1' }]
     }]);
 
-    const entries = teacherService.calls[0][0].classrooms;
-    const [key] = Object.keys(entries);
-
-    expect(key).not.toBe('9-Z');
-    expect(key.length).toBeGreaterThan(10);
-    // Unlinked is recorded on the entry, not encoded in the key.
-    expect(entries[key].classroomId).toBe('');
-    expect(entries[key].grade).toBe('9');
-    expect(entries[key].section).toBe('Z');
-    expect(entries[key].classroomName).toBe('9 Z');
+    expect(teacherService.calls.length).toBe(0);
+    expect(component.teacherError()).toBe('Could not register those teachers.');
   });
 
   /** The school comes from step 1, never from the form. */

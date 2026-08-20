@@ -79,20 +79,6 @@ export const COLLECTIONS = Object.freeze({
 /** The field carrying ownership on institution documents. */
 export const OWNER_FIELD = 'ownerId';
 
-/**
- * A unique key for a map entry that has no document id to use.
- *
- * WHY NOT grade-section. A key built out of the class encodes data into the key:
- * it changes the moment a real classroom appears, so the same class read under
- * two keys looks like two classes, and nothing can be updated in place.
- *
- * crypto.randomUUID rather than a Firestore reference id: this key stands for an
- * entry that is NOT a document, and something shaped like a document id invites
- * being followed as one. The hyphens make it plainly synthetic.
- */
-export function generatedKey(): string {
-  return crypto.randomUUID();
-}
 
 function assertSafeSegment(segment: string, label: string): void {
   if (typeof segment !== 'string' || segment.trim() === '') {
