@@ -358,9 +358,12 @@ export class SetupWizard implements OnInit, OnDestroy {
       map[key] = {
         activeStatus: true,
         classroomId: matched?.docId ?? '',
+        // COMPOSED WHEN THERE IS NO CLASSROOM to take it from, which happens only
+        // if the create failed. "5 B" is what composeClassroomName would have
+        // produced anyway, so the entry stays readable instead of nameless.
         classroomName: matched
           ? (matched.type === 'STEM-CLUB' ? matched.stemClubName : matched.classroomName)
-          : '',
+          : `${row.grade} ${row.section}`.trim(),
         grade: row.grade,
         section: row.section,
         institutionId: schoolId,
