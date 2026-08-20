@@ -118,10 +118,23 @@
   box-shadow: var(--focus-ring);
 }
 
+/* School and Programme are genuinely disabled until the pincode finds something,
+   and their placeholder is the INSTRUCTION for getting out of that state
+   ("Enter a pincode first"). At --ink-400 on a grey ground that instruction was
+   the least readable text on the form, which is what made the control look
+   broken rather than waiting.
+
+   --ink-500 keeps it legible; the grey background still carries "not yet". */
 .field select:disabled {
   background-color: var(--ink-050);
-  color: var(--ink-400);
+  color: var(--ink-500);
   cursor: not-allowed;
+}
+
+/* A disabled select must not out-rank a live one, so the placeholder rule below
+   cannot lighten it further — it is already at its floor. */
+.field select:disabled:has(option[value='']:checked) {
+  color: var(--ink-500);
 }
 
 /* An unchosen select should read like a placeholder, not like a value.
