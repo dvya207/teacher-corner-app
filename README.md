@@ -17,7 +17,8 @@
   <img alt="Node.js" height="26" src="https://img.shields.io/badge/Node.js-20-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white">
 </p>
 
-A web console for teachers to manage their schools, classes and programmes.
+Angular 21 + Firebase console for teachers — manage institutions, classrooms,
+programmes and teachers, with phone-OTP and Google sign-in.
 
 ## What it does
 
