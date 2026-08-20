@@ -148,7 +148,11 @@
    colour alone, which is the more reliable signal anyway. */
 .field select:invalid,
 .field select:has(option[value='']:checked) {
-  color: var(--ink-500);
+  /* --ink-700, not --ink-500. Two rounds of "these still look disabled" say the
+     mid grey is not enough: a live control has to read as live at a glance, and
+     the distinction from a chosen value (--ink-900) is carried well enough by one
+     step rather than three. */
+  color: var(--ink-700);
 }
 
 /* Once something is chosen it reads as a value, at full strength. */

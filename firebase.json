@@ -15,14 +15,15 @@
     ],
     "headers": [
       {
-        "//": "Angular hashes these filenames, so a changed file gets a new name and can never be served stale.",
-        "source": "**/*.@(js|css)",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        "//": "ORDER IS LOAD-BEARING. Everything revalidates by default, and the hashed assets below opt back out. Where two rules match one file, the LATER one wins.",
+        "//why": "The previous rule named '/index.html', which never matched: the SPA rewrite serves index.html for '/' and for every deep route, so the request path is '/dashboard' or '/', never '/index.html'. Every visitor therefore got Firebase's default hour on the one file that must not be cached, and kept booting an old bundle for an hour after each deploy.",
+        "source": "**",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       },
       {
-        "//": "index.html is NOT hashed. It must revalidate or users keep booting an old bundle that references deleted chunks.",
-        "source": "/index.html",
-        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        "//": "Angular hashes these filenames, so a changed file gets a new name and can never be served stale. Listed AFTER the catch-all so it overrides it.",
+        "source": "**/*.@(js|css|woff|woff2|ttf|eot|png|jpg|jpeg|gif|svg|webp|avif|ico)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
       }
     ]
   },
