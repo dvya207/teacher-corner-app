@@ -329,15 +329,6 @@ export class AddTeachers {
   }
 
   /**
-   * Email left empty. SEPARATE from emailInvalid() because isValidEmail() passes
-   * '' by design, so a blank field would otherwise report nothing at all while
-   * still holding Submit dead.
-   */
-  emailMissing(): boolean {
-    return this.shows('email') && this.entry().email.trim() === '';
-  }
-
-  /**
    * No class assigned yet, once the user has actually tried to submit.
    *
    * Gated on attempted() rather than shows(): there is no control to blur here,

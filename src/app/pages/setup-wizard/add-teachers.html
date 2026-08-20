@@ -65,13 +65,11 @@
           placeholder="Enter your email address"
           [value]="entry().email"
           [disabled]="identityLocked()"
-          [class.is-error]="emailInvalid() || emailMissing()"
+          [class.is-error]="emailInvalid()"
           (blur)="markBlurred('email')"
           (input)="update('email', valueOf($event))"
         />
-        @if (emailMissing()) {
-          <span class="field-error">Email is required</span>
-        } @else if (emailInvalid()) {
+        @if (emailInvalid()) {
           <span class="field-error">Enter a valid email address</span>
         }
       </div>

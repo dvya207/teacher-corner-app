@@ -214,11 +214,14 @@ export function isValidEmail(raw: string): boolean {
 export function isCompleteEntry(entry: TeacherEntry): boolean {
   return (
     isValidPhone(entry.phone) &&
-    // EMAIL IS REQUIRED, on instruction. isValidEmail() passes '' so that it can
-    // validate format alone; the non-empty check is separate rather than folded
-    // into it, because the field-level error message needs to distinguish
-    // "missing" from "malformed".
-    entry.email.trim() !== '' &&
+    /*
+     * EMAIL IS OPTIONAL AGAIN. It was briefly required, which contradicted both
+     * this form's own label ("Email (optional)") and production's — so a blank
+     * one held Submit dead while the label said it was fine to skip. A field that
+     * blocks must say so.
+     *
+     * isValidEmail() passes '' by design, so this validates format only.
+     */
     isValidEmail(entry.email) &&
     entry.firstName.trim() !== '' &&
     entry.lastName.trim() !== '' &&

@@ -72,9 +72,6 @@ describe('Add Teachers', () => {
     component.update('phone', phone);
     component.update('firstName', first);
     component.update('lastName', 'Rao');
-    // REQUIRED, so a "filled" teacher has to carry one. Tests that care about
-    // the email itself set or clear it explicitly after calling this.
-    component.update('email', 'anita.rao@example.com');
   }
 
   /**
@@ -344,22 +341,18 @@ describe('Add Teachers', () => {
       .toBe('Enter valid 10 digits phone number');
   });
 
-  it('requires an email, and says so rather than failing silently', async () => {
+  /**
+   * OPTIONAL, and the label says so. It was briefly required, which held Submit
+   * dead on a form whose own label read "Email (optional)".
+   */
+  it('accepts an empty email, because it is optional', async () => {
     await render();
     fillTeacher();
     addClassroom();
-    component.update('email', '');
     component.markBlurred('email');
-    fixture.detectChanges();
 
-    // NOT emailInvalid(): isValidEmail() passes '' so it can validate format
-    // alone. A blank field is reported by emailMissing() instead.
     expect(component.emailInvalid()).toBe(false);
-    expect(component.emailMissing()).toBe(true);
-    expect(component.canSubmit()).toBe(false);
-
-    const errors = [...el().querySelectorAll('.field-error')].map(e => e.textContent?.trim());
-    expect(errors).toContain('Email is required');
+    expect(component.canSubmit()).toBe(true);
   });
 
   it('rejects a malformed one', async () => {
