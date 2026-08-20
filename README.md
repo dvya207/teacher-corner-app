@@ -347,15 +347,3 @@ curl -O https://teachercorner.thinktac.com/assets/images/logo/thinktacLogo_noTag
 curl -O https://teachercorner.thinktac.com/assets/images/logo/thinktacLogo_noTagline_white.svg
 # then re-crop: lockup viewBox "64.78 67.01 2269.42 527.15", mark "64.78 41.32 578.52 578.52"
 ```
-
----
-
-## Not done yet
-
-- The pages that come before sign-in
-- Institution card grid, expand-to-classrooms, "What's new"
-- Real Firestore reads behind `mock-dashboard.ts`
-- A real role source — `AuthService.role()` returns a hardcoded `'Teacher'`;
-  it should read a custom claim or a teachers document
-- Registration and password reset
-- Security rules, and any tests beyond the one smoke spec
