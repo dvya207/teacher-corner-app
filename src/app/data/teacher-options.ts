@@ -19,16 +19,23 @@
  */
 export interface TeacherClassroomEntry {
   /**
-   * A classrooms/{docId} from the chosen school.
-   *
-   * ONE FIELD, not grade + section + programme. The classroom document already
-   * carries its grade, section, type and the programmes it runs, so the form
-   * picks the classroom and the write copies the rest from it. Choosing a
-   * programme separately would let a teacher be attached to a programme the
-   * classroom does not actually run.
+   * Stored bare — '1', not 'Class 1'. `gradeLabel()` in classroom-options.ts is
+   * what the control shows; prettifying the stored value would write something no
+   * other screen and no imported row would match.
    */
-  classroomId: string;
+  grade: string;
+  /** A–Z, or production's 'NA' for a school that does not section its grades. */
+  section: string;
+  /**
+   * A programmes/{docId} from the chosen institution's catalogue.
+   *
+   * NOT A CLASSROOM. This briefly asked for one instead, which production's own
+   * Add Teachers step does not: it collects grade, section and programme, and the
+   * classroom is resolved from them. Reverted to match.
+   */
+  programmeId: string;
 }
+
 
 
 /**
@@ -118,7 +125,7 @@ export const DEFAULT_TEACHER_GRADE = '1';
  * default, because guessing either would be guessing which class a teacher takes.
  */
 export function emptyClassroomEntry(): TeacherClassroomEntry {
-  return { classroomId: '' };
+  return { grade: DEFAULT_TEACHER_GRADE, section: '', programmeId: '' };
 }
 
 /**
@@ -233,14 +240,14 @@ export function isCompleteEntry(entry: TeacherEntry): boolean {
   );
 }
 
-/** A classroom row with a classroom actually chosen. */
+/** Every one of a row's three controls answered. */
 export function isCompleteClassroom(row: TeacherClassroomEntry): boolean {
-  return row.classroomId !== '';
+  return row.grade !== '' && row.section !== '' && row.programmeId !== '';
 }
 
 /** A class row nobody has touched beyond its defaulted grade. */
 export function isBlankClassroom(row: TeacherClassroomEntry): boolean {
-  return row.classroomId === '';
+  return row.section === '' && row.programmeId === '';
 }
 
 

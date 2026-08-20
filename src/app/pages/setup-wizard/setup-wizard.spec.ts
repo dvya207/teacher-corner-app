@@ -994,65 +994,8 @@ describe('Set Up Wizard — registering teachers', () => {
     firstName: first,
     lastName: 'Rao',
     role: 'School Teacher',
-    classrooms: [{ classroomId: 'c1' }],
+    classrooms: [{ grade: '4', section: 'A', programmeId: 'prog-1' }],
     existingId: ''
-  });
-
-  /**
-   * THE SCHOOL COMES FROM THE CLASSROOM, not from the form and no longer from
-   * the wizard either. Every field on a teacher's classroom entry is copied from
-   * the classroom document, so a teacher can never carry a school the classroom
-   * does not have.
-   */
-  it('copies the school off the classroom the teacher was attached to', async () => {
-    await reachStepTwo();
-
-    await component.addTeachers([row('9876543210')]);
-
-    expect(teacherService.calls.length).toBe(1);
-    expect(teacherService.calls[0][0].classrooms['c1'].institutionId).toBe('inst-1');
-    expect(teacherService.calls[0][0].classrooms['c1'].institutionName).toBe('Oak School');
-  });
-
-  /** Grade, section and type are the classroom's, never re-typed on the form. */
-  it('copies the classroom’s own grade, section, name and type', async () => {
-    await reachStepTwo();
-
-    await component.addTeachers([row('9876543210')]);
-    const entry = teacherService.calls[0][0].classrooms['c1'];
-
-    expect(entry.classroomName).toBe('4 A');
-    expect(entry.grade).toBe('4');
-    expect(entry.section).toBe('A');
-    expect(entry.type).toBe('CLASSROOM');
-  });
-
-  /**
-   * THE TEACHER INHERITS THE CLASSROOM'S PROGRAMMES rather than choosing one.
-   * Picking a programme separately would allow attaching a teacher to a
-   * programme the classroom does not actually run.
-   */
-  it('inherits the programmes the classroom runs, in production’s shape', async () => {
-    await reachStepTwo();
-
-    await component.addTeachers([row('9876543210')]);
-
-    expect(teacherService.calls[0][0].classrooms['c1'].programmes).toEqual([{
-      programmeId: 'prog-1',
-      programmeName: 'Science',
-      displayName: 'Science',
-      programmeCode: 'P1',
-      sequentiallyLocked: false
-    }]);
-  });
-
-  /** Per classroom, following production, not hoisted onto the teacher. */
-  it('stores the role on the classroom entry', async () => {
-    await reachStepTwo();
-
-    await component.addTeachers([row('9876543210')]);
-
-    expect(teacherService.calls[0][0].classrooms['c1'].userRole).toBe('School Teacher');
   });
 
   /** The dial code follows step 1's country, and is stored apart from the digits. */
@@ -1150,82 +1093,128 @@ describe('Set Up Wizard — registering teachers', () => {
   /* ---- The classroom entries ---------------------------------------------- */
 
   /**
-   * GRADE, SECTION AND PROGRAMME ARE NO LONGER COLLECTED. The form picks a
-   * classroom and the write copies everything from that document, which is what
-   * these tests replace: there is no form-supplied grade to carry, and no
-   * programme id to resolve a name for.
+   * THE FORM COLLECTS GRADE, SECTION AND PROGRAMME, matching production's own Add
+   * Teachers step. The classroom is RESOLVED from grade + section within the
+   * chosen school rather than being picked.
    */
-  it('carries every classroom a teacher takes, keyed by classroom id', async () => {
+  it('matches an existing classroom by grade and section, and keys on its id', async () => {
     await reachStepTwo();
-    classroomService.classrooms = [
-      classroomFixture(),
-      classroomFixture({ docId: 'c2', classroomId: 'c2', classroomName: '5 B', grade: '5', section: 'B' })
-    ];
-    await component.load();
 
-    await component.addTeachers([{
-      ...row('9876543210'),
-      classrooms: [{ classroomId: 'c1' }, { classroomId: 'c2' }]
-    }]);
+    await component.addTeachers([row('9876543210')]);
+    const entries = teacherService.calls[0][0].classrooms;
 
-    expect(Object.keys(teacherService.calls[0][0].classrooms).sort()).toEqual(['c1', 'c2']);
-    expect(teacherService.calls[0][0].classrooms['c2'].classroomName).toBe('5 B');
+    // classroomFixture() is 4 A at inst-1, which is what row() asks for.
+    expect(Object.keys(entries)).toEqual(['c1']);
+    expect(entries['c1'].classroomId).toBe('c1');
+    expect(entries['c1'].classroomName).toBe('4 A');
   });
 
   /**
-   * A row whose classroom has since disappeared is DROPPED rather than written
-   * as an entry with empty fields, which would look like a real classroom with
-   * no name.
+   * NOTHING IS CREATED. Writing a classroom as a side effect of registering a
+   * teacher would have this step quietly populating a collection the form never
+   * mentions — and the wizard runs right after a school is created, when it
+   * legitimately has none.
    */
-  it('drops a row whose classroom no longer exists', async () => {
+  it('records an unmatched class with an empty classroomId rather than inventing one', async () => {
     await reachStepTwo();
 
     await component.addTeachers([{
       ...row('9876543210'),
-      classrooms: [{ classroomId: 'gone' }]
+      classrooms: [{ grade: '9', section: 'Z', programmeId: 'prog-1' }]
     }]);
 
-    expect(teacherService.calls[0][0].classrooms).toEqual({});
+    const entries = teacherService.calls[0][0].classrooms;
+
+    expect(Object.keys(entries)).toEqual(['9-Z']);
+    expect(entries['9-Z'].classroomId).toBe('');
+    expect(entries['9-Z'].grade).toBe('9');
+    expect(entries['9-Z'].section).toBe('Z');
   });
 
-  /** A club has no grade or section, and its name lives in a different field. */
-  it('uses the club name for a STEM club, and leaves grade and section empty', async () => {
+  /** The school comes from step 1, never from the form. */
+  it('stamps the chosen school on every entry', async () => {
     await reachStepTwo();
-    classroomService.classrooms = [classroomFixture({
-      type: 'STEM-CLUB',
-      classroomName: '',
-      stemClubName: 'ThinkTac STEM Forge',
-      grade: '',
-      section: ''
-    })];
-    await component.load();
 
     await component.addTeachers([row('9876543210')]);
-    const entry = teacherService.calls[0][0].classrooms['c1'];
 
-    expect(entry.classroomName).toBe('ThinkTac STEM Forge');
-    expect(entry.type).toBe('STEM-CLUB');
-    expect(entry.grade).toBe('');
-    expect(entry.section).toBe('');
+    expect(teacherService.calls[0][0].classrooms['c1'].institutionId).toBe('inst-1');
   });
 
-  /** Only the chosen school's, for the same reason the programmes are filtered. */
-  it('offers only the chosen school’s classrooms', async () => {
+  /** Per classroom, following production, not hoisted onto the teacher. */
+  it('stores the role on the classroom entry', async () => {
     await reachStepTwo();
-    classroomService.classrooms = [
-      classroomFixture(),
-      classroomFixture({ docId: 'c9', classroomId: 'c9', institutionId: 'other-school' })
-    ];
-    await component.load();
 
-    expect(component.classroomOptions().map(option => option.id)).toEqual(['c1']);
+    await component.addTeachers([row('9876543210')]);
+
+    expect(teacherService.calls[0][0].classrooms['c1'].userRole).toBe('School Teacher');
   });
 
-  /** Shown under the select, because the teacher inherits rather than chooses. */
-  it('labels each option with the programmes that classroom runs', async () => {
+  /** The form holds ids only, so the programme is resolved into production's shape. */
+  it('resolves the chosen programme into a full programme entry', async () => {
+    await reachStepTwo([programme({ docId: 'prog-1', programmeId: 'prog-1', displayName: 'Science' })]);
+
+    await component.addTeachers([row('9876543210')]);
+
+    expect(teacherService.calls[0][0].classrooms['c1'].programmes).toEqual([{
+      programmeId: 'prog-1',
+      programmeName: 'Oak 26-27 Grade 1 - Science',
+      displayName: 'Science',
+      programmeCode: 'P10001',
+      sequentiallyLocked: false
+    }]);
+  });
+
+  /**
+   * TWO ROWS FOR ONE CLASS ARE ONE CLASSROOM WITH TWO PROGRAMMES. Keying on the
+   * class means the second row would otherwise overwrite the first.
+   */
+  it('merges rows that name the same class, accumulating their programmes', async () => {
+    await reachStepTwo([
+      programme({ docId: 'prog-1', programmeId: 'prog-1', displayName: 'Science' }),
+      programme({ docId: 'prog-2', programmeId: 'prog-2', displayName: 'Maths' })
+    ]);
+
+    await component.addTeachers([{
+      ...row('9876543210'),
+      classrooms: [
+        { grade: '4', section: 'A', programmeId: 'prog-1' },
+        { grade: '4', section: 'A', programmeId: 'prog-2' }
+      ]
+    }]);
+
+    const entries = teacherService.calls[0][0].classrooms;
+
+    expect(Object.keys(entries)).toEqual(['c1']);
+    expect(entries['c1'].programmes.map(p => p.programmeId)).toEqual(['prog-1', 'prog-2']);
+  });
+
+  it('does not duplicate a programme picked twice for the same class', async () => {
     await reachStepTwo();
 
-    expect(component.classroomOptions()[0].programmes).toBe('Science');
+    await component.addTeachers([{
+      ...row('9876543210'),
+      classrooms: [
+        { grade: '4', section: 'A', programmeId: 'prog-1' },
+        { grade: '4', section: 'A', programmeId: 'prog-1' }
+      ]
+    }]);
+
+    expect(teacherService.calls[0][0].classrooms['c1'].programmes.length).toBe(1);
+  });
+
+  /** Two different classes stay two entries. */
+  it('keeps separate classes separate', async () => {
+    await reachStepTwo();
+
+    await component.addTeachers([{
+      ...row('9876543210'),
+      classrooms: [
+        { grade: '4', section: 'A', programmeId: 'prog-1' },
+        { grade: '5', section: 'B', programmeId: 'prog-1' }
+      ]
+    }]);
+
+    expect(Object.keys(teacherService.calls[0][0].classrooms).sort()).toEqual(['5-B', 'c1']);
   });
 
   /* ---- Which programmes are assignable ------------------------------------ */
@@ -1564,7 +1553,7 @@ describe('Set Up Wizard — the success toast', () => {
     firstName: 'Santosh',
     lastName: 'Kanta',
     role: 'School Teacher',
-    classrooms: [{ classroomId: 'c1' }],
+    classrooms: [{ grade: '4', section: 'A', programmeId: 'prog-1' }],
     existingId: ''
   });
 

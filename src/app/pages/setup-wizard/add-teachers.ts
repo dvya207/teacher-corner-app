@@ -93,15 +93,6 @@ export class AddTeachers {
   readonly saving = input(false);
 
   /**
-   * The chosen school's classrooms, as pickable options.
-   *
-   * `programmes` is the label of what each one runs, shown under the select
-   * because a teacher inherits it rather than choosing it. Resolved by the
-   * wizard, which owns the classroom read.
-   */
-  readonly classroomOptions = input<readonly { id: string; label: string; programmes: string }[]>([]);
-
-  /**
    * The chosen institution's programme catalogue.
    *
    * Passed in rather than read here, because WHICH catalogue is a wizard
@@ -137,11 +128,6 @@ export class AddTeachers {
 
   /** The one teacher being entered, with the class rows they take. */
   readonly entry = signal<TeacherEntry>(emptyTeacherEntry());
-
-  /** The programme names a chosen classroom will contribute, or '' for none. */
-  programmesFor(classroomId: string): string {
-    return this.classroomOptions().find(option => option.id === classroomId)?.programmes ?? '';
-  }
 
   /** The classroom rows, read straight off the teacher. */
   readonly classrooms = computed(() => this.entry().classrooms);

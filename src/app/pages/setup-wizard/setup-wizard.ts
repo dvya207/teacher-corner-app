@@ -20,7 +20,8 @@ import {
   Programme,
   Teacher,
   TeacherClassroom,
-  TeacherDraft
+  TeacherDraft,
+  TeacherProgramme
 } from '../../models/teaching.model';
 import { Timestamp } from 'firebase/firestore';
 import { InstitutionService } from '../../services/institution.service';
@@ -235,71 +236,90 @@ export class SetupWizard implements OnInit, OnDestroy {
   );
 
   /**
-   * The chosen school's classrooms, as options for step 2.
+   * The teacher's classrooms map, built from the grade, section and programme the
+   * form collected.
    *
-   * Filtered to the school step 1 selected, for the same reason
-   * assignableProgrammes is: attaching a teacher to another school's classroom
-   * would be a data error the form should not make reachable.
-   */
-  readonly classroomOptions = computed(() =>
-    this.classrooms()
-      .filter(classroom => classroom.institutionId === this.school())
-      .map(classroom => ({
-        id: classroom.docId,
-        label: classroomTitle(classroom),
-        programmes: Object.values(classroom.programmes ?? {})
-          .map(entry => entry.displayName || entry.programmeName)
-          .filter(Boolean)
-          .join(', ')
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label))
-  );
-
-  /**
-   * The teacher's classrooms map, COPIED FROM THE CLASSROOM DOCUMENTS.
+   * THE FORM DOES NOT ASK FOR A CLASSROOM, matching production's own Add Teachers
+   * step. The classroom is RESOLVED from grade + section within the chosen
+   * school, which is exactly what a classroom document is.
    *
-   * Everything but the role comes from the classroom itself, so a teacher can
-   * never carry a grade, a school or a programme the classroom does not have.
-   * The role is the one per-classroom value the form supplies.
+   *   matched    an existing classrooms/{id} with that grade and section, whose
+   *              name and type are copied onto the entry
+   *   unmatched  the entry is still recorded, keyed by grade-section and carrying
+   *              an EMPTY classroomId
    *
-   * Rows whose classroom has since disappeared are dropped rather than written
-   * as an entry with empty fields.
+   * NOTHING IS CREATED HERE. Writing a classroom as a side effect of registering
+   * a teacher would have this step quietly populating a collection the form never
+   * mentions, and the wizard runs immediately after a school is created, when it
+   * legitimately has none. An empty classroomId is visibly unlinked and can be
+   * filled in later; an invented one could never be told from a real reference.
+   *
+   * ROWS SHARING A CLASS MERGE. Two rows with the same grade and section are the
+   * same classroom with two programmes, so their programmes accumulate on one
+   * entry rather than one row overwriting the other.
    */
   private classroomsMapFor(
-    rows: readonly { classroomId: string }[],
+    rows: readonly { grade: string; section: string; programmeId: string }[],
     userRole: string
   ): Record<string, TeacherClassroom> {
-    const byId = new Map(this.classrooms().map(classroom => [classroom.docId, classroom]));
+    const schoolId = this.school();
+    const school = this.institutions().find(item => item.docId === schoolId);
+    const programmesById = new Map(this.programmes().map(item => [item.docId, item]));
 
-    const entries = rows
-      .map(row => byId.get(row.classroomId))
-      .filter((classroom): classroom is Classroom => classroom !== undefined)
-      .map(classroom => [
-        classroom.docId,
-        {
-          activeStatus: true,
-          classroomId: classroom.docId,
-          classroomName: classroom.type === 'STEM-CLUB'
-            ? classroom.stemClubName
-            : classroom.classroomName,
-          grade: classroom.grade,
-          section: classroom.section,
-          institutionId: classroom.institutionId,
-          institutionName: classroom.institutionName,
-          type: classroom.type,
-          userRole,
-          programmes: Object.values(classroom.programmes ?? {}).map(programme => ({
+    const classroomFor = (grade: string, section: string): Classroom | undefined =>
+      this.classrooms().find(classroom =>
+        classroom.institutionId === schoolId &&
+        classroom.type === 'CLASSROOM' &&
+        classroom.grade === grade &&
+        classroom.section === section
+      );
+
+    const map: Record<string, TeacherClassroom> = {};
+
+    for (const row of rows) {
+      const matched = classroomFor(row.grade, row.section);
+      const key = matched?.docId ?? `${row.grade}-${row.section}`;
+
+      const programme = programmesById.get(row.programmeId);
+      const entry: TeacherProgramme | null = programme
+        ? {
             programmeId: programme.programmeId,
             programmeName: programme.programmeName,
             displayName: programme.displayName,
             programmeCode: programme.programmeCode,
-            sequentiallyLocked: programme.sequentiallyLocked === true
-          })),
-          createdAt: null as unknown as Timestamp
-        } satisfies TeacherClassroom
-      ] as const);
+            sequentiallyLocked: false
+          }
+        : null;
 
-    return Object.fromEntries(entries);
+      const existing = map[key];
+
+      if (existing) {
+        // Same class, another programme. Deduped so re-picking one is a no-op.
+        if (entry && !existing.programmes.some(p => p.programmeId === entry.programmeId)) {
+          existing.programmes.push(entry);
+        }
+
+        continue;
+      }
+
+      map[key] = {
+        activeStatus: true,
+        classroomId: matched?.docId ?? '',
+        classroomName: matched
+          ? (matched.type === 'STEM-CLUB' ? matched.stemClubName : matched.classroomName)
+          : '',
+        grade: row.grade,
+        section: row.section,
+        institutionId: schoolId,
+        institutionName: school?.institutionName ?? '',
+        type: matched?.type ?? 'CLASSROOM',
+        userRole,
+        programmes: entry ? [entry] : [],
+        createdAt: null as unknown as Timestamp
+      };
+    }
+
+    return map;
   }
 
   /** The dial code step 2's phone prefix shows, from step 1's country. */

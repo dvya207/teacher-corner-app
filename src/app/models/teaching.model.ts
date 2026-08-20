@@ -798,15 +798,13 @@ export interface TeacherMeta {
  */
 export interface Teacher {
   /**
-   * Mirrors the Firestore document id, which is the teacher's SUBSCRIBER DIGITS.
+   * Mirrors the Firestore document id, as every other collection here does.
    *
-   * Keyed by phone rather than by a random id: the phone number is what the OTP
-   * flow resolves a person by, so a teacher registered by an admin is findable
-   * the moment that person signs in. Production keys by Auth uid instead, which
-   * is not available here because registering a teacher creates no Auth user.
-   *
-   * Matching is on the subscriber digits ALONE, without the dial code, which is
-   * what findKnownTeacher already does.
+   * A CLIENT-ALLOCATED ID, not the phone and not an Auth uid. A phone number can
+   * be reassigned to another person and a document id cannot be changed once
+   * written, so an id encoding the number would outlive the fact. The number
+   * lives on teacherMeta, where findKnownTeacher matches on it — that lookup is
+   * what stops a second document being written for one person.
    */
   docId: string;
 

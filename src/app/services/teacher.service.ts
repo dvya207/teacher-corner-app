@@ -366,32 +366,25 @@ export class TeacherService {
     const uid = this.auth.requireUid();
 
     /*
-     * KEYED BY THE SUBSCRIBER DIGITS, not by a generated id.
+     * A CLIENT-ALLOCATED ID, as every other collection here uses.
      *
-     * The phone number is what the OTP flow resolves a person by, so keying on
-     * it makes an admin-registered teacher findable the moment that person signs
-     * in. It also makes re-registering the same number an overwrite of one
-     * document rather than a second copy.
-     *
-     * A number is REQUIRED for that reason: without one there is no id to write
-     * to, and falling back to a random id would quietly reintroduce duplicates.
+     * This was briefly the subscriber phone, on the reasoning that the OTP flow
+     * resolves people by number. Reverted on instruction: a phone number is not
+     * an identity here — it can be reassigned to another person, and a document
+     * id cannot be changed once written, so the id would outlive the fact it
+     * encodes. The number stays on teacherMeta, where findKnownTeacher matches
+     * on it, and that lookup is what stops a second document for one person.
      */
-    const digits = draft.teacherMeta.phoneNumber.trim();
-
-    if (!digits) {
-      throw new Error('A teacher cannot be registered without a phone number.');
-    }
-
-    const reference = activeTeacherDoc(digits);
+    const reference = newActiveTeacherDoc();
 
     const payload = {
       ...draft,
-      docId: digits,
+      docId: reference.id,
       ownerId: uid,
       teacherMeta: {
         ...draft.teacherMeta,
-        phone: digits,
-        phoneNumber: digits,
+        // Both names for the same digits, which is production's shape.
+        phone: draft.teacherMeta.phoneNumber,
         fullNameLowerCase: teacherSearchKey(
           draft.teacherMeta.firstName,
           draft.teacherMeta.lastName

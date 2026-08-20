@@ -148,52 +148,93 @@
 
       <div class="class-row" [class.is-locked]="locked($index)">
 
-        <!-- ONE CONTROL, not grade + section + programme.
-
-             The classroom document already carries its grade, section, type and
-             the programmes it runs, so picking it is the whole choice and the
-             write copies the rest from it. Choosing a programme separately would
-             allow attaching a teacher to a programme the classroom does not run. -->
-        <div class="field field-wide">
-          <label [attr.for]="'tc-classroom-' + $index">
-            Classroom
+        <div class="field">
+          <label [attr.for]="'tc-grade-' + $index">
+            Grade
             @if (!locked($index)) {
               <span class="req" aria-hidden="true">*</span>
             }
           </label>
           <select
-            [id]="'tc-classroom-' + $index"
-            [disabled]="locked($index) || identityLocked() || classroomOptions().length === 0"
-            [class.is-error]="missingClassroom($index, 'classroomId')"
-            (blur)="markBlurred($index + '.classroomId')"
-            (change)="updateClassroom($index, 'classroomId', valueOf($event))"
+            [id]="'tc-grade-' + $index"
+            [disabled]="locked($index) || identityLocked()"
+            [class.is-error]="missingClassroom($index, 'grade')"
+            (blur)="markBlurred($index + '.grade')"
+            (change)="updateClassroom($index, 'grade', valueOf($event))"
           >
-            <option value="" [selected]="!row.classroomId"></option>
-            @for (option of classroomOptions(); track option.id) {
-              <option [value]="option.id" [selected]="option.id === row.classroomId">
-                {{ option.label }}
+            <option value="" [selected]="!row.grade">Select</option>
+            @for (option of grades(); track option) {
+              <option [value]="option" [selected]="option === row.grade">
+                {{ gradeLabel(option) }}
               </option>
             }
           </select>
-          @if (missingClassroom($index, 'classroomId')) {
-            <span class="field-error">Classroom is required</span>
+          @if (missingClassroom($index, 'grade')) {
+            <span class="field-error">Grade is required</span>
           }
-          <!-- WHAT THE TEACHER WILL INHERIT, shown because it is not chosen here. -->
-          @if (programmesFor(row.classroomId)) {
-            <span class="field-hint">Programmes: {{ programmesFor(row.classroomId) }}</span>
+        </div>
+
+        <div class="field">
+          <label [attr.for]="'tc-section-' + $index">
+            Section
+            @if (!locked($index)) {
+              <span class="req" aria-hidden="true">*</span>
+            }
+          </label>
+          <select
+            [id]="'tc-section-' + $index"
+            [disabled]="locked($index) || identityLocked()"
+            [class.is-error]="missingClassroom($index, 'section')"
+            (blur)="markBlurred($index + '.section')"
+            (change)="updateClassroom($index, 'section', valueOf($event))"
+          >
+            <option value="" [selected]="!row.section">Select</option>
+            @for (option of sections(); track option) {
+              <option [value]="option" [selected]="option === row.section">{{ option }}</option>
+            }
+          </select>
+          @if (missingClassroom($index, 'section')) {
+            <span class="field-error">Section is required</span>
+          }
+        </div>
+
+        <div class="field field-wide">
+          <label [attr.for]="'tc-programme-' + $index">
+            Programme
+            @if (!locked($index)) {
+              <span class="req" aria-hidden="true">*</span>
+            }
+          </label>
+          <!-- THE CHOSEN INSTITUTION'S ASSIGNED PROGRAMMES, filtered by the wizard
+               to that school's live REGULAR ones. -->
+          <select
+            [id]="'tc-programme-' + $index"
+            [disabled]="locked($index) || identityLocked()"
+            [class.is-error]="missingClassroom($index, 'programmeId')"
+            (blur)="markBlurred($index + '.programmeId')"
+            (change)="updateClassroom($index, 'programmeId', valueOf($event))"
+          >
+            <option value="" [selected]="!row.programmeId"></option>
+            @for (option of programmes(); track option.id) {
+              <option [value]="option.id" [selected]="option.id === row.programmeId">
+                {{ option.name }}
+              </option>
+            }
+          </select>
+          @if (missingClassroom($index, 'programmeId')) {
+            <span class="field-error">Programme is required</span>
           }
         </div>
 
         <!-- HIDDEN WHILE THERE IS ONLY ONE ROW. A teacher must take at least one
-             classroom, so on a lone row the bin has nothing to remove — it could
-             only clear the field, which is not what a bin means. It appears as
-             soon as the ⊕ has produced a second row. -->
+             class, so on a lone row the bin has nothing to remove — it could only
+             clear the fields, which is not what a bin means. -->
         @if (count() > 1) {
           <button
             type="button"
             class="class-remove"
             (click)="removeClassroom($index)"
-            [attr.aria-label]="'Remove classroom ' + ($index + 1)"
+            [attr.aria-label]="'Remove class ' + ($index + 1)"
           >
             <app-icon name="trash" [size]="18" />
           </button>
@@ -203,13 +244,10 @@
 
     }
 
-    <!-- A SCHOOL CREATED IN STEP 1 HAS NO CLASSROOMS AT ALL, so this is the
-         expected state on a first run rather than an error — which is why it says
-         how to fix it instead of only reporting the emptiness. -->
-    @if (classroomOptions().length === 0) {
+    @if (programmes().length === 0) {
       <span class="field-hint is-warn">
-        This school has no classrooms yet. Add one with
-        <strong>Add Classroom</strong> before assigning teachers.
+        This institution has no live programmes yet. Create one under
+        <strong>Programme</strong> before assigning teachers to a class.
       </span>
     }
 
