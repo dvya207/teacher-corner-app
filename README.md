@@ -1,5 +1,13 @@
 # Teacher Corner
 
+![Angular](https://img.shields.io/badge/Angular-21-DD0031?style=flat-square&logo=angular&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![RxJS](https://img.shields.io/badge/RxJS-7.8-B7178C?style=flat-square&logo=reactivex&logoColor=white)
+![Firebase](https://img.shields.io/badge/Firebase-12-FFCA28?style=flat-square&logo=firebase&logoColor=black)
+![Cloud Firestore](https://img.shields.io/badge/Cloud%20Firestore-rules%20%2B%20tests-FFA000?style=flat-square&logo=firebase&logoColor=black)
+![Cloud Functions](https://img.shields.io/badge/Cloud%20Functions-gen2-4285F4?style=flat-square&logo=googlecloud&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-20-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)
+
 Angular 21 + Firebase teacher console. First pass: a sign-in page and a
 navigable app shell.
 
@@ -19,7 +27,6 @@ navigable app shell.
 | **Dashboard** | Welcome banner and the Institutions/Classrooms counts. Nothing else yet. |
 | **Classrooms** | Built. Table of classrooms and STEM clubs, stat cards, type filters, Add Classroom, Manage Programmes, and a Trash with restore. See **Classrooms** below. |
 | **Programme** | Built. The programme catalogue: table, stat cards, Active/Draft filters, a Create Programme wizard, an edit modal, and a Trash with restore. See **Programmes** below. |
-| **Learning Units** | Built. The activity catalogue: table, stat cards, Live/Draft filters, one add/edit modal, and a Trash with restore. See **Learning Units** below. |
 | **Set Up Wizard** | Routed placeholder. It navigates and highlights correctly; the page is empty. |
 | **Data** | Real Firestore reads. Blocked until rules are deployed — see **Data isolation** below. |
 | **Firebase config** | Live. Project `helix-staging-india`, app `Teacher Corner Dev`. |
@@ -106,8 +113,7 @@ src/
 │   │   ├── setup-wizard/    placeholder
 │   │   ├── classrooms/      table + Add Classroom + Manage Programmes + Trash
 │   │   ├── programme/       catalogue + Create wizard + edit + Trash
-│   │   ├── learning-units/  activity catalogue + add/edit modal + Trash
-│   │   └── learning-units/  placeholder
+│   │   └── learning-units/  activity catalogue + add/edit modal + Trash
 │   ├── services/
 │   │   └── auth.service.ts  sign-in, sign-out, role, error messages
 │   ├── app.routes.ts        route table
@@ -287,67 +293,6 @@ does too.
   school.
 - The **school cannot be changed** on an existing programme. Moving one between
   schools would orphan it from the classrooms already carrying it.
-
----
-
-## Learning Units
-
-The activities a programme is built from, and the fourth table built to the
-Institutions pattern.
-
-### Firestore
-
-```
-learningUnits/{docId}                              ACTIVE
-learningUnits/trash/DeletedLearningUnits/{docId}    DELETED
-```
-
-Subcollection named to match production's
-`LearningUnits/--trash--/DeletedLearningUnits/{docId}`. Deletion is a move, the
-document id survives it, and restore is the exact inverse — the same shape as the
-other three.
-
-### A deliberate subset
-
-Production's `LearningUnit` interface carries **70+ fields**: every resource path,
-six people's names and phone numbers, nine timing figures, four description
-variants, six cross-reference arrays. This app stores the fourteen its list and
-form actually render, under production's exact names, so a row read from there
-lines up field for field and a row written here is a valid production document
-with the optional parts absent.
-
-Declaring all seventy and filling in fourteen would be the lie
-`normaliseInstitution` exists to prevent: the type would promise fields no writer
-sets, and the first save that copied one back would send `undefined` and fail the
-whole document.
-
-### One language per document
-
-Production stores a single `isoCode` per document, so a unit existing in Tamil and
-English is **two documents sharing a `learningUnitCode`**. The programme picker
-shows one row reading `PT12 DIY Sundial / TA · EN · vV22`, so
-`toPickableUnits()` folds the family back together — first document by code wins
-for name and version, languages accumulate, sorted by code so the fold is
-deterministic rather than dependent on query order.
-
-### One modal, not two
-
-Institutions and Programmes each have a separate add and edit because their forms
-genuinely differ (a three-step wizard versus a tabbed editor; a five-step flow
-versus three tabs). A learning unit is a single flat form either way, so splitting
-it would be the same ninety lines twice with the word "Add" changed — and the two
-copies would drift the first time a field was added to one. Mode is decided by
-whether the `unit` input is null.
-
-### Known gaps
-
-- **Not wired to the Programme picker yet.** The Manage Learning Units tab reads
-  an empty catalogue, so it still says so. Connecting it is one service call on
-  the Programme page, deliberately not done here because it changes a completed
-  feature's behaviour and was outside the Day 8 scope.
-- `status` reuses the Programme vocabulary (`LIVE` / `DEVELOPEMENT`). Production
-  types this field as a bare `string` and its full vocabulary is not enumerated
-  here, so anything not live or active is treated as a draft.
 
 ---
 
