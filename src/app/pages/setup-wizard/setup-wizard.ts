@@ -276,6 +276,38 @@ export class SetupWizard implements OnInit, OnDestroy {
     const school = this.institutions().find(item => item.docId === schoolId);
     const programmesById = new Map(this.programmes().map(item => [item.docId, item]));
 
+    /*
+     * GROUPED BY CLASS FIRST, before anything is written.
+     *
+     * A teacher can take several programmes in one class, and each arrives as its
+     * own row. Resolving row by row created the classroom on the first one and
+     * attached only that programme, so the second programme landed on the teacher
+     * while the classroom did not run it — the exact mismatch this resolution
+     * exists to prevent. Collecting every programme for a class first means the
+     * classroom is created once, already running all of them.
+     */
+    const byClass = new Map<string, { grade: string; section: string; programmeIds: string[] }>();
+
+    for (const row of rows) {
+      const classKey = `${row.grade}|${row.section}`;
+      const group = byClass.get(classKey);
+
+      if (!group) {
+        byClass.set(classKey, {
+          grade: row.grade,
+          section: row.section,
+          programmeIds: [row.programmeId]
+        });
+
+        continue;
+      }
+
+      // Deduped, so picking the same programme twice for one class is a no-op.
+      if (!group.programmeIds.includes(row.programmeId)) {
+        group.programmeIds.push(row.programmeId);
+      }
+    }
+
     const find = (grade: string, section: string): Classroom | undefined =>
       this.classrooms().find(classroom =>
         classroom.institutionId === schoolId &&
@@ -284,107 +316,68 @@ export class SetupWizard implements OnInit, OnDestroy {
         classroom.section === section
       );
 
-    const classroomFor = async (
-      grade: string,
-      section: string,
-      programmeId: string
-    ): Promise<Classroom | undefined> => {
-      const existing = find(grade, section);
-
-      if (existing) {
-        return existing;
-      }
-
-      try {
-        const created = await this.classroomService.create(
-          {
-            type: 'CLASSROOM',
-            classroomName: '',
-            stemClubName: '',
-            grade,
-            section,
-            board: this.board(),
-            institutionId: schoolId,
-            institutionName: school?.institutionName ?? '',
-            /*
-             * THE CHOSEN PROGRAMME IS ATTACHED, so a classroom created here is not
-             * left running nothing while a teacher is recorded as teaching a
-             * programme in it.
-             *
-             * Only on CREATE. An existing classroom's programmes belong to the
-             * Classrooms page; registering a teacher must not change what a class
-             * other people already use is running.
-             */
-            programmes: toProgrammeMap(
-              this.programmes().filter(item => item.docId === programmeId)
-            )
-          },
-          this.classrooms()
-        );
-
-        // Held locally so two rows naming the same class reuse it rather than
-        // racing to create it twice.
-        this.classrooms.update(list => [...list, created]);
-
-        return created;
-      } catch (error) {
-        console.error('Could not create the classroom for this teacher.', error);
-        return undefined;
-      }
-    };
-
     const map: Record<string, TeacherClassroom> = {};
 
-    for (const row of rows) {
-      const matched = await classroomFor(row.grade, row.section, row.programmeId);
-      /*
-       * The classroom's own id where there is one, and a generated id otherwise.
-       *
-       * NOT grade-section. That encoded the class into the key, which made the key
-       * change as soon as a real classroom appeared, and made two entries for one
-       * class look like two classes. classroomId stays empty on this path, which
-       * is what marks the entry as unlinked — the key is only a key.
-       */
-      const key = matched?.docId ?? generatedKey();
+    for (const group of byClass.values()) {
+      const programmes = group.programmeIds
+        .map(programmeId => programmesById.get(programmeId))
+        .filter((programme): programme is Programme => programme !== undefined);
 
-      const programme = programmesById.get(row.programmeId);
-      const entry: TeacherProgramme | null = programme
-        ? {
-            programmeId: programme.programmeId,
-            programmeName: programme.programmeName,
-            displayName: programme.displayName,
-            programmeCode: programme.programmeCode,
-            sequentiallyLocked: false
-          }
-        : null;
+      let classroom = find(group.grade, group.section);
 
-      const existing = map[key];
+      if (!classroom) {
+        try {
+          classroom = await this.classroomService.create(
+            {
+              type: 'CLASSROOM',
+              classroomName: '',
+              stemClubName: '',
+              grade: group.grade,
+              section: group.section,
+              board: this.board(),
+              institutionId: schoolId,
+              institutionName: school?.institutionName ?? '',
+              /*
+               * EVERY programme this teacher takes in the class, not just the
+               * first. Only on CREATE: an existing classroom's programmes belong
+               * to the Classrooms page, and registering a teacher must not change
+               * what a class other people already use is running.
+               */
+              programmes: toProgrammeMap(programmes)
+            },
+            this.classrooms()
+          );
 
-      if (existing) {
-        // Same class, another programme. Deduped so re-picking one is a no-op.
-        if (entry && !existing.programmes.some(p => p.programmeId === entry.programmeId)) {
-          existing.programmes.push(entry);
+          // Held locally so a later group, or a second teacher in the same submit,
+          // reuses it rather than creating a duplicate.
+          this.classrooms.update(list => [...list, classroom as Classroom]);
+        } catch (error) {
+          console.error('Could not create the classroom for this teacher.', error);
+          classroom = undefined;
         }
-
-        continue;
       }
+
+      const key = classroom?.docId ?? generatedKey();
 
       map[key] = {
         activeStatus: true,
-        classroomId: matched?.docId ?? '',
-        // COMPOSED WHEN THERE IS NO CLASSROOM to take it from, which happens only
-        // if the create failed. "5 B" is what composeClassroomName would have
-        // produced anyway, so the entry stays readable instead of nameless.
-        classroomName: matched
-          ? (matched.type === 'STEM-CLUB' ? matched.stemClubName : matched.classroomName)
-          : `${row.grade} ${row.section}`.trim(),
-        grade: row.grade,
-        section: row.section,
+        classroomId: classroom?.docId ?? '',
+        classroomName: classroom
+          ? (classroom.type === 'STEM-CLUB' ? classroom.stemClubName : classroom.classroomName)
+          : `${group.grade} ${group.section}`.trim(),
+        grade: group.grade,
+        section: group.section,
         institutionId: schoolId,
         institutionName: school?.institutionName ?? '',
-        type: matched?.type ?? 'CLASSROOM',
+        type: classroom?.type ?? 'CLASSROOM',
         userRole,
-        programmes: entry ? [entry] : [],
+        programmes: programmes.map(programme => ({
+          programmeId: programme.programmeId,
+          programmeName: programme.programmeName,
+          displayName: programme.displayName,
+          programmeCode: programme.programmeCode,
+          sequentiallyLocked: false
+        })),
         createdAt: null as unknown as Timestamp
       };
     }

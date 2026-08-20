@@ -1288,6 +1288,55 @@ describe('Set Up Wizard — registering teachers', () => {
     expect(Object.keys(classroomService.created[0]['programmes'] as object)).toEqual(['prog-1']);
   });
 
+  /**
+   * SEVERAL PROGRAMMES IN ONE CLASS is the case that was broken. Resolving row by
+   * row created the classroom on the first row with only that programme attached,
+   * so the second landed on the teacher while the classroom did not run it.
+   */
+  it('creates the classroom running every programme the teacher takes in it', async () => {
+    await reachStepTwo([
+      programme({ docId: 'prog-1', programmeId: 'prog-1', displayName: 'Science' }),
+      programme({ docId: 'prog-2', programmeId: 'prog-2', displayName: 'Maths' })
+    ]);
+
+    await component.addTeachers([{
+      ...row('9876543210'),
+      classrooms: [
+        { grade: '9', section: 'Z', programmeId: 'prog-1' },
+        { grade: '9', section: 'Z', programmeId: 'prog-2' }
+      ]
+    }]);
+
+    // ONE classroom, running BOTH.
+    expect(classroomService.created.length).toBe(1);
+    expect(Object.keys(classroomService.created[0]['programmes'] as object).sort())
+      .toEqual(['prog-1', 'prog-2']);
+
+    // And the teacher carries both on the one entry.
+    const entries = teacherService.calls[0][0].classrooms;
+
+    expect(Object.keys(entries)).toEqual(['made-1']);
+    expect(entries['made-1'].programmes.map(p => p.programmeId).sort())
+      .toEqual(['prog-1', 'prog-2']);
+  });
+
+  /** Different classes stay different classrooms, each with its own programme. */
+  it('creates one classroom per class', async () => {
+    await reachStepTwo();
+
+    await component.addTeachers([{
+      ...row('9876543210'),
+      classrooms: [
+        { grade: '9', section: 'Y', programmeId: 'prog-1' },
+        { grade: '9', section: 'Z', programmeId: 'prog-1' }
+      ]
+    }]);
+
+    expect(classroomService.created.length).toBe(2);
+    expect(Object.keys(teacherService.calls[0][0].classrooms).sort())
+      .toEqual(['made-1', 'made-2']);
+  });
+
   /** Two rows for one class must reuse the first create, not race a second. */
   it('creates one classroom for two rows naming the same class', async () => {
     await reachStepTwo();
