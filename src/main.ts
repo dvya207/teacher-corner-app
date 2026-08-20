@@ -1,7 +1,7 @@
 import { bootstrapApplication } from '@angular/platform-browser';
 import { appConfig } from './app/app.config';
 import { App } from './app/app';
-import { reloadIfStale } from './app/core/build-check';
+import { reloadIfStale, watchForNewBuild } from './app/core/build-check';
 
 bootstrapApplication(App, appConfig)
   .catch((err) => console.error(err));
@@ -12,3 +12,4 @@ bootstrapApplication(App, appConfig)
  * which reads as a live bug in code that no longer exists. This ends that.
  */
 void reloadIfStale();
+watchForNewBuild();

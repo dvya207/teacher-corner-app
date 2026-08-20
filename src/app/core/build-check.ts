@@ -50,6 +50,22 @@ async function deployedEntryBundle(): Promise<string> {
   return match ? match[1] : '';
 }
 
+/**
+ * Checks again when the tab is brought back to the front.
+ *
+ * The boot check only catches a deploy that happened BEFORE the tab was opened.
+ * The case that actually bites is a tab left open while a deploy lands, so the
+ * check repeats whenever the tab becomes visible again — which is exactly when
+ * somebody is about to use it.
+ */
+export function watchForNewBuild(): void {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      void reloadIfStale();
+    }
+  });
+}
+
 export async function reloadIfStale(): Promise<void> {
   // Only meaningful where a deploy can have happened under us.
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
@@ -65,7 +81,18 @@ export async function reloadIfStale(): Promise<void> {
     const deployed = await deployedEntryBundle();
 
     // Either unreadable: do nothing rather than guess.
-    if (!loaded || !deployed || loaded === deployed) {
+    if (!loaded || !deployed) {
+      return;
+    }
+
+    if (loaded === deployed) {
+      /*
+       * SAID OUT LOUD, because the alternative was unfalsifiable. A stale tab
+       * writes documents in the old shape carrying today's timestamps, and there
+       * was no way to tell from the app which build had produced them. Now one
+       * line in the console answers it.
+       */
+      console.info(`Teacher Corner: running the current build (${loaded}).`);
       return;
     }
 
