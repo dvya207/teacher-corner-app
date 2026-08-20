@@ -1039,7 +1039,7 @@ describe('Set Up Wizard — registering teachers', () => {
     await reachStepTwo();
 
     await component.addTeachers([row('9876543210')]);
-    await component.addTeachers([row('9123456780', 'Bhavana')]);
+    await component.addTeachers([row('9123456780', 'Rekha')]);
 
     expect(component.teachers().length).toBe(2);
     // Keyed by phone now, not by a generated id.
@@ -1622,8 +1622,8 @@ describe('registeredMessage', () => {
    * on screen.
    */
   it('names a single teacher', () => {
-    expect(registeredMessage([{ teacherMeta: { firstName: 'Santosh', lastName: 'Kanta' } }]))
-      .toBe('Santosh Kanta registered successfully');
+    expect(registeredMessage([{ teacherMeta: { firstName: 'Meera', lastName: 'Iyer' } }]))
+      .toBe('Meera Iyer registered successfully');
   });
 
   it('falls back to the plain sentence when there is no name', () => {
@@ -1688,8 +1688,8 @@ describe('Set Up Wizard — the success toast', () => {
   const row = () => ({
     phone: '9876543210',
     email: '',
-    firstName: 'Santosh',
-    lastName: 'Kanta',
+    firstName: 'Meera',
+    lastName: 'Iyer',
     role: 'School Teacher',
     classrooms: [{ grade: '4', section: 'A', programmeId: 'prog-1' }],
     existingId: ''
@@ -1709,7 +1709,7 @@ describe('Set Up Wizard — the success toast', () => {
 
     const toast = el().querySelector('.toast');
     expect(toast).not.toBeNull();
-    expect(toast?.textContent).toContain('Santosh Kanta registered successfully');
+    expect(toast?.textContent).toContain('Meera Iyer registered successfully');
   });
 
   /** Confirmation, not an interruption: an assertive region would cut across. */
@@ -1754,10 +1754,10 @@ describe('Set Up Wizard — the success toast', () => {
     await reachStepTwo();
     await component.addTeachers([row()]);
 
-    await component.addTeachers([{ ...row(), firstName: 'Bhavana' }]);
+    await component.addTeachers([{ ...row(), firstName: 'Rekha' }]);
     fixture.detectChanges();
 
-    expect(component.notice()).toBe('Bhavana Kanta registered successfully');
+    expect(component.notice()).toBe('Rekha Iyer registered successfully');
   });
 
   /** A timer firing into a destroyed component is how this becomes a leak. */

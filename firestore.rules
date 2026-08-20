@@ -360,7 +360,7 @@ service cloud.firestore {
     //
     // Countries, boards, languages, school types, grades, sections, programme
     // statuses and the rest: everything the app used to hardcode. One document per
-    // list, following thinktac-india-production's own Configuration collection.
+    // list, following the production app's own Configuration collection.
     //
     //   read    any authenticated user. Every signed-in teacher needs these to render
     //           a form, and they are option vocabularies rather than anyone's data.

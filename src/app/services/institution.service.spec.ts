@@ -111,7 +111,7 @@ describe('normaliseInstitution', () => {
 
   it('fills in customerSchool for a document written before it existed', () => {
     const row = normaliseInstitution<Institution>('inst-1', {
-      institutionName: 'Kuvempu University'
+      institutionName: 'Northwind University'
     });
 
     expect(row.customerSchool).toBe(false);

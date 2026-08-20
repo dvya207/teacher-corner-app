@@ -337,7 +337,7 @@ export function teacherFullName(first: string, last: string): string {
 
 /**
  * Production's `fullNameLowerCase`: the name lowercased with all whitespace
- * removed, so "Santosh Kanta" becomes "santoshkanta". It is a search key, not a
+ * removed, so "Meera Iyer" becomes "meeraiyer". It is a search key, not a
  * display value — nothing renders it.
  */
 export function teacherSearchKey(first: string, last: string): string {

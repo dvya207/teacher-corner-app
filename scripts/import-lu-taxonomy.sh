@@ -34,7 +34,7 @@
 #   2. keyring: secret-tool lookup service firebase type sa-keyfile
 #   3. gcloud auth application-default login
 #
-# The account needs Firestore READ on thinktac-india-production. As of writing,
+# The account needs Firestore READ on the source project. As of writing,
 # `firebase projects:list` on this machine sees only helix-staging-india, so one
 # of the three above has to be set up first — which is a person's job, not a
 # script's.
@@ -45,7 +45,10 @@
 #
 set -euo pipefail
 
-PROJECT="${FIREBASE_PROJECT:-thinktac-india-production}"
+# NO DEFAULT, deliberately. This reads from a production project, and a hardcoded
+# default both names that project in a public repo and makes it the thing you hit
+# by forgetting to set the variable.
+PROJECT="${FIREBASE_PROJECT:?set FIREBASE_PROJECT to the project to read from}"
 FBADMIN="${FBADMIN:-$HOME/.claude/scripts/firebase/fbadmin.js}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="$REPO_ROOT/src/app/data/learning-unit-taxonomy.ts"

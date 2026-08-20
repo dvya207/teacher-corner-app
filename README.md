@@ -303,7 +303,7 @@ protected by default rather than by remembering to attach them.
 ## Classrooms
 
 Rebuilds the `manage-classrooms` screen from ThinkTac production
-(`thinktac-india-production/apps/teacher-corner2-0`), using its field names
+(the production Teacher Corner app), using its field names
 verbatim so a row created here and one created there line up field for field.
 
 ### Firestore

@@ -118,9 +118,9 @@ export const TEMPLATE_EXAMPLE: readonly string[] = [
   'Bhadravathi',
   'Shivamogga',
   'Karnataka',
-  'Santosh',
-  'Kanta',
-  'santosh.kanta@example.com',
+  'Meera',
+  'Iyer',
+  'meera.iyer@example.com',
   '9876543210'
 ];
 

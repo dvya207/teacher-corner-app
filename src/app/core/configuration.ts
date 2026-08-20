@@ -2,7 +2,7 @@
  * The Configuration collection: every option list this app used to hardcode.
  *
  * ONE DOCUMENT PER OPTION SET, in a collection named `Configuration`, which is the
- * shape thinktac-india-production uses. Its documents were read directly before this
+ * shape the production app uses. Its documents were read directly before this
  * file was written, and the conventions copied rather than invented:
  *
  *   - the payload sits under a NAMED KEY, not at the document root, so a document can

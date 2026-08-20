@@ -17,7 +17,7 @@ import { CODE_TTL_MS } from './codes';
  *   SMTP_PORT      587 for STARTTLS, 465 for TLS
  *   SMTP_USER      provider's username ("apikey" for SendGrid)
  *   SMTP_PASSWORD  the secret — set with `firebase functions:secrets:set`
- *   MAIL_FROM      the From header, e.g. Teacher Corner <no-reply@thinktac.com>
+ *   MAIL_FROM      the From header, e.g. Teacher Corner <no-reply@example.com>
  */
 
 function required(name: string): string {

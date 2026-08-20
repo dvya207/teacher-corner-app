@@ -38,7 +38,7 @@ import { BulkUploadSchools } from './bulk-upload-schools';
 /**
  * What the success toast says after a registration.
  *
- * NAMES THE TEACHER when there is a name to use, because "Santosh Kanta
+ * NAMES THE TEACHER when there is a name to use, because "Meera Iyer
  * registered successfully" is worth more than the generic line and this step is
  * run several times in a row — a confirmation that reads identically every time
  * cannot be told from the previous one still on screen.

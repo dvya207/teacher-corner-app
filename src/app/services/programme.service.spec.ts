@@ -242,7 +242,7 @@ describe('rename propagation across a teacher\'s classrooms', () => {
       grade: '4',
       section: 'A',
       institutionId: 'inst-1',
-      institutionName: 'Airaa Academy',
+      institutionName: 'Fabrikam Academy',
       type: 'CLASSROOM',
       userRole: 'schoolTeacher',
       programmes,

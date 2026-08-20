@@ -27,7 +27,7 @@ class StubProfileService {
     lastName: 'Jain',
     currentClassInfo: {
       institutionId: 'inst-1',
-      institutionName: 'KUVEMPU UNIVERSITY',
+      institutionName: 'NORTHWIND UNIVERSITY',
       classroomName: '1 B',
       programmeId: 'prog-1',
       programmeName: 'STEM'
@@ -92,7 +92,7 @@ describe('Approval', () => {
     const text = fixture.nativeElement.textContent as string;
 
     expect(text).toContain('1 B');
-    expect(text).toContain('KUVEMPU UNIVERSITY');
+    expect(text).toContain('NORTHWIND UNIVERSITY');
   });
 
   /** Production promises a WhatsApp message; this app sends none. */

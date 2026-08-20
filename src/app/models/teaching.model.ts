@@ -688,7 +688,7 @@ export interface PickableUnit {
  * One programme on a teacher's classroom entry.
  *
  * PRODUCTION'S SHAPE AND NAMES, taken from Teachers/{id}.classrooms[].programmes
- * in thinktac-india-production: an ARRAY on the classroom entry, carrying the
+ * in the production app: an ARRAY on the classroom entry, carrying the
  * same five keys ClassroomProgramme does minus the workflow. Kept identical so a
  * document written here is readable by production and vice versa.
  *

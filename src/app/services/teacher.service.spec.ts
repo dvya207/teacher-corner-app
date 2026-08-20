@@ -181,9 +181,9 @@ describe('normaliseTeacher', () => {
 
   /** Production's search key: lowercased, whitespace removed. */
   it('derives fullNameLowerCase when the stored document has none', () => {
-    const teacher = normaliseTeacher<Teacher>('t1', { firstName: 'Santosh', lastName: 'Kanta' });
+    const teacher = normaliseTeacher<Teacher>('t1', { firstName: 'Meera', lastName: 'Iyer' });
 
-    expect(teacher.teacherMeta.fullNameLowerCase).toBe('santoshkanta');
+    expect(teacher.teacherMeta.fullNameLowerCase).toBe('meeraiyer');
   });
 
   it('omits uid entirely when the document has none', () => {
@@ -202,7 +202,7 @@ describe('normaliseTeacher', () => {
 
   it('reads a stored classrooms map, keeping its key as the classroom id', () => {
     const teacher = normaliseTeacher<Teacher>('t1', {
-      classrooms: { c1: { classroomName: '4 A', institutionName: 'Airaa Academy' } }
+      classrooms: { c1: { classroomName: '4 A', institutionName: 'Fabrikam Academy' } }
     });
 
     expect(teacher.classrooms['c1'].classroomId).toBe('c1');
@@ -270,7 +270,7 @@ describe('mergeClassrooms', () => {
       grade: '4',
       section: 'A',
       institutionId: 'inst-1',
-      institutionName: 'Airaa Academy',
+      institutionName: 'Fabrikam Academy',
       type: 'CLASSROOM' as const,
       userRole: 'schoolTeacher',
       programmes: programmeIds.map(programmeId => ({
@@ -345,7 +345,7 @@ describe('stampedClassrooms', () => {
       grade: '9',
       section: 'B',
       institutionId: 'inst-1',
-      institutionName: 'KUVEMPU UNIVERSITY',
+      institutionName: 'NORTHWIND UNIVERSITY',
       type: 'CLASSROOM',
       userRole: 'School Teacher',
       programmes: [],

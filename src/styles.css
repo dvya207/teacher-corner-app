@@ -32,7 +32,7 @@
      ==========================================================================
 
      Everything below comes from two files in
-     ~/code/thinktac-india-production/apps/teacher-corner2-0:
+     the production Teacher Corner app:
 
        tailwind.config.js        theme 'theme-brand':
                                    primary = generatePalette('#169CD8')

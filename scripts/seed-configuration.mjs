@@ -5,7 +5,7 @@
  * replaces, so seeding changes no behaviour: the app shows the same options, it just
  * reads them from Firestore afterwards. Widening a list becomes a console edit.
  *
- * Follows the conventions read out of thinktac-india-production's own Configuration
+ * Follows the conventions read out of the production app's own Configuration
  * collection: payload under a named key, and a `docId` field repeating the id.
  *
  * IDEMPOTENT. Each document is written whole with set(), so running twice leaves the
