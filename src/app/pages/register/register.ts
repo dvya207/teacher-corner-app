@@ -212,11 +212,33 @@ export class Register {
       .sort((a, b) => a.name.localeCompare(b.name));
   });
 
-  readonly programmes = computed(() =>
-    this.allProgrammes()
-      .map(item => ({ id: item.docId, name: item.programmeName }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  );
+  /**
+   * The programmes offered for what the pincode found, NOT the whole catalogue.
+   *
+   * WHY IT IS NARROWED. This list previously mapped every programme the account
+   * could read, so a teacher at one pincode was offered programmes belonging to
+   * schools in other towns — and picking one wrote a programme its own school
+   * does not run.
+   *
+   * TWO SCOPES, in order:
+   *   a school chosen   that school's programmes only, which is the precise answer
+   *   none chosen yet   every school the pincode matched, so the control is usable
+   *                     before the school question is answered
+   *
+   * Empty until the pincode matches something, which is the point: the programme
+   * question has no meaningful answer before the school question does.
+   */
+  readonly programmes = computed(() => {
+    const chosen = this.school();
+    const scope = chosen
+      ? new Set([chosen])
+      : new Set(this.schools().map(item => item.id));
+
+    return this.allProgrammes()
+      .filter(item => scope.has(item.institutionId))
+      .map(item => ({ id: item.docId, name: item.displayName || item.programmeName }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
 
   readonly pincodeComplete = computed(() => isCompletePincode(this.pincode(), this.country()));
 
@@ -263,19 +285,37 @@ export class Register {
     // changed country invalidates both rather than keeping a code that no longer
     // fits the new format.
     this.pincode.set('');
-    this.school.set('');
+    this.clearSchoolAndProgramme();
   }
 
   onPincodeInput(value: string): void {
     this.pincode.set(toPincodeDigits(value, this.country()));
     // Narrowing the search must not leave a school selected that the new search
     // would never have offered.
-    this.school.set('');
+    this.clearSchoolAndProgramme();
   }
 
   onBoardChange(value: string): void {
     this.board.set(value);
+    this.clearSchoolAndProgramme();
+  }
+
+  /**
+   * A different school means a different programme list.
+   *
+   * WITHOUT THIS the narrowing is defeated by a stale signal: pick school A and
+   * its programme, switch to school B, and `programme` still holds A's — which
+   * B does not run, and which submit would happily write.
+   */
+  onSchoolChange(value: string): void {
+    this.school.set(value);
+    this.programme.set('');
+  }
+
+  /** Both, because the programme list is scoped by the school and the pincode. */
+  private clearSchoolAndProgramme(): void {
     this.school.set('');
+    this.programme.set('');
   }
 
   /** Re-reads the institutions, so a school added elsewhere shows up here. */

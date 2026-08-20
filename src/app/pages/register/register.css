@@ -124,10 +124,23 @@
   cursor: not-allowed;
 }
 
-/* An unchosen select should read like a placeholder, not like a value. */
+/* An unchosen select should read like a placeholder, not like a value.
+
+   --ink-500, NOT --ink-400: that is the colour `:disabled` uses just above, so an
+   empty-but-usable select was rendering identically to one that cannot be
+   touched. A placeholder has to read as "nothing chosen yet", which is a lighter
+   value than a real answer but still plainly live.
+
+   Disabled stays distinguishable by its grey BACKGROUND rather than by text
+   colour alone, which is the more reliable signal anyway. */
 .field select:invalid,
 .field select:has(option[value='']:checked) {
-  color: var(--ink-400);
+  color: var(--ink-500);
+}
+
+/* Once something is chosen it reads as a value, at full strength. */
+.field select:has(option:not([value='']):checked) {
+  color: var(--ink-900);
 }
 
 /* ---- Layout of the controls --------------------------------------------- */

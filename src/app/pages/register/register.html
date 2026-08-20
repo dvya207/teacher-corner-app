@@ -83,7 +83,7 @@
           <label for="school">School / Institution</label>
           <select
             id="school"
-            (change)="school.set($any($event.target).value)"
+            (change)="onSchoolChange($any($event.target).value)"
             [disabled]="schools().length === 0"
           >
             <option value="" disabled [selected]="!school()">
@@ -204,11 +204,25 @@
               (change)="programme.set($any($event.target).value)"
               [disabled]="programmes().length === 0"
             >
-              <option value="" disabled [selected]="!programme()">Programme</option>
+              <option value="" disabled [selected]="!programme()">
+                @if (!pincodeComplete()) {
+                  Enter a pincode first
+                } @else {
+                  Programme
+                }
+              </option>
               @for (item of programmes(); track item.id) {
                 <option [value]="item.id" [selected]="item.id === programme()">{{ item.name }}</option>
               }
             </select>
+            <!-- The list is scoped to what the pincode found, so an empty one is a
+                 result about those schools rather than a broken control. -->
+            @if (pincodeComplete() && schools().length > 0 && programmes().length === 0) {
+              <p class="field-hint">
+                No programmes recorded yet for
+                {{ school() ? 'that school' : 'the schools at this pincode' }}.
+              </p>
+            }
           </div>
         </div>
 

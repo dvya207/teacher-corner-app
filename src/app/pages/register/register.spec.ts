@@ -40,8 +40,12 @@ const ASH = institution('inst-3', 'Ash Academy', '560002', 'CBSE');
 const ELM = institution('inst-4', 'Elm International', '560001', 'CBSE', 'Nepal');
 
 class StubInstitutionService {
-  institutions: Institution[] = [OAK, BIRCH, ASH, ELM];
+  institutions: Institution[];
   listCalls = 0;
+
+  constructor(institutions: Institution[] = [OAK, BIRCH, ASH, ELM]) {
+    this.institutions = institutions;
+  }
 
   async list(): Promise<Institution[]> {
     this.listCalls += 1;
@@ -53,9 +57,33 @@ class StubInstitutionService {
   }
 }
 
+/**
+ * PROGRAMMES CARRY institutionId, because the register page now scopes them to the
+ * schools the pincode found. A stub without one belongs to no school and the list
+ * reads empty — which is what made the old stub pass every test while covering
+ * nothing.
+ */
+function stubProgramme(
+  docId: string,
+  programmeName: string,
+  institutionId: string,
+  displayName = ''
+): Programme {
+  return { docId, programmeName, displayName, institutionId } as unknown as Programme;
+}
+
 class StubProgrammeService {
+  constructor(
+    public programmes: Programme[] = [
+      // OAK and BIRCH sit at 560001; ASH is at 560002.
+      stubProgramme('prog-1', 'STEM Foundation', 'inst-1'),
+      stubProgramme('prog-2', 'Robotics', 'inst-2'),
+      stubProgramme('prog-3', 'Faraway Science', 'inst-3', 'Faraway Science Lab')
+    ]
+  ) {}
+
   async list(): Promise<Programme[]> {
-    return [{ docId: 'prog-1', programmeName: 'STEM Foundation' } as unknown as Programme];
+    return this.programmes;
   }
 }
 
@@ -213,4 +241,106 @@ describe('Register', () => {
     component.section.set('A');
     expect(component.canSubmit()).toBe(true);
   });
+});
+
+/**
+ * THE PROGRAMME LIST IS SCOPED BY THE PINCODE.
+ *
+ * It previously mapped every programme the account could read, so a teacher at
+ * one pincode was offered programmes belonging to schools in other towns — and
+ * picking one wrote a programme its own school does not run.
+ */
+describe('Register — the programme list', () => {
+  let fixture: ComponentFixture<Register>;
+  let component: Register;
+
+  beforeEach(async () => {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [Register],
+      providers: [
+        { provide: InstitutionService, useValue: new StubInstitutionService([OAK, BIRCH, ASH]) },
+        { provide: ProgrammeService, useValue: new StubProgrammeService() },
+        { provide: ProfileService, useValue: new StubProfileService() },
+        { provide: AuthService, useValue: new StubAuthService() }
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(Register);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  });
+
+  const programmeNames = () => component.programmes().map(item => item.name);
+
+  it('offers nothing before the pincode is complete', () => {
+    expect(component.programmes()).toEqual([]);
+
+    component.onPincodeInput('5600');
+
+    expect(component.programmes()).toEqual([]);
+  });
+
+  it('offers the programmes of every school the pincode matched', () => {
+    component.onPincodeInput('560001');
+
+    // OAK and BIRCH are at 560001; ASH's programme is at 560002 and must not appear.
+    expect(programmeNames()).toEqual(['Robotics', 'STEM Foundation']);
+  });
+
+  /** THE BUG THIS CATCHES: being offered another town's programmes. */
+  it('never offers a programme belonging to a school at another pincode', () => {
+    component.onPincodeInput('560002');
+
+    // ASH's programme only, and labelled by its displayName — the same rule the
+    // setup wizard uses, so the two screens name a programme identically.
+    expect(programmeNames()).toEqual(['Faraway Science Lab']);
+  });
+
+  it('narrows to one school’s programmes once a school is chosen', () => {
+    component.onPincodeInput('560001');
+    component.onSchoolChange('inst-1');
+
+    expect(programmeNames()).toEqual(['STEM Foundation']);
+  });
+
+  /**
+   * WITHOUT THIS the scoping is defeated by a stale signal: pick a school and its
+   * programme, switch school, and the old programme is still selected — one the
+   * new school does not run, which submit would happily write.
+   */
+  it('clears a chosen programme when the school changes', () => {
+    component.onPincodeInput('560001');
+    component.onSchoolChange('inst-1');
+    component.programme.set('prog-1');
+
+    component.onSchoolChange('inst-2');
+
+    expect(component.programme()).toBe('');
+  });
+
+  it('clears both the school and the programme when the pincode changes', () => {
+    component.onPincodeInput('560001');
+    component.onSchoolChange('inst-1');
+    component.programme.set('prog-1');
+
+    component.onPincodeInput('560002');
+
+    expect(component.school()).toBe('');
+    expect(component.programme()).toBe('');
+  });
+
+  it('clears them when the board narrows the search too', () => {
+    component.onPincodeInput('560001');
+    component.onSchoolChange('inst-1');
+    component.programme.set('prog-1');
+
+    component.onBoardChange('ICSE');
+
+    expect(component.school()).toBe('');
+    expect(component.programme()).toBe('');
+  });
+
 });
