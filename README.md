@@ -33,7 +33,7 @@ teacher management backed by Firestore.
 | **Set Up Wizard** | Built. The wizard itself plus Add Teachers and Bulk Upload Schools. |
 | **Profile** | Built. Reachable at `/profile`; the update-profile component is shared with the shell's user menu. |
 | **Data** | Real Firestore reads against the `teacher-corner-dev` database. Rules are deployed — see **Permissions** below. |
-| **Firebase config** | Live. Project `helix-staging-india`, app `Teacher Corner Dev`. |
+| **Firebase config** | Live, against a staging Firebase project. |
 
 Deliberately **not** built: the institution card grid, the expand-to-classrooms
 panel, and "What's new".
@@ -121,12 +121,11 @@ Reading the table:
 
 - **`users/{uid}` is the only owner-scoped path.** The uid is the document id,
   so the rule is one comparison with no `get()` lookup.
-- **The five data collections authorise on authentication alone.** They are not
-  narrowed by `ownerId`; the field is written and the app's queries filter on
-  it, but the rules do not require it. Any signed-in account can read and write
-  any row. This was raised and accepted as a deliberate staging decision, and
-  the `ownsExisting()` helper is kept unused in the rules file so narrowing it
-  again is a substitution rather than a rewrite.
+- **The five data collections authorise on authentication, not on ownership.**
+  `ownerId` is written and the app's queries filter on it, but the rules do not
+  require it. Narrowing them is tracked work, and `ownsExisting()` is kept unused
+  in the rules file so it is a substitution rather than a rewrite. Treat the
+  current setting as suitable for staging only.
 - **`id != 'trash'` is integrity, not authorization.** That id is the container
   document for deleted rows; creating a document with it would overwrite the
   container.
@@ -141,11 +140,10 @@ Reading the table:
   the Admin SDK, which bypasses rules. `ConfigurationService` falls back to the
   built-in lists when a document is missing or empty, so a denied read degrades
   to shipped behaviour rather than empty selects.
-- **`OTPVerifications` is closed to every client.** It holds `salt` and
-  `hashedOtp` for a live challenge. Read access would allow lifting both and
-  brute-forcing a six-digit code offline; write access would allow storing a
-  hash of a chosen code and verifying against it. The functions reach it through
-  the Admin SDK, which bypasses rules, so denying clients costs nothing.
+- **`OTPVerifications` is closed to every client**, and that is load-bearing
+  rather than hygiene: it holds the challenge material for a live sign-in. The
+  functions reach it through the Admin SDK, which bypasses rules, so denying
+  every client costs them nothing.
 - **The catch-all denies everything else**, so a new collection is closed until
   its own block is added.
 
@@ -160,12 +158,14 @@ npm run test:rules        # against the emulator
 Two routes, both ending in a Firebase session.
 
 **Mobile number + OTP — the primary route.** The login page leads with it.
-`OtpService` calls two callable Gen2 functions in `asia-south1`:
+`OtpService` calls two callable Gen2 functions, one to send and one to verify.
+They are named and configured in `functions-otp/`; this file does not repeat their
+addresses.
 
-| Function | What it does |
+| Step | What happens |
 | :-- | :-- |
-| `tcDevSendOtp` | Normalises the phone number, generates a code, stores `salt` + `hashedOtp` in `OTPVerifications/{phone}`, and sends the SMS through Exotel. Holds the Exotel credentials as bound secrets. Rate-limited by `requestCount` / `windowStart` on the same document. |
-| `tcDevVerifyOtp` | Checks the submitted code against the stored hash and returns a **custom token**. No Exotel secrets — it sends nothing. |
+| Send | Normalises the number, generates a code, stores only a salted hash of it, and sends the SMS through the configured provider. The provider credentials are bound secrets, never in the repository. Send attempts are rate limited per number. |
+| Verify | Checks the submitted code against the stored hash and returns a **custom token**. Sends nothing, and holds no provider credentials. |
 
 The code is generated, hashed and verified entirely server-side; the client
 never sees it. `AuthService.loginWithToken()` exchanges the custom token for a
@@ -192,9 +192,8 @@ alongside, with `registrationCompleteGuard` on `/register` and
 
 ## Pointing it at your own project
 
-`src/environments/environment.ts` ships with the live config for the
-`Teacher Corner Dev` app in `helix-staging-india`. To run against a different
-project, replace the `firebase` object:
+`src/environments/environment.ts` ships with a live staging config. To run
+against your own project, replace the `firebase` object:
 
 ```bash
 firebase apps:sdkconfig WEB --project <your-project-id>
@@ -209,7 +208,7 @@ You will also need, in the Firebase console:
 - **Google** enabled under Authentication → Sign-in method, with `localhost` in
   Authorized domains
 - A `teacher-corner-dev` database, with `firestore.rules` deployed to it
-- The OTP functions deployed, their Exotel secrets bound, and
+- The OTP functions deployed, their provider secrets bound, and
   `functions-otp/.env` populated from `.env.example` — otherwise the mobile
   route fails and only Google works
 
@@ -503,7 +502,8 @@ component is the **height**; width follows from the artwork.
 To refresh the assets from source:
 
 ```bash
-curl -O https://teachercorner.thinktac.com/assets/images/logo/thinktacLogo_noTagline_colour.svg
-curl -O https://teachercorner.thinktac.com/assets/images/logo/thinktacLogo_noTagline_white.svg
+# From the production app's own asset path, under assets/images/logo/:
+#   thinktacLogo_noTagline_colour.svg
+#   thinktacLogo_noTagline_white.svg
 # then re-crop: lockup viewBox "64.78 67.01 2269.42 527.15", mark "64.78 41.32 578.52 578.52"
 ```
