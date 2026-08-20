@@ -926,6 +926,33 @@ export interface TeacherProfile {
    * falls back to the literal 'Teacher', so a name-based check would treat every
    * brand-new phone user as already registered.
    */
+  /**
+   * One self-registration request, matching production's
+   * Users/{uid}.selfRegTeacherApproval entries.
+   *
+   * An ADMIN flips `approvalStatus` from false to true, in the console or in the
+   * admin app. Nothing in this app writes it — see ProfileService.gate(), which
+   * only ever reads it.
+   *
+   * Production's entry carries the first four keys. The rest are carried here so
+   * an approval has something to PROMOTE: the teaching details are not written to
+   * the profile until the request is granted, so they have to survive somewhere in
+   * the meantime, and the request itself is the honest place for them. A
+   * production reader ignores the extra keys.
+   */
+  selfRegTeacherApproval?: Record<string, {
+    approvalStatus: boolean;
+    classroomId: string;
+    classroomName: string;
+    institutionName: string;
+
+    institutionId?: string;
+    grade?: string;
+    section?: string;
+    programmeId?: string;
+    programmeName?: string;
+  }>;
+
   profileComplete?: boolean;
 
   /**

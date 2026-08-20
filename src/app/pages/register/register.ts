@@ -7,9 +7,10 @@ import { Logo } from '../../components/logo/logo';
 import { COUNTRIES, DEFAULT_COUNTRY, dialFor } from '../../data/institution-options';
 import { HERO_MODULES } from '../../data/hero-content';
 import { isCompletePincode, toPincodeDigits } from '../../data/setup-wizard-options';
-import { Institution, Programme } from '../../models/teaching.model';
+import { Classroom, Institution, Programme } from '../../models/teaching.model';
 import { AuthService } from '../../services/auth.service';
 import { InstitutionService } from '../../services/institution.service';
+import { ClassroomService } from '../../services/classroom.service';
 import { ProfileService } from '../../services/profile.service';
 import { ProgrammeService } from '../../services/programme.service';
 
@@ -89,6 +90,15 @@ export class Register {
 
   /** Everything this teacher owns, loaded once. */
   private readonly institutions = signal<Institution[]>([]);
+
+  /**
+   * The school's classrooms, read only to resolve a classroomId for the request.
+   *
+   * The form asks for grade and section, following production; this is what turns
+   * that into a reference where one exists. A failed read is survivable — the
+   * request is then keyed grade-section with an empty classroomId.
+   */
+  private readonly classrooms = signal<Classroom[]>([]);
   readonly allProgrammes = signal<Programme[]>([]);
 
   readonly loading = signal(true);
@@ -112,6 +122,7 @@ export class Register {
   private auth = inject(AuthService);
   private router = inject(Router);
   private institutionService = inject(InstitutionService);
+  private classroomService = inject(ClassroomService);
   private programmeService = inject(ProgrammeService);
   private profileService = inject(ProfileService);
 
@@ -138,13 +149,17 @@ export class Register {
    */
   private async loadOwnData(): Promise<void> {
     try {
-      const [institutions, programmes] = await Promise.all([
+      const [institutions, programmes, classrooms] = await Promise.all([
         this.institutionService.list(),
-        this.programmeService.list()
+        this.programmeService.list(),
+        // Only to resolve a classroomId for the request; an empty list just means
+        // the request carries none.
+        this.classroomService.list()
       ]);
 
       this.institutions.set(institutions);
       this.allProgrammes.set(programmes);
+      this.classrooms.set(classrooms);
     } catch (error) {
       console.error('Could not load schools or programmes for registration.', error);
     } finally {
@@ -352,48 +367,58 @@ export class Register {
     const chosenProgramme = this.programmes().find(item => item.id === this.programme());
 
     try {
+      /*
+       * A REQUEST, not a finished profile.
+       *
+       * The school, class and programme are NOT written onto the profile here.
+       * They are carried on a selfRegTeacherApproval entry with approvalStatus
+       * false, and ProfileService promotes them onto the profile once an
+       * administrator flips that to true. Until then the document says who asked
+       * and what for, and nothing about where they teach.
+       *
+       * KEYED BY classroomId where one matches, following production. The form
+       * asks for grade and section rather than a classroom, so an unmatched class
+       * is keyed grade-section and carries an empty classroomId — visibly
+       * unlinked, and nothing is created here to fill it.
+       */
+      const matched = this.classrooms().find(classroom =>
+        classroom.institutionId === this.school() &&
+        classroom.type === 'CLASSROOM' &&
+        classroom.grade === this.grade() &&
+        classroom.section === this.section()
+      );
+
+      const classroomName = matched
+        ? (matched.classroomName?.trim() || matched.stemClubName?.trim() || '')
+        : `${this.grade()} ${this.section()}`.trim();
+
+      const key = matched?.docId ?? `${this.grade()}-${this.section()}`;
+
       await this.profileService.save({
         firstName: this.firstName().trim(),
         lastName: this.lastName().trim(),
         email: this.email().trim(),
         // The verified number off the session, never the form.
         phone: this.phoneDigits,
+        countryCode: dialFor(this.country()),
         country: this.country(),
         pincode: this.pincode().trim(),
         board: this.board(),
-        institutionId: this.school(),
-        institutionName: chosenSchool?.name ?? '',
-        grade: this.grade(),
-        section: this.section(),
-        // Programme is optional on this form, so these stay empty rather than
-        // writing undefined, which Firestore rejects.
-        programmeId: this.programme(),
-        programmeName: chosenProgramme?.name ?? '',
-        /*
-         * The resolved class, as a map, mirroring production's currentStudentInfo.
-         *
-         * The flat fields above record what was TYPED; this records what it
-         * resolved to. Ids rather than names, so a renamed institution or a moved
-         * classroom stays followable. classroomName is composed the same way the
-         * classrooms page composes it, so "3 A" here means the same thing there.
-         */
-        currentClassInfo: {
-          institutionId: this.school(),
-          institutionName: chosenSchool?.name ?? '',
-          classroomName: `${this.grade()} ${this.section()}`.trim(),
-          programmeId: this.programme(),
-          programmeName: chosenProgramme?.name ?? ''
-        },
-        // THE TWO FLAGS THE GUARDS READ. Both written only on a successful save, so
-        // a failed one leaves the teacher on this form rather than through to a
-        // dashboard with no profile behind it.
-        //
-        // profileComplete says the form is done. `ApprovedStatus` is FALSE, and an
-        // administrator flips it in the Firestore console; until then the teacher
-        // sits on /approval-page. Written explicitly rather than left absent so the
-        // document shows the state plainly to whoever has to act on it.
-        profileComplete: true,
-        ApprovedStatus: false
+        selfRegTeacherApproval: {
+          [key]: {
+            // FALSE, ALWAYS. Nothing in this app grants a request.
+            approvalStatus: false,
+            classroomId: matched?.docId ?? '',
+            classroomName,
+            institutionName: chosenSchool?.name ?? '',
+            // Carried so the promotion has something to promote.
+            institutionId: this.school(),
+            grade: this.grade(),
+            section: this.section(),
+            programmeId: this.programme(),
+            programmeName: chosenProgramme?.name ?? ''
+          }
+        }
       });
 
       // BEFORE navigating, so the topbar and the dashboard greeting read the real

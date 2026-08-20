@@ -79,14 +79,20 @@ export class ProfileService {
       {
         ...profile,
         uid,
+        docId: uid,
         role: this.auth.role(),
+        // Production's field. This app registers phone sign-ins only — the gate
+        // never asks a Google account to register — so the source is always the
+        // OTP provider.
+        registeredFrom: 'EXOTEL',
         updatedAt: serverTimestamp(),
         // Only on first write. Spread of an empty object is a no-op otherwise.
-        ...(existing.exists() ? {} : { createdAt: serverTimestamp() })
+        ...(existing.exists() ? {} : { createdAt: serverTimestamp(), registeredAt: serverTimestamp() })
       },
       { merge: true }
     );
   }
+
 
   /**
    * Records the signed-in teacher in users/{uid}.
@@ -143,14 +149,41 @@ export class ProfileService {
       }
 
       const profile = snapshot.data() as TeacherProfile;
+      const requests = Object.values(profile.selfRegTeacherApproval ?? {});
 
-      if (profile.profileComplete !== true) {
+      /*
+       * THE REQUEST IS WHAT SAYS THE FORM WAS SUBMITTED, not profileComplete.
+       *
+       * The teaching details are no longer written at registration — they are
+       * held on the request and promoted once it is granted — so profileComplete
+       * is absent for a teacher who is waiting. Reading it here would send them
+       * back to a form they have already filled in.
+       */
+      if (requests.length === 0) {
+        // LEGACY, and it has to stay: documents written before the two-phase
+        // split carry profileComplete and ApprovedStatus and no request at all.
+        if (profile.profileComplete === true) {
+          return profile.ApprovedStatus === true ? null : 'approval';
+        }
+
         return 'register';
       }
 
-      // Absence means not approved. See the field's comment for why that is the
-      // safe default.
-      return profile.ApprovedStatus === true ? null : 'approval';
+      if (!requests.some(request => request.approvalStatus === true)) {
+        return 'approval';
+      }
+
+      /*
+       * APPROVED. The details are promoted HERE rather than only on the waiting
+       * page, because an admin can grant a request while nobody is watching — the
+       * teacher may have closed the tab days earlier. Doing it on the way in makes
+       * the promotion happen exactly once, whenever they next arrive.
+       */
+      if (profile.profileComplete !== true) {
+        await this.promoteApproved(uid, profile);
+      }
+
+      return null;
     } catch (error) {
       console.error('Could not read the profile to decide where to route.', error);
       return null;
@@ -158,22 +191,55 @@ export class ProfileService {
   }
 
   /**
-   * Watches users/{uid} and reports when the account becomes approved.
+   * Writes the teaching details a granted request was holding.
    *
-   * A LIVE LISTENER, not a poll. onSnapshot holds an open channel, so flipping
-   * ApprovedStatus in the Firestore console reaches the browser in about as long as
-   * the write takes — no refresh, and no timer firing reads that almost always say
-   * the same thing.
+   * WHY THIS EXISTS AT ALL. Registration stores only who the teacher is and what
+   * they asked for; the school, class and programme land on the profile only once
+   * an administrator has granted it. So the request carries them in the meantime
+   * and this is what moves them across.
    *
-   * Fires only on the TRANSITION to approved. The listener also delivers the current
-   * state immediately on attach, and the caller is a page that only exists while the
-   * account is unapproved, so a first callback saying "still false" is expected and
-   * must not be treated as an event.
+   * THE FIRST GRANTED REQUEST WINS. A teacher can only have one current class on
+   * their profile, and granting two is an administrative decision this app cannot
+   * resolve — so it takes the first granted one and leaves the rest on the
+   * document to be seen.
    *
-   * RETURNS THE UNSUBSCRIBE, and the caller must call it. An onSnapshot left running
-   * after its component is destroyed keeps a socket open and keeps firing into a
-   * navigation that has already happened.
+   * merge:true, and profileComplete is written LAST in the same write, so a
+   * failure leaves the profile un-promoted and this runs again next time rather
+   * than leaving it half-written.
    */
+  private async promoteApproved(uid: string, profile: TeacherProfile): Promise<void> {
+    const granted = Object.values(profile.selfRegTeacherApproval ?? {})
+      .find(request => request.approvalStatus === true);
+
+    if (!granted) {
+      return;
+    }
+
+    await setDoc(
+      userProfileDoc(uid),
+      {
+        institutionId: granted.institutionId ?? '',
+        institutionName: granted.institutionName ?? '',
+        grade: granted.grade ?? '',
+        section: granted.section ?? '',
+        programmeId: granted.programmeId ?? '',
+        programmeName: granted.programmeName ?? '',
+        currentClassInfo: {
+          institutionId: granted.institutionId ?? '',
+          institutionName: granted.institutionName ?? '',
+          classroomName: granted.classroomName ?? '',
+          programmeId: granted.programmeId ?? '',
+          programmeName: granted.programmeName ?? ''
+        },
+        // Approved AND promoted. The guards read this to mean "the shell may open".
+        profileComplete: true,
+        ApprovedStatus: true,
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+  }
+
   watchApproval(onApproved: () => void): () => void {
     const uid = this.auth.currentUid();
 
@@ -187,7 +253,11 @@ export class ProfileService {
       snapshot => {
         const profile = snapshot.data() as TeacherProfile | undefined;
 
-        if (profile?.ApprovedStatus === true) {
+        const granted = Object.values(profile?.selfRegTeacherApproval ?? {})
+          .some(request => request.approvalStatus === true);
+
+        // Legacy documents carry the flag and no request; both count as approved.
+        if (granted || profile?.ApprovedStatus === true) {
           onApproved();
         }
       },

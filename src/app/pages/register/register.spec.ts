@@ -1,11 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { Institution, Programme } from '../../models/teaching.model';
+import { Classroom, Institution, Programme } from '../../models/teaching.model';
 import { AuthService } from '../../services/auth.service';
 import { InstitutionService } from '../../services/institution.service';
 import { ProfileService } from '../../services/profile.service';
 import { ProgrammeService } from '../../services/programme.service';
+import { ClassroomService } from '../../services/classroom.service';
 import { Register } from './register';
 
 /**
@@ -72,6 +73,16 @@ function stubProgramme(
   return { docId, programmeName, displayName, institutionId } as unknown as Programme;
 }
 
+/**
+ * The classrooms the form reads only to resolve a classroomId for the request.
+ * An empty list is a legitimate state: the request then carries none.
+ */
+class StubClassroomService {
+  constructor(public classrooms: Classroom[] = []) {}
+  async list(): Promise<Classroom[]> { return this.classrooms; }
+  describeError(_error: unknown, fallback: string): string { return fallback; }
+}
+
 class StubProgrammeService {
   constructor(
     public programmes: Programme[] = [
@@ -121,6 +132,7 @@ describe('Register', () => {
         provideRouter([]),
         { provide: InstitutionService, useValue: institutions },
         { provide: ProgrammeService, useValue: new StubProgrammeService() },
+        { provide: ClassroomService, useValue: new StubClassroomService() },
         { provide: ProfileService, useValue: new StubProfileService() },
         { provide: AuthService, useValue: new StubAuthService() }
       ]
@@ -261,6 +273,7 @@ describe('Register — the programme list', () => {
       providers: [
         { provide: InstitutionService, useValue: new StubInstitutionService([OAK, BIRCH, ASH]) },
         { provide: ProgrammeService, useValue: new StubProgrammeService() },
+        { provide: ClassroomService, useValue: new StubClassroomService() },
         { provide: ProfileService, useValue: new StubProfileService() },
         { provide: AuthService, useValue: new StubAuthService() }
       ]
@@ -343,4 +356,164 @@ describe('Register — the programme list', () => {
     expect(component.programme()).toBe('');
   });
 
+});
+
+/**
+ * REGISTRATION WRITES A REQUEST, NOT A FINISHED PROFILE.
+ *
+ * The school, class and programme are held on a selfRegTeacherApproval entry with
+ * approvalStatus false, and ProfileService promotes them onto the profile only
+ * once an administrator flips that to true. The whole submit path had no coverage
+ * before this.
+ */
+describe('Register — what submit writes', () => {
+  let fixture: ComponentFixture<Register>;
+  let component: Register;
+  let profile: StubProfileService;
+
+  async function render(classrooms: Classroom[] = []): Promise<void> {
+    TestBed.resetTestingModule();
+    profile = new StubProfileService();
+
+    await TestBed.configureTestingModule({
+      imports: [Register],
+      providers: [
+        { provide: InstitutionService, useValue: new StubInstitutionService([OAK]) },
+        { provide: ProgrammeService, useValue: new StubProgrammeService() },
+        { provide: ClassroomService, useValue: new StubClassroomService(classrooms) },
+        { provide: ProfileService, useValue: profile },
+        { provide: AuthService, useValue: new StubAuthService() }
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(Register);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  /** OAK sits at 560001 on CBSE, and carries prog-1. */
+  function fillForm(): void {
+    component.onPincodeInput('560001');
+    component.onBoardChange('CBSE');
+    component.onSchoolChange('inst-1');
+    component.firstName.set('Anita');
+    component.lastName.set('Rao');
+    component.email.set('anita@example.com');
+    component.grade.set('9');
+    component.section.set('B');
+    component.programme.set('prog-1');
+  }
+
+  function classroom(fields: Partial<Classroom> = {}): Classroom {
+    return {
+      docId: 'c1',
+      classroomId: 'c1',
+      type: 'CLASSROOM',
+      classroomName: '9 B',
+      stemClubName: '',
+      grade: '9',
+      section: 'B',
+      institutionId: 'inst-1',
+      institutionName: 'Oak Public School',
+      programmes: {},
+      ownerId: 'u1',
+      ...fields
+    } as Classroom;
+  }
+
+  const written = () => profile.saved[0] as Record<string, unknown>;
+  const request = () =>
+    Object.values(written()['selfRegTeacherApproval'] as Record<string, Record<string, unknown>>)[0];
+
+  it('files the request with approvalStatus false, never true', async () => {
+    await render();
+    fillForm();
+
+    await component.submit();
+
+    expect(profile.saved.length).toBe(1);
+    expect(request()['approvalStatus']).toBe(false);
+  });
+
+  /**
+   * THE POINT OF THE SPLIT. A waiting teacher's profile says who asked and what
+   * for, and nothing about where they teach.
+   */
+  it('does not write the teaching details onto the profile yet', async () => {
+    await render();
+    fillForm();
+
+    await component.submit();
+
+    for (const field of [
+      'institutionId', 'institutionName', 'grade', 'section',
+      'programmeId', 'programmeName', 'currentClassInfo', 'profileComplete'
+    ]) {
+      expect(written()[field]).toBeUndefined();
+    }
+  });
+
+  it('still records who asked', async () => {
+    await render();
+    fillForm();
+
+    await component.submit();
+
+    expect(written()['firstName']).toBe('Anita');
+    expect(written()['lastName']).toBe('Rao');
+    expect(written()['email']).toBe('anita@example.com');
+    expect(written()['countryCode']).toBe('+91');
+  });
+
+  /** Carried on the request so an approval has something to promote. */
+  it('carries the class and programme on the request', async () => {
+    await render();
+    fillForm();
+
+    await component.submit();
+
+    expect(request()['grade']).toBe('9');
+    expect(request()['section']).toBe('B');
+    expect(request()['programmeId']).toBe('prog-1');
+    expect(request()['institutionId']).toBe('inst-1');
+    expect(request()['institutionName']).toBe('Oak Public School');
+  });
+
+  /** Production keys these by classroomId, so a match is used where one exists. */
+  it('keys the request by classroomId when a classroom matches', async () => {
+    await render([classroom()]);
+    fillForm();
+
+    await component.submit();
+
+    expect(Object.keys(written()['selfRegTeacherApproval'] as object)).toEqual(['c1']);
+    expect(request()['classroomId']).toBe('c1');
+    expect(request()['classroomName']).toBe('9 B');
+  });
+
+  /**
+   * NOTHING IS CREATED to make a key. An empty classroomId is visibly unlinked;
+   * an invented one could never be told from a real reference.
+   */
+  it('falls back to grade-section with an empty classroomId when none matches', async () => {
+    await render([classroom({ docId: 'c9', classroomId: 'c9', grade: '4', section: 'A' })]);
+    fillForm();
+
+    await component.submit();
+
+    expect(Object.keys(written()['selfRegTeacherApproval'] as object)).toEqual(['9-B']);
+    expect(request()['classroomId']).toBe('');
+    expect(request()['classroomName']).toBe('9 B');
+  });
+
+  it('will not submit an incomplete form', async () => {
+    await render();
+    component.onPincodeInput('560001');
+
+    await component.submit();
+
+    expect(profile.saved.length).toBe(0);
+  });
 });
