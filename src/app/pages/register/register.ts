@@ -10,7 +10,7 @@ import { isCompletePincode, toPincodeDigits } from '../../data/setup-wizard-opti
 import { Classroom, Institution, Programme } from '../../models/teaching.model';
 import { AuthService } from '../../services/auth.service';
 import { InstitutionService } from '../../services/institution.service';
-import { ClassroomService } from '../../services/classroom.service';
+import { ClassroomService, toProgrammeMap } from '../../services/classroom.service';
 import { ProfileService } from '../../services/profile.service';
 import { ProgrammeService } from '../../services/programme.service';
 
@@ -289,6 +289,10 @@ export class Register {
     this.emailValid() &&
     !!this.grade() &&
     !!this.section() &&
+    // REQUIRED NOW. It was optional, which left programmeId and programmeName
+    // empty on the request and then empty on the promoted profile — a class with
+    // no programme is not a teaching assignment anybody can act on.
+    !!this.programme() &&
     !this.pending()
   );
 
@@ -353,6 +357,67 @@ export class Register {
     }
   }
 
+  /**
+   * The classrooms/{id} for the chosen school, grade and section — creating it if
+   * it is not there yet.
+   *
+   * MATCHES ON type CLASSROOM, because a STEM club has no grade or section to
+   * match against and must never be handed back for a class.
+   *
+   * Returns undefined only when the create itself failed, which the caller treats
+   * as "file the request anyway".
+   */
+  private async resolveClassroom(institutionName: string): Promise<Classroom | undefined> {
+    const existing = this.classrooms().find(classroom =>
+      classroom.institutionId === this.school() &&
+      classroom.type === 'CLASSROOM' &&
+      classroom.grade === this.grade() &&
+      classroom.section === this.section()
+    );
+
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      const created = await this.classroomService.create(
+        {
+          type: 'CLASSROOM',
+          classroomName: '',
+          stemClubName: '',
+          grade: this.grade(),
+          section: this.section(),
+          board: this.board(),
+          institutionId: this.school(),
+          institutionName,
+          /*
+           * THE CHOSEN PROGRAMME IS ATTACHED. A classroom created with an empty
+           * programmes map would leave the teacher referencing a programme their
+           * own classroom does not run, which is the inconsistency this whole
+           * resolution exists to avoid.
+           *
+           * Only on CREATE. An existing classroom's programmes are the Classrooms
+           * page's business, and a registration must not quietly change what a
+           * class other people already use is running.
+           */
+          programmes: toProgrammeMap(
+            this.allProgrammes().filter(item => item.docId === this.programme())
+          )
+        },
+        this.classrooms()
+      );
+
+      // Kept locally so a second submit in the same session reuses it rather than
+      // creating a duplicate.
+      this.classrooms.update(list => [...list, created]);
+
+      return created;
+    } catch (error) {
+      console.error('Could not create the classroom for this registration.', error);
+      return undefined;
+    }
+  }
+
   // ---- Submit -------------------------------------------------------------
 
   async submit(): Promise<void> {
@@ -381,18 +446,29 @@ export class Register {
        * is keyed grade-section and carries an empty classroomId — visibly
        * unlinked, and nothing is created here to fill it.
        */
-      const matched = this.classrooms().find(classroom =>
-        classroom.institutionId === this.school() &&
-        classroom.type === 'CLASSROOM' &&
-        classroom.grade === this.grade() &&
-        classroom.section === this.section()
-      );
+      /*
+       * THE CLASSROOM IS RESOLVED, AND CREATED IF IT DOES NOT EXIST.
+       *
+       * The form asks for grade and section, following production, so the
+       * classroom behind them has to be found. An existing one is reused; where
+       * none matches, one is created so the request carries a REAL reference
+       * rather than an empty classroomId that nothing can follow.
+       *
+       * CREATED HERE rather than on approval, so the reference exists from the
+       * moment the request is filed — an admin reading it can open the classroom
+       * they are being asked to approve somebody into.
+       *
+       * A FAILED CREATE IS SURVIVABLE. The request is still filed, carrying an
+       * empty classroomId, because losing the registration outright over a
+       * secondary write would be the worse outcome.
+       */
+      const classroom = await this.resolveClassroom(chosenSchool?.name ?? '');
 
-      const classroomName = matched
-        ? (matched.classroomName?.trim() || matched.stemClubName?.trim() || '')
+      const classroomName = classroom
+        ? (classroom.classroomName?.trim() || classroom.stemClubName?.trim() || '')
         : `${this.grade()} ${this.section()}`.trim();
 
-      const key = matched?.docId ?? `${this.grade()}-${this.section()}`;
+      const key = classroom?.docId ?? `${this.grade()}-${this.section()}`;
 
       await this.profileService.save({
         firstName: this.firstName().trim(),
@@ -408,7 +484,7 @@ export class Register {
           [key]: {
             // FALSE, ALWAYS. Nothing in this app grants a request.
             approvalStatus: false,
-            classroomId: matched?.docId ?? '',
+            classroomId: classroom?.docId ?? '',
             classroomName,
             institutionName: chosenSchool?.name ?? '',
             // Carried so the promotion has something to promote.

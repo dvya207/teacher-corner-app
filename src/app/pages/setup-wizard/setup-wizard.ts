@@ -29,7 +29,7 @@ import { ProgrammeService } from '../../services/programme.service';
 import { TeacherService } from '../../services/teacher.service';
 import { TeacherEntry } from '../../data/teacher-options';
 import { classroomTitle } from '../../data/classroom-options';
-import { ClassroomService } from '../../services/classroom.service';
+import { ClassroomService, toProgrammeMap } from '../../services/classroom.service';
 import { AddInstitutionInline } from '../classrooms/add-institution-inline';
 import { AddTeachers } from './add-teachers';
 import { BulkUploadSchools } from './bulk-upload-schools';
@@ -245,28 +245,32 @@ export class SetupWizard implements OnInit, OnDestroy {
    *
    *   matched    an existing classrooms/{id} with that grade and section, whose
    *              name and type are copied onto the entry
-   *   unmatched  the entry is still recorded, keyed by grade-section and carrying
-   *              an EMPTY classroomId
+   *   unmatched  one is CREATED, so the entry carries a real reference
    *
-   * NOTHING IS CREATED HERE. Writing a classroom as a side effect of registering
-   * a teacher would have this step quietly populating a collection the form never
-   * mentions, and the wizard runs immediately after a school is created, when it
-   * legitimately has none. An empty classroomId is visibly unlinked and can be
-   * filled in later; an invented one could never be told from a real reference.
+   * IT DOES CREATE. That was avoided at first, on the reasoning that this step
+   * should not quietly populate a collection the form never mentions — but the
+   * alternative was an empty classroomId that nothing can follow, and a teacher
+   * attached to a class with no document behind it is not a usable record. The
+   * wizard runs right after a school is created, so the common case is that none
+   * of its classes exist yet and each one has to be made.
+   *
+   * A FAILED CREATE IS SURVIVABLE: the entry is still recorded, keyed
+   * grade-section with an empty classroomId, rather than losing the whole
+   * registration over a secondary write.
    *
    * ROWS SHARING A CLASS MERGE. Two rows with the same grade and section are the
    * same classroom with two programmes, so their programmes accumulate on one
    * entry rather than one row overwriting the other.
    */
-  private classroomsMapFor(
+  private async classroomsMapFor(
     rows: readonly { grade: string; section: string; programmeId: string }[],
     userRole: string
-  ): Record<string, TeacherClassroom> {
+  ): Promise<Record<string, TeacherClassroom>> {
     const schoolId = this.school();
     const school = this.institutions().find(item => item.docId === schoolId);
     const programmesById = new Map(this.programmes().map(item => [item.docId, item]));
 
-    const classroomFor = (grade: string, section: string): Classroom | undefined =>
+    const find = (grade: string, section: string): Classroom | undefined =>
       this.classrooms().find(classroom =>
         classroom.institutionId === schoolId &&
         classroom.type === 'CLASSROOM' &&
@@ -274,10 +278,59 @@ export class SetupWizard implements OnInit, OnDestroy {
         classroom.section === section
       );
 
+    const classroomFor = async (
+      grade: string,
+      section: string,
+      programmeId: string
+    ): Promise<Classroom | undefined> => {
+      const existing = find(grade, section);
+
+      if (existing) {
+        return existing;
+      }
+
+      try {
+        const created = await this.classroomService.create(
+          {
+            type: 'CLASSROOM',
+            classroomName: '',
+            stemClubName: '',
+            grade,
+            section,
+            board: this.board(),
+            institutionId: schoolId,
+            institutionName: school?.institutionName ?? '',
+            /*
+             * THE CHOSEN PROGRAMME IS ATTACHED, so a classroom created here is not
+             * left running nothing while a teacher is recorded as teaching a
+             * programme in it.
+             *
+             * Only on CREATE. An existing classroom's programmes belong to the
+             * Classrooms page; registering a teacher must not change what a class
+             * other people already use is running.
+             */
+            programmes: toProgrammeMap(
+              this.programmes().filter(item => item.docId === programmeId)
+            )
+          },
+          this.classrooms()
+        );
+
+        // Held locally so two rows naming the same class reuse it rather than
+        // racing to create it twice.
+        this.classrooms.update(list => [...list, created]);
+
+        return created;
+      } catch (error) {
+        console.error('Could not create the classroom for this teacher.', error);
+        return undefined;
+      }
+    };
+
     const map: Record<string, TeacherClassroom> = {};
 
     for (const row of rows) {
-      const matched = classroomFor(row.grade, row.section);
+      const matched = await classroomFor(row.grade, row.section, row.programmeId);
       const key = matched?.docId ?? `${row.grade}-${row.section}`;
 
       const programme = programmesById.get(row.programmeId);
@@ -699,8 +752,15 @@ export class SetupWizard implements OnInit, OnDestroy {
         uid: '',
         updatedAt: null as unknown as Timestamp
       },
-      classrooms: this.classroomsMapFor(entry.classrooms, entry.role)
+      classrooms: {} as Record<string, TeacherClassroom>
     }));
+
+    // Resolved AFTER the drafts are shaped, and sequentially: creating a classroom
+    // is a write, and two rows naming the same class must reuse the first rather
+    // than racing to create it twice.
+    for (const [index, entry] of entries.entries()) {
+      drafts[index].classrooms = await this.classroomsMapFor(entry.classrooms, entry.role);
+    }
 
     try {
       /**

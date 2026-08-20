@@ -70,7 +70,16 @@ function stubProgramme(
   institutionId: string,
   displayName = ''
 ): Programme {
-  return { docId, programmeName, displayName, institutionId } as unknown as Programme;
+  // programmeId as well as docId: toProgrammeMap keys the classroom's programmes
+  // map on programmeId, so a stub without one keys everything under 'undefined'.
+  return {
+    docId,
+    programmeId: docId,
+    programmeName,
+    displayName,
+    programmeCode: 'P1',
+    institutionId
+  } as unknown as Programme;
 }
 
 /**
@@ -78,8 +87,30 @@ function stubProgramme(
  * An empty list is a legitimate state: the request then carries none.
  */
 class StubClassroomService {
+  created: unknown[] = [];
+  createError: unknown = null;
+
   constructor(public classrooms: Classroom[] = []) {}
+
   async list(): Promise<Classroom[]> { return this.classrooms; }
+
+  async create(draft: Record<string, unknown>): Promise<Classroom> {
+    if (this.createError) {
+      throw this.createError;
+    }
+
+    this.created.push(draft);
+
+    // The real service COMPOSES the name from grade and section rather than
+    // storing what it was handed, so the stub has to as well or callers see ''.
+    return {
+      ...draft,
+      docId: 'new-c1',
+      classroomId: 'new-c1',
+      classroomName: `${draft['grade']} ${draft['section']}`.trim()
+    } as unknown as Classroom;
+  }
+
   describeError(_error: unknown, fallback: string): string { return fallback; }
 }
 
@@ -251,6 +282,13 @@ describe('Register', () => {
     expect(component.canSubmit()).toBe(false);
 
     component.section.set('A');
+
+    // AND the programme, which is required now: a class with no programme is not
+    // a teaching assignment anybody can act on, and it left programmeId empty on
+    // the request and then on the promoted profile.
+    expect(component.canSubmit()).toBe(false);
+
+    component.programme.set('prog-1');
     expect(component.canSubmit()).toBe(true);
   });
 });
@@ -494,17 +532,17 @@ describe('Register — what submit writes', () => {
   });
 
   /**
-   * NOTHING IS CREATED to make a key. An empty classroomId is visibly unlinked;
-   * an invented one could never be told from a real reference.
+   * A CLASS WITH NO CLASSROOM GETS ONE. The request is keyed by the created id,
+   * so it carries a reference something can follow — see the resolution suite
+   * below for the create itself.
    */
-  it('falls back to grade-section with an empty classroomId when none matches', async () => {
+  it('keys by a newly created classroom when none matches', async () => {
     await render([classroom({ docId: 'c9', classroomId: 'c9', grade: '4', section: 'A' })]);
     fillForm();
 
     await component.submit();
 
-    expect(Object.keys(written()['selfRegTeacherApproval'] as object)).toEqual(['9-B']);
-    expect(request()['classroomId']).toBe('');
+    expect(request()['classroomId']).toBe('new-c1');
     expect(request()['classroomName']).toBe('9 B');
   });
 
@@ -515,5 +553,131 @@ describe('Register — what submit writes', () => {
     await component.submit();
 
     expect(profile.saved.length).toBe(0);
+  });
+});
+
+/**
+ * A CLASSROOM IS CREATED WHERE NONE MATCHES, so the request carries a real
+ * reference. It previously carried an empty classroomId, which nothing can
+ * follow.
+ */
+describe('Register — resolving the classroom', () => {
+  let fixture: ComponentFixture<Register>;
+  let component: Register;
+  let profile: StubProfileService;
+  let classrooms: StubClassroomService;
+
+  async function render(existing: Classroom[] = []): Promise<void> {
+    TestBed.resetTestingModule();
+    profile = new StubProfileService();
+    classrooms = new StubClassroomService(existing);
+
+    await TestBed.configureTestingModule({
+      imports: [Register],
+      providers: [
+        { provide: InstitutionService, useValue: new StubInstitutionService([OAK]) },
+        { provide: ProgrammeService, useValue: new StubProgrammeService() },
+        { provide: ClassroomService, useValue: classrooms },
+        { provide: ProfileService, useValue: profile },
+        { provide: AuthService, useValue: new StubAuthService() }
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(Register);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  function fillForm(): void {
+    component.onPincodeInput('560001');
+    component.onBoardChange('CBSE');
+    component.onSchoolChange('inst-1');
+    component.firstName.set('Anita');
+    component.lastName.set('Rao');
+    component.email.set('anita@example.com');
+    component.grade.set('9');
+    component.section.set('B');
+    component.programme.set('prog-1');
+  }
+
+  const request = () =>
+    Object.values(
+      (profile.saved[0] as Record<string, unknown>)['selfRegTeacherApproval'] as
+        Record<string, Record<string, unknown>>
+    )[0];
+
+  it('creates the classroom when none matches, and uses its id', async () => {
+    await render();
+    fillForm();
+
+    await component.submit();
+
+    expect(classrooms.created.length).toBe(1);
+    expect(request()['classroomId']).toBe('new-c1');
+  });
+
+  it('creates it for the chosen school, grade and section', async () => {
+    await render();
+    fillForm();
+
+    await component.submit();
+    const draft = classrooms.created[0] as Record<string, unknown>;
+
+    expect(draft['institutionId']).toBe('inst-1');
+    expect(draft['grade']).toBe('9');
+    expect(draft['section']).toBe('B');
+    expect(draft['type']).toBe('CLASSROOM');
+  });
+
+  /**
+   * THE POINT. A classroom created with no programmes would leave the teacher
+   * recorded as teaching a programme their own class does not run.
+   */
+  it('attaches the chosen programme to the classroom it creates', async () => {
+    await render();
+    fillForm();
+
+    await component.submit();
+    const draft = classrooms.created[0] as Record<string, unknown>;
+
+    expect(Object.keys(draft['programmes'] as object)).toEqual(['prog-1']);
+  });
+
+  it('reuses an existing classroom rather than creating a second one', async () => {
+    await render([{
+      docId: 'c-existing',
+      classroomId: 'c-existing',
+      type: 'CLASSROOM',
+      classroomName: '9 B',
+      stemClubName: '',
+      grade: '9',
+      section: 'B',
+      institutionId: 'inst-1',
+      programmes: {}
+    } as unknown as Classroom]);
+    fillForm();
+
+    await component.submit();
+
+    expect(classrooms.created.length).toBe(0);
+    expect(request()['classroomId']).toBe('c-existing');
+  });
+
+  /**
+   * A SECONDARY WRITE MUST NOT COST THE REGISTRATION. The request is still filed,
+   * carrying an empty classroomId, rather than the teacher losing their submission.
+   */
+  it('still files the request when the classroom could not be created', async () => {
+    await render();
+    classrooms.createError = new Error('permission-denied');
+    fillForm();
+
+    await component.submit();
+
+    expect(profile.saved.length).toBe(1);
+    expect(request()['classroomId']).toBe('');
+    expect(request()['classroomName']).toBe('9 B');
   });
 });
