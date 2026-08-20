@@ -121,8 +121,32 @@ function classroomFixture(fields: Partial<Classroom> = {}): Classroom {
 }
 
 class StubClassroomService {
+  created: Record<string, unknown>[] = [];
+  createError: unknown = null;
+  private next = 0;
+
   constructor(public classrooms: Classroom[] = [classroomFixture()]) {}
+
   list = async (): Promise<Classroom[]> => this.classrooms;
+
+  create = async (draft: Record<string, unknown>): Promise<Classroom> => {
+    if (this.createError) {
+      throw this.createError;
+    }
+
+    this.created.push(draft);
+    const docId = `made-${++this.next}`;
+
+    // The real service composes the name from grade and section rather than
+    // storing what it was handed.
+    return {
+      ...draft,
+      docId,
+      classroomId: docId,
+      classroomName: `${draft['grade']} ${draft['section']}`.trim()
+    } as unknown as Classroom;
+  };
+
   describeError = (_error: unknown, fallback: string): string => fallback;
 }
 
@@ -1115,8 +1139,15 @@ describe('Set Up Wizard — registering teachers', () => {
    * mentions — and the wizard runs right after a school is created, when it
    * legitimately has none.
    */
-  it('records an unmatched class with an empty classroomId rather than inventing one', async () => {
+  /**
+   * A class with no classroom gets one created, so the entry is keyed by a real
+   * document id — see the creation tests. This covers the CREATE-FAILED path,
+   * where the entry is still recorded under a generated key rather than under
+   * grade-section, which would move the moment a real classroom appeared.
+   */
+  it('keys a failed create by a generated id, never by grade-section', async () => {
     await reachStepTwo();
+    classroomService.createError = new Error('permission-denied');
 
     await component.addTeachers([{
       ...row('9876543210'),
@@ -1124,11 +1155,15 @@ describe('Set Up Wizard — registering teachers', () => {
     }]);
 
     const entries = teacherService.calls[0][0].classrooms;
+    const [key] = Object.keys(entries);
 
-    expect(Object.keys(entries)).toEqual(['9-Z']);
-    expect(entries['9-Z'].classroomId).toBe('');
-    expect(entries['9-Z'].grade).toBe('9');
-    expect(entries['9-Z'].section).toBe('Z');
+    expect(key).not.toBe('9-Z');
+    expect(key.length).toBeGreaterThan(10);
+    // Unlinked is recorded on the entry, not encoded in the key.
+    expect(entries[key].classroomId).toBe('');
+    expect(entries[key].grade).toBe('9');
+    expect(entries[key].section).toBe('Z');
+    expect(entries[key].classroomName).toBe('9 Z');
   });
 
   /** The school comes from step 1, never from the form. */
@@ -1214,7 +1249,67 @@ describe('Set Up Wizard — registering teachers', () => {
       ]
     }]);
 
-    expect(Object.keys(teacherService.calls[0][0].classrooms).sort()).toEqual(['5-B', 'c1']);
+    // Two real classrooms: c1 matched, and 5 B was created.
+    expect(Object.keys(teacherService.calls[0][0].classrooms).length).toBe(2);
+  });
+
+  /**
+   * A CLASS WITH NO CLASSROOM GETS ONE, so the entry carries a real reference
+   * instead of an empty classroomId that nothing can follow. The wizard runs
+   * right after a school is created, so this is the common case rather than the
+   * edge one.
+   */
+  it('creates the classroom when none matches, and keys on its id', async () => {
+    await reachStepTwo();
+
+    await component.addTeachers([{
+      ...row('9876543210'),
+      classrooms: [{ grade: '9', section: 'Z', programmeId: 'prog-1' }]
+    }]);
+
+    expect(classroomService.created.length).toBe(1);
+
+    const entries = teacherService.calls[0][0].classrooms;
+
+    expect(Object.keys(entries)).toEqual(['made-1']);
+    expect(entries['made-1'].classroomId).toBe('made-1');
+    expect(entries['made-1'].classroomName).toBe('9 Z');
+  });
+
+  /** Otherwise the teacher teaches a programme their own classroom does not run. */
+  it('attaches the chosen programme to the classroom it creates', async () => {
+    await reachStepTwo();
+
+    await component.addTeachers([{
+      ...row('9876543210'),
+      classrooms: [{ grade: '9', section: 'Z', programmeId: 'prog-1' }]
+    }]);
+
+    expect(Object.keys(classroomService.created[0]['programmes'] as object)).toEqual(['prog-1']);
+  });
+
+  /** Two rows for one class must reuse the first create, not race a second. */
+  it('creates one classroom for two rows naming the same class', async () => {
+    await reachStepTwo();
+
+    await component.addTeachers([{
+      ...row('9876543210'),
+      classrooms: [
+        { grade: '9', section: 'Z', programmeId: 'prog-1' },
+        { grade: '9', section: 'Z', programmeId: 'prog-1' }
+      ]
+    }]);
+
+    expect(classroomService.created.length).toBe(1);
+    expect(Object.keys(teacherService.calls[0][0].classrooms)).toEqual(['made-1']);
+  });
+
+  it('reuses a matching classroom rather than creating another', async () => {
+    await reachStepTwo();
+
+    await component.addTeachers([row('9876543210')]);
+
+    expect(classroomService.created.length).toBe(0);
   });
 
   /* ---- Which programmes are assignable ------------------------------------ */

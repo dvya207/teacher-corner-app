@@ -140,7 +140,8 @@ describe('normaliseTeacher', () => {
         fullNameLowerCase: '',
         phone: '',
         phoneNumber: '',
-        uid: '',
+        // uid is ABSENT, not empty: a teacher who has never signed in has no uid,
+        // and a blank one would read as answered.
         updatedAt: null
       },
       classrooms: {}
@@ -184,8 +185,18 @@ describe('normaliseTeacher', () => {
     expect(teacher.teacherMeta.fullNameLowerCase).toBe('santoshkanta');
   });
 
-  it('leaves uid empty, because registering a teacher creates no Auth user', () => {
-    expect(normaliseTeacher<Teacher>('t1', { firstName: 'Anita' }).teacherMeta.uid).toBe('');
+  it('omits uid entirely when the document has none', () => {
+    const meta = normaliseTeacher<Teacher>('t1', { firstName: 'Anita' }).teacherMeta;
+
+    expect('uid' in meta).toBe(false);
+  });
+
+  it('keeps a uid the document does carry', () => {
+    const meta = normaliseTeacher<Teacher>('t1', {
+      teacherMeta: { uid: 'auth-uid-1' }
+    }).teacherMeta;
+
+    expect(meta.uid).toBe('auth-uid-1');
   });
 
   it('reads a stored classrooms map, keeping its key as the classroom id', () => {

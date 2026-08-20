@@ -24,6 +24,8 @@ import {
   TeacherProgramme
 } from '../../models/teaching.model';
 import { Timestamp } from 'firebase/firestore';
+
+import { generatedKey } from '../../core/firestore-paths';
 import { InstitutionService } from '../../services/institution.service';
 import { ProgrammeService } from '../../services/programme.service';
 import { TeacherService } from '../../services/teacher.service';
@@ -245,7 +247,11 @@ export class SetupWizard implements OnInit, OnDestroy {
    *
    *   matched    an existing classrooms/{id} with that grade and section, whose
    *              name and type are copied onto the entry
-   *   unmatched  one is CREATED, so the entry carries a real reference
+   *   unmatched  one is CREATED, so the entry carries a real reference. If that
+   *              create fails, the entry is keyed by a GENERATED id rather than by
+   *              grade-section: a key built out of the class is not stable — the
+   *              same teacher re-registered after the classroom exists would land
+   *              under a different key and read as a second class.
    *
    * IT DOES CREATE. That was avoided at first, on the reasoning that this step
    * should not quietly populate a collection the form never mentions — but the
@@ -331,7 +337,15 @@ export class SetupWizard implements OnInit, OnDestroy {
 
     for (const row of rows) {
       const matched = await classroomFor(row.grade, row.section, row.programmeId);
-      const key = matched?.docId ?? `${row.grade}-${row.section}`;
+      /*
+       * The classroom's own id where there is one, and a generated id otherwise.
+       *
+       * NOT grade-section. That encoded the class into the key, which made the key
+       * change as soon as a real classroom appeared, and made two entries for one
+       * class look like two classes. classroomId stays empty on this path, which
+       * is what marks the entry as unlinked — the key is only a key.
+       */
+      const key = matched?.docId ?? generatedKey();
 
       const programme = programmesById.get(row.programmeId);
       const entry: TeacherProgramme | null = programme

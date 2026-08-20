@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { Icon } from '../../components/icon/icon';
 import { Logo } from '../../components/logo/logo';
 import { COUNTRIES, DEFAULT_COUNTRY, dialFor } from '../../data/institution-options';
+import { generatedKey } from '../../core/firestore-paths';
 import { HERO_MODULES } from '../../data/hero-content';
 import { isCompletePincode, toPincodeDigits } from '../../data/setup-wizard-options';
 import { Classroom, Institution, Programme } from '../../models/teaching.model';
@@ -468,7 +469,14 @@ export class Register {
         ? (classroom.classroomName?.trim() || classroom.stemClubName?.trim() || '')
         : `${this.grade()} ${this.section()}`.trim();
 
-      const key = classroom?.docId ?? `${this.grade()}-${this.section()}`;
+      /*
+       * The classroom's own id, or a generated one if the create failed.
+       *
+       * NOT grade-section: that encoded the class into the key, so the key moved
+       * the moment a real classroom appeared. classroomId is what records whether
+       * the entry is linked; the key is only a key.
+       */
+      const key = classroom?.docId ?? generatedKey();
 
       await this.profileService.save({
         firstName: this.firstName().trim(),

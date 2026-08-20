@@ -775,8 +775,15 @@ export interface TeacherMeta {
   /** The same digits under production's other name for them. */
   phoneNumber: string;
 
-  /** Firebase Auth uid, or '' until this teacher has signed in. */
-  uid: string;
+  /**
+   * Firebase Auth uid — ABSENT until this teacher has signed in.
+   *
+   * OMITTED RATHER THAN EMPTY. Registering a teacher creates no Auth user, so
+   * there is no uid to record; writing '' would put a field on the document that
+   * looks answered and is not. ProfileService adds it the first time that person
+   * signs in with the number an admin registered.
+   */
+  uid?: string;
 
   updatedAt: Timestamp;
 }

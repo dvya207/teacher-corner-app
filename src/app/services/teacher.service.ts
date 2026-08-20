@@ -185,7 +185,9 @@ export function teacherMetaFrom(data: Record<string, unknown>): TeacherMeta {
     fullNameLowerCase: stored.fullNameLowerCase ?? teacherSearchKey(firstName, lastName),
     phone: digits,
     phoneNumber: digits,
-    uid: stored.uid ?? '',
+    // Only when the document actually carries one: an absent uid means this
+    // teacher has never signed in, which is different from having a blank one.
+    ...(stored.uid ? { uid: stored.uid } : {}),
     updatedAt: stored.updatedAt ?? (null as unknown as Timestamp)
   };
 }
@@ -279,6 +281,24 @@ export function stampedClassrooms(
       { ...entry, createdAt: serverTimestamp() as unknown as Timestamp }
     ])
   );
+}
+
+/**
+ * The same meta without a blank `uid`.
+ *
+ * A teacher registered by an admin has no Auth account yet, so there is no uid to
+ * write. Storing '' puts a field on the document that reads as answered when it
+ * is not — the field appears once linkSignedInUid has something real to put in
+ * it.
+ */
+export function withoutEmptyUid(meta: TeacherMeta): TeacherMeta {
+  if (meta.uid) {
+    return meta;
+  }
+
+  const { uid, ...rest } = meta;
+
+  return rest as TeacherMeta;
 }
 
 /** first + last, collapsed. Stored denormalised, as institutions store their representative's. */
@@ -411,7 +431,7 @@ export class TeacherService {
        */
       classrooms: stampedClassrooms(draft.classrooms),
       teacherMeta: {
-        ...draft.teacherMeta,
+        ...withoutEmptyUid(draft.teacherMeta),
         // Both names for the same digits, which is production's shape.
         phone: draft.teacherMeta.phoneNumber,
         fullNameLowerCase: teacherSearchKey(
