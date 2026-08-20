@@ -8,8 +8,9 @@
 ![Cloud Functions](https://img.shields.io/badge/Cloud%20Functions-gen2-4285F4?style=flat-square&logo=googlecloud&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-20-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)
 
-Angular 21 + Firebase teacher console. First pass: a sign-in page and a
-navigable app shell.
+Angular 21 + Firebase teacher console. Phone-OTP and Google sign-in, a
+registration and approval flow, and institution, classroom, programme and
+teacher management backed by Firestore.
 
 > **Working name.** The project is called `teacher-corner` so it had somewhere
 > to live. Renaming is two edits — `name` in `package.json` and the project key
@@ -21,52 +22,183 @@ navigable app shell.
 
 | Area | State |
 | :-- | :-- |
-| **Sign-in page** | Built. Email/password + Google, split layout with the marketing hero. |
+| **Sign-in page** | Built. Mobile-number OTP as the primary route, Google under an "or", split layout with the marketing hero. See **Authentication** below. |
+| **Pre-sign-in pages** | Built. A `/` splash, plus `/register` and `/approval-page` behind their own guards. |
 | **App shell** | Built. Sidebar, topbar, breadcrumb, search field, user menu, collapse and mobile drawer. |
 | **Sign-out page** | Built. Centred card on the brand purple, 5-second countdown, auto-redirect to `/login`. Both logout entry points route here. |
-| **Dashboard** | Welcome banner and the Institutions/Classrooms counts. Nothing else yet. |
+| **Dashboard** | Welcome banner, the Institutions/Classrooms counts, and the quick-action tiles. |
+| **Institutions** | Built. Table, stat cards, Add Institution, an edit modal, and a Trash with restore. |
 | **Classrooms** | Built. Table of classrooms and STEM clubs, stat cards, type filters, Add Classroom, Manage Programmes, and a Trash with restore. See **Classrooms** below. |
 | **Programme** | Built. The programme catalogue: table, stat cards, Active/Draft filters, a Create Programme wizard, an edit modal, and a Trash with restore. See **Programmes** below. |
-| **Set Up Wizard** | Routed placeholder. It navigates and highlights correctly; the page is empty. |
-| **Data** | Real Firestore reads. Blocked until rules are deployed — see **Data isolation** below. |
+| **Set Up Wizard** | Built. The wizard itself plus Add Teachers and Bulk Upload Schools. |
+| **Profile** | Built. Reachable at `/profile`; the update-profile component is shared with the shell's user menu. |
+| **Data** | Real Firestore reads against the `teacher-corner-dev` database. Rules are deployed — see **Permissions** below. |
 | **Firebase config** | Live. Project `helix-staging-india`, app `Teacher Corner Dev`. |
 
-Deliberately **not** built in this pass: the institution card grid, the
-expand-to-classrooms panel, "What's new", and the pages that come before
-sign-in.
+Deliberately **not** built: the institution card grid, the expand-to-classrooms
+panel, and "What's new".
+
+**Learning Units has no route.** The code is still here —
+`pages/learning-units/`, `LearningUnitService`, `learning-unit-taxonomy.ts` and
+the `learningUnits` rules all remain — but the way in was removed, so
+`/learning-units` falls through to the `**` route. It is kept rather than
+deleted because Classrooms and `bulk-upload-options.ts` reach into it, which
+makes removal a refactor rather than a deletion.
 
 ---
 
 ## Data isolation
 
-Teacher Corner uses its own dedicated Firestore database with its own rules
-file. All application data lives under a single per-user root, and every
-Firestore path in the app is built in one place.
+Teacher Corner owns the `teacher-corner-dev` database outright, with its own
+rules file. Firestore rules are per-database and a deploy replaces the whole
+ruleset, so a dedicated database is what makes the boundary structural rather
+than a matter of discipline.
 
 | Guard | What it does |
 | :-- | :-- |
-| `core/firestore-paths.ts` | The **only** place a Firestore path is built. Roots every reference at the app's own tree, which callers cannot override. Rejects path separators and foreign collection names at runtime. |
-| `tests/isolation.test.mjs` | Fails if any file under `src/` builds a Firestore path outside the sanctioned helpers, or calls `collection(db, …)` / `doc(db, …)` directly. |
-| `firestore.rules` | This app's rules only. Deploys from here target this app's database and no other. |
+| `core/firestore-paths.ts` | The **only** place a Firestore path is built. Exposes `COLLECTIONS`, the trash helpers and the `ownerId`-filtered queries; validates every segment it is handed. |
+| `tests/isolation.test.mjs` | Fails if any file under `src/` calls `collection(db, …)` / `doc(db, …)` directly, or names a foreign collection in a string literal. |
+| `firebase.json` | Names its deploy target explicitly, so a rules deploy from here cannot reach another database. The database id is load-bearing: omitting it targets the default. |
 
 ```bash
 npm run test:isolation
 ```
 
-If it fails, **do not add an exception** — route the call through
-`userCollection()` / `userDoc()` instead.
+If it fails, **do not add an exception** — route the call through the helpers in
+`firestore-paths.ts` instead.
 
-## Before sign-in will work
+---
 
-`src/environments/environment.ts` ships with `PENDING_FIREBASE_CLI_LOGIN`
-placeholders. Until they are replaced, the login page shows an inline amber
-notice and any sign-in attempt fails with `auth/invalid-api-key`.
+## Collections
+
+Top-level collections, not a per-user tree. Ownership rides on an `ownerId`
+field rather than the path.
+
+```
+teacher-corner-dev
+├── users/{uid}                                    teacher profile, keyed by uid
+├── institutions/{id}                              ACTIVE
+│   └── trash/DeletedInstitutes/{id}               deleted
+├── classrooms/{id}                                ACTIVE  (classrooms + STEM clubs)
+│   └── trash/DeletedClassrooms/{id}
+├── programmes/{id}                                ACTIVE
+│   └── trash/DeletedProgrammes/{id}
+├── learningUnits/{id}                             ACTIVE  (page unrouted)
+│   └── trash/DeletedLearningUnits/{id}
+├── teachers/{id}                                  records ABOUT people, not identities
+│   └── trash/DeletedTeachers/{id}
+├── Configuration/{document}                       option vocabularies
+└── OTPVerifications/{phone}                       server-owned OTP challenge
+```
+
+Deletion is a **move**, not a flag: the document is written into the trash
+subcollection and removed from the active one in a single transaction, and a
+restore reverses it. `trash` is a document sitting alongside the active rows,
+with the deleted ones beneath it; both it and the subcollection name are pinned
+in the rules rather than wildcards, so no unaudited tree can be invented.
+
+---
+
+## Permissions
+
+What `firestore.rules` currently grants. `signedIn()` is `request.auth != null`
+and nothing more.
+
+| Path | read | create | update | delete |
+| :-- | :-- | :-- | :-- | :-- |
+| `users/{uid}` and everything below it | owner | owner | owner | owner |
+| `institutions/{id}` | signed in | signed in, id ≠ `trash` | signed in | signed in |
+| `classrooms/{id}` | signed in | signed in, id ≠ `trash` | signed in | signed in |
+| `programmes/{id}` | signed in | signed in, id ≠ `trash` | signed in | signed in |
+| `learningUnits/{id}` | signed in | signed in, id ≠ `trash` | signed in | signed in |
+| `teachers/{id}` | signed in | signed in, id ≠ `trash` | signed in | signed in |
+| `<collection>/trash/Deleted…/{id}` | signed in | signed in | **never** | signed in |
+| `Configuration/{document}` | signed in | — | — | — |
+| `OTPVerifications/{phone}` | **never** | **never** | **never** | **never** |
+| anything else | **never** | **never** | **never** | **never** |
+
+Reading the table:
+
+- **`users/{uid}` is the only owner-scoped path.** The uid is the document id,
+  so the rule is one comparison with no `get()` lookup.
+- **The five data collections authorise on authentication alone.** They are not
+  narrowed by `ownerId`; the field is written and the app's queries filter on
+  it, but the rules do not require it. Any signed-in account can read and write
+  any row. This was raised and accepted as a deliberate staging decision, and
+  the `ownsExisting()` helper is kept unused in the rules file so narrowing it
+  again is a substitution rather than a rewrite.
+- **`id != 'trash'` is integrity, not authorization.** That id is the container
+  document for deleted rows; creating a document with it would overwrite the
+  container.
+- **Trash grants no update.** Nothing legitimately edits a document while it is
+  in the trash — `create` is what a delete does, `delete` is what a restore
+  does. Restore it first.
+- **The `trash` container document itself gets no rule**, so it stays
+  unreadable. It holds no fields and need not exist.
+- **`Configuration` is read-only to clients.** It holds the vocabulary every
+  other user's forms are built from, so one client write would change what every
+  teacher can select. Seeding goes through `scripts/seed-configuration.mjs` on
+  the Admin SDK, which bypasses rules. `ConfigurationService` falls back to the
+  built-in lists when a document is missing or empty, so a denied read degrades
+  to shipped behaviour rather than empty selects.
+- **`OTPVerifications` is closed to every client.** It holds `salt` and
+  `hashedOtp` for a live challenge. Read access would allow lifting both and
+  brute-forcing a six-digit code offline; write access would allow storing a
+  hash of a chosen code and verifying against it. The functions reach it through
+  the Admin SDK, which bypasses rules, so denying clients costs nothing.
+- **The catch-all denies everything else**, so a new collection is closed until
+  its own block is added.
+
+```bash
+npm run test:rules        # against the emulator
+```
+
+---
+
+## Authentication
+
+Two routes, both ending in a Firebase session.
+
+**Mobile number + OTP — the primary route.** The login page leads with it.
+`OtpService` calls two callable Gen2 functions in `asia-south1`:
+
+| Function | What it does |
+| :-- | :-- |
+| `tcDevSendOtp` | Normalises the phone number, generates a code, stores `salt` + `hashedOtp` in `OTPVerifications/{phone}`, and sends the SMS through Exotel. Holds the Exotel credentials as bound secrets. Rate-limited by `requestCount` / `windowStart` on the same document. |
+| `tcDevVerifyOtp` | Checks the submitted code against the stored hash and returns a **custom token**. No Exotel secrets — it sends nothing. |
+
+The code is generated, hashed and verified entirely server-side; the client
+never sees it. `AuthService.loginWithToken()` exchanges the custom token for a
+session via `signInWithCustomToken`. Numbers listed in `TEST_PHONES` get the
+code written to the function log and the SMS skipped — with that unset, every
+number receives a real, billed SMS.
+
+**Google — the secondary route**, offered under an "or".
+`AuthService.loginWithGoogle()` uses `signInWithPopup` with a fresh
+`GoogleAuthProvider` per call.
+
+There is **no email/password sign-in.**
+
+`AuthService.isPhoneSession()` reads `providerData` to tell the two apart, which
+matters because a phone sign-in has no display name or photo of its own.
+`AuthService.role()` returns a hardcoded `'Teacher'`; it sits behind a method so
+the eventual custom claim or `teachers` lookup is a change to one body.
+
+**Guards.** `authGuard` protects the shell; `registrationGuard` sits on it
+alongside, with `registrationCompleteGuard` on `/register` and
+`approvalPendingGuard` on `/approval-page`.
+
+---
+
+## Pointing it at your own project
+
+`src/environments/environment.ts` ships with the live config for the
+`Teacher Corner Dev` app in `helix-staging-india`. To run against a different
+project, replace the `firebase` object:
 
 ```bash
 firebase apps:sdkconfig WEB --project <your-project-id>
 ```
-
-Paste the result over the `firebase` object in that file.
 
 These values are **not secrets** — the Firebase web config is compiled into the
 client bundle by design. Access control comes from Firebase Auth and the
@@ -74,8 +206,12 @@ security rules.
 
 You will also need, in the Firebase console:
 
-- **Email/Password** enabled under Authentication → Sign-in method
-- **Google** enabled under the same, with `localhost` in Authorized domains
+- **Google** enabled under Authentication → Sign-in method, with `localhost` in
+  Authorized domains
+- A `teacher-corner-dev` database, with `firestore.rules` deployed to it
+- The OTP functions deployed, their Exotel secrets bound, and
+  `functions-otp/.env` populated from `.env.example` — otherwise the mobile
+  route fails and only Google works
 
 ---
 
@@ -97,46 +233,70 @@ src/
 ├── app/
 │   ├── components/
 │   │   ├── icon/            every SVG icon, one component, one stroke scale
-│   │   └── logo/            official ThinkTac artwork; colour/white, full/mark
+│   │   ├── logo/            official ThinkTac artwork; colour/white, full/mark
+│   │   └── update-profile/  shared by /profile and the shell user menu
 │   ├── core/
-│   │   └── firebase.ts      Firebase app + Auth singletons, config guard
-│   ├── data/
-│   │   └── mock-dashboard.ts  ALL mock data — the one file to delete later
+│   │   ├── firebase.ts      Firebase app + Auth + Firestore singletons
+│   │   ├── firestore-paths.ts  the ONLY place a Firestore path is built
+│   │   ├── configuration.ts sheet/option vocabulary types
+│   │   ├── csv.ts           CSV parsing for bulk upload
+│   │   └── xlsx.ts          spreadsheet parsing for bulk upload
+│   ├── data/                option lists, taxonomies, static page content
 │   ├── guards/
-│   │   └── auth-guard.ts    session-aware guard on the shell route
+│   │   ├── auth-guard.ts    session-aware guard on the shell route
+│   │   └── registration-guard.ts  registration + approval gating
 │   ├── layout/
 │   │   └── shell/           sidebar + topbar + <router-outlet>
+│   ├── models/
+│   │   └── teaching.model.ts  institution, classroom, programme, teacher shapes
 │   ├── pages/
-│   │   ├── login/           sign-in (outside the shell)
-│   │   ├── sign-out/        post-logout confirmation + countdown (outside the shell)
-│   │   ├── dashboard/       welcome banner + counts
-│   │   ├── setup-wizard/    placeholder
+│   │   ├── welcome/         splash at '/' (outside the shell)
+│   │   ├── login/           mobile OTP + Google (outside the shell)
+│   │   ├── register/        post-sign-in registration
+│   │   ├── approval/        pending-approval holding page
+│   │   ├── sign-out/        post-logout confirmation + countdown
+│   │   ├── dashboard/       welcome banner + counts + quick-action tiles
+│   │   ├── setup-wizard/    wizard + Add Teachers + Bulk Upload Schools
+│   │   ├── institutions/    table + Add Institution + edit + Trash
 │   │   ├── classrooms/      table + Add Classroom + Manage Programmes + Trash
 │   │   ├── programme/       catalogue + Create wizard + edit + Trash
-│   │   └── learning-units/  activity catalogue + add/edit modal + Trash
-│   ├── services/
-│   │   └── auth.service.ts  sign-in, sign-out, role, error messages
+│   │   ├── learning-units/  built, but NOT routed
+│   │   └── profile/         account details
+│   ├── services/            auth, otp, profile, dashboard, notification, and
+│   │                        one service per collection
 │   ├── app.routes.ts        route table
 │   └── app.config.ts        providers
 ├── environments/
 │   └── environment.ts       Firebase web config
 └── styles.css               design tokens, reset, shared primitives
+
+functions-otp/              Gen2 callable OTP functions (own package)
+tests/isolation.test.mjs    source-level path guard
+tests/rules/                rules tests, against the emulator
 ```
 
 ### Routes
 
 | Path | Component | Guarded |
 | :-- | :-- | :-- |
+| `/` | Welcome | — |
 | `/login` | Login | — |
 | `/sign-out` | SignOut | — |
-| `/dashboard` | Dashboard | `authGuard` |
-| `/setup-wizard` | SetupWizard | `authGuard` |
-| `/classrooms` | Classrooms | `authGuard` |
-| `/programme` | Programme | `authGuard` |
-| `/learning-units` | LearningUnits | `authGuard` |
+| `/register` | Register | `authGuard`, `registrationCompleteGuard` |
+| `/approval-page` | Approval | `authGuard`, `approvalPendingGuard` |
+| `/dashboard` | Dashboard | `authGuard`, `registrationGuard` |
+| `/setup-wizard` | SetupWizard | `authGuard`, `registrationGuard` |
+| `/institutions` | Institutions | `authGuard`, `registrationGuard` |
+| `/classrooms` | Classrooms | `authGuard`, `registrationGuard` |
+| `/programme` | Programme | `authGuard`, `registrationGuard` |
+| `/profile` | Profile | `authGuard`, `registrationGuard` |
+| anything else | → `/` | — |
 
-The guard sits on the parent `Shell` route, not on each child, so a page added
-later is protected by default rather than by remembering to attach it.
+Every page is lazy: `loadComponent` rather than a top-level import. The guards
+sit on the parent `Shell` route, not on each child, so a page added later is
+protected by default rather than by remembering to attach them.
+
+`/learning-units` is **not** registered, so it falls through to the wildcard.
 
 ---
 
