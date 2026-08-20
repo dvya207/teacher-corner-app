@@ -72,6 +72,9 @@ describe('Add Teachers', () => {
     component.update('phone', phone);
     component.update('firstName', first);
     component.update('lastName', 'Rao');
+    // REQUIRED, so a "filled" teacher has to carry one. Tests that care about
+    // the email itself set or clear it explicitly after calling this.
+    component.update('email', 'anita.rao@example.com');
   }
 
   /**
@@ -341,13 +344,22 @@ describe('Add Teachers', () => {
       .toBe('Enter valid 10 digits phone number');
   });
 
-  it('accepts an empty email, because it is optional', async () => {
+  it('requires an email, and says so rather than failing silently', async () => {
     await render();
     fillTeacher();
+    addClass();
+    component.update('email', '');
     component.markBlurred('email');
+    fixture.detectChanges();
 
+    // NOT emailInvalid(): isValidEmail() passes '' so it can validate format
+    // alone. A blank field is reported by emailMissing() instead.
     expect(component.emailInvalid()).toBe(false);
-    expect(component.canSubmit()).toBe(true);
+    expect(component.emailMissing()).toBe(true);
+    expect(component.canSubmit()).toBe(false);
+
+    const errors = [...el().querySelectorAll('.field-error')].map(e => e.textContent?.trim());
+    expect(errors).toContain('Email is required');
   });
 
   it('rejects a malformed one', async () => {
@@ -432,20 +444,24 @@ describe('Add Teachers', () => {
   });
 
   /**
-   * CLASSES ARE OPTIONAL, and that follows from hiding them behind the ⊕:
-   * requiring one would leave Submit dead on a form that looks finished, with no
-   * hint that pressing ⊕ was compulsory.
+   * AT LEAST ONE CLASS IS REQUIRED. Because the controls are hidden behind the
+   * ⊕, the requirement is invisible until it is announced, so the message is
+   * part of the contract rather than a nicety.
    */
-  it('submits a teacher with no classes at all', async () => {
+  it('refuses a teacher with no classes, and says why', async () => {
     await render();
     fillTeacher();
 
-    expect(component.canSubmit()).toBe(true);
+    expect(component.canSubmit()).toBe(false);
 
     component.submit();
+    fixture.detectChanges();
 
-    expect(emitted.length).toBe(1);
-    expect(emitted[0][0].classes).toEqual([]);
+    expect(emitted.length).toBe(0);
+    expect(component.classesMissing()).toBe(true);
+
+    const errors = [...el().querySelectorAll('.field-error')].map(e => e.textContent?.trim());
+    expect(errors).toContain('Add at least one class using the + below');
   });
 
   /**
@@ -458,14 +474,18 @@ describe('Add Teachers', () => {
   it('tolerates a blank added row but blocks a half-filled one', async () => {
     await render();
     fillTeacher();
+    // A COMPLETE ROW FIRST, because one is now required: a blank row on its own
+    // no longer satisfies the requirement, so this test would otherwise be
+    // asserting the class rule rather than the blank-row rule.
+    addClass('A', 'prog-1');
 
     component.addClass();
     expect(component.canSubmit()).toBe(true);
 
-    component.updateClass(0, 'section', 'A');
+    component.updateClass(1, 'section', 'B');
     expect(component.canSubmit()).toBe(false);
 
-    component.updateClass(0, 'programmeId', 'prog-1');
+    component.updateClass(1, 'programmeId', 'prog-2');
     expect(component.canSubmit()).toBe(true);
   });
 
@@ -484,6 +504,12 @@ describe('Add Teachers', () => {
     expect(button().disabled).toBe(true);
 
     fillTeacher();
+    fixture.detectChanges();
+
+    // Still dead: the person is complete but they have no class yet.
+    expect(button().disabled).toBe(true);
+
+    addClass();
     fixture.detectChanges();
 
     expect(button().disabled).toBe(false);

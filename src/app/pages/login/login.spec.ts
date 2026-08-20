@@ -138,7 +138,7 @@ describe('Login', () => {
 
     expect(button().disabled).toBe(true);
 
-    component.onPhoneInput('76767');
+    component.onPhoneInput('99999');
     fixture.detectChanges();
     expect(button().disabled).toBe(true);
 
@@ -166,7 +166,7 @@ describe('Login', () => {
     component.onPhoneInput('1234567890');
     expect(component.phoneValid()).toBe(false);
 
-    component.onPhoneInput('76767579');
+    component.onPhoneInput('99999000');
     expect(component.phoneValid()).toBe(false);
 
     component.onPhoneInput('9999900004');
@@ -174,7 +174,7 @@ describe('Login', () => {
   });
 
   it('strips a pasted +91 and any punctuation from the number', () => {
-    component.onPhoneInput('+91 76767-57980');
+    component.onPhoneInput('+91 99999-00004');
     expect(component.phoneNumber()).toBe('9999900004');
   });
 

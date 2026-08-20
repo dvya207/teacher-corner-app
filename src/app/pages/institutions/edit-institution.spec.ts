@@ -544,7 +544,7 @@ describe('EditInstitution', () => {
 
   /** Reformatting a number without changing its digits is not an edit. */
   it('ignores phone formatting that normalises back to the stored digits', () => {
-    component.update('representativePhoneNumber', '98342-36469');
+    component.update('representativePhoneNumber', '99999-00002');
 
     expect(component.dirty()).toBe(false);
 

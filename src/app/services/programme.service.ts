@@ -13,6 +13,8 @@ import {
 import { db } from '../core/firebase';
 import {
   activeClassroomDoc,
+  activeTeacherDoc,
+  activeTeachersCollection,
   newProgrammeDoc,
   programmeCounterDoc,
   programmeDoc,
@@ -33,9 +35,41 @@ import {
   ProgrammeDraft,
   ProgrammeType,
   TRASH_METADATA_FIELDS,
+  TeacherClass,
   TrashedProgramme
 } from '../models/teaching.model';
 import { AuthService } from './auth.service';
+
+/**
+ * Whether a teacher's class rows hold an out-of-date copy of a programme's name.
+ *
+ * `key` is the programme's DOC ID, not its programmeId — a teacher's class rows
+ * carry the docId under a field named programmeId. See propagateRename.
+ */
+export function classesAreStale(
+  classes: readonly TeacherClass[],
+  key: string,
+  name: string
+): boolean {
+  return classes.some(row => row.programmeId === key && row.programmeName !== name);
+}
+
+/**
+ * The same rows with one programme's name refreshed, everything else verbatim.
+ *
+ * Returns a new array and never mutates: the caller writes the result back as a
+ * whole, because `classes` is an array and Firestore cannot address a field
+ * inside one.
+ */
+export function classesWithRenamed(
+  classes: readonly TeacherClass[],
+  key: string,
+  name: string
+): TeacherClass[] {
+  return classes.map(row =>
+    row.programmeId === key ? { ...row, programmeName: name } : row
+  );
+}
 
 /**
  * Fills in fields a stored programme may predate.
@@ -272,6 +306,97 @@ export class ProgrammeService {
     );
 
     return affected.map(classroom => classroom.docId);
+  }
+
+  /**
+   * Pushes a renamed programme out to every document holding a COPY of its name.
+   *
+   * WHY THIS EXISTS. Both classrooms and teachers denormalise the programme's
+   * name at attach time, so a rename left them rendering the old one
+   * indefinitely. The id was always right, so this was a display fault rather
+   * than data loss — but it made the catalogue disagree with every page that
+   * shows a programme, and the edit modal could only report the count.
+   *
+   * TWO DIFFERENT WRITES, because the two shapes differ:
+   *
+   *   classrooms  programmes is a MAP keyed by programme id, so the copy is
+   *               reachable by dotted path and only the changed leaves are
+   *               written. Nothing else on the classroom is touched.
+   *   teachers    classes is an ARRAY, which has no addressable inner field.
+   *               The whole array is rewritten, with untouched rows preserved
+   *               verbatim.
+   *
+   * TEACHERS SNAPSHOT `displayName || programmeName`, matching what the setup
+   * wizard resolved when it wrote them, so the same rule is applied here rather
+   * than a bare programmeName — otherwise a programme with a display name would
+   * be propagated as the wrong string.
+   *
+   * NOT ATOMIC, and cannot be: this spans two collections and an unbounded
+   * number of documents. A partial run leaves some copies updated and the rest
+   * stale, which is the state the app was permanently in before, and is fixed by
+   * saving again. The programme itself is written first by update(), so the
+   * catalogue is never the thing left behind.
+   *
+   * Returns what it touched, so the caller can report honestly.
+   */
+  async propagateRename(
+    programme: Programme,
+    classrooms: Classroom[]
+  ): Promise<{ classrooms: number; teachers: number }> {
+    /*
+     * TWO DIFFERENT KEYS, and getting this wrong silently propagates nothing.
+     *
+     *   classrooms  keyed by programmeId — see addProgramme(), which writes
+     *               `programmes[programme.programmeId]`, and
+     *               detachFromClassrooms(), called with target.programmeId.
+     *   teachers    keyed by docId — the setup wizard's assignableProgrammes()
+     *               emits `{ id: programme.docId }`, and that id is what lands
+     *               in each class row's programmeId field.
+     *
+     * The field is called programmeId in both places while holding different
+     * values, which is a trap worth naming rather than quietly working around.
+     */
+    const classroomKey = programme.programmeId;
+    const teacherKey = programme.docId;
+    const snapshotName = programme.displayName || programme.programmeName;
+
+    const affectedClassrooms = classrooms.filter(classroom =>
+      Object.prototype.hasOwnProperty.call(classroom.programmes ?? {}, classroomKey)
+    );
+
+    await Promise.all(
+      affectedClassrooms.map(classroom =>
+        updateDoc(activeClassroomDoc(classroom.docId), {
+          [`programmes.${classroomKey}.programmeName`]: programme.programmeName,
+          [`programmes.${classroomKey}.displayName`]: programme.displayName,
+          [`programmes.${classroomKey}.programmeCode`]: programme.programmeCode,
+          updatedAt: serverTimestamp()
+        })
+      )
+    );
+
+    // Read-modify-write, because `classes` is an array. Only teachers that
+    // actually carry this programme AND whose stored name has drifted are
+    // written, so a no-op rename costs no writes.
+    const snapshot = await getDocs(activeTeachersCollection());
+
+    const staleTeachers = snapshot.docs
+      .map(document => ({
+        docId: document.id,
+        classes: (document.data()['classes'] as TeacherClass[] | undefined) ?? []
+      }))
+      .filter(teacher => classesAreStale(teacher.classes, teacherKey, snapshotName));
+
+    await Promise.all(
+      staleTeachers.map(teacher =>
+        updateDoc(activeTeacherDoc(teacher.docId), {
+          classes: classesWithRenamed(teacher.classes, teacherKey, snapshotName),
+          updatedAt: serverTimestamp()
+        })
+      )
+    );
+
+    return { classrooms: affectedClassrooms.length, teachers: staleTeachers.length };
   }
 
   /**

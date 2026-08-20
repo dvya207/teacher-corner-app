@@ -297,6 +297,13 @@ export class AuthService {
       case 'auth/invalid-api-key':
       case 'auth/api-key-not-valid':
         return 'Firebase is not configured yet. See src/environments/environment.ts.';
+      // Retrying can NEVER fix this one, so it must not fall through to the
+      // generic "try again". Firebase auto-authorises localhost and the project's
+      // DEFAULT hosting site only; every additional site has to be added by hand
+      // under Authentication -> Settings -> Authorized domains. The symptom is
+      // Google working locally and failing on a deployed host.
+      case 'auth/unauthorized-domain':
+        return 'Google sign-in is not enabled for this domain yet. Add it under Authentication → Settings → Authorized domains in the Firebase console.';
       default:
         return 'Could not sign in. Please try again.';
     }

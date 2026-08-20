@@ -319,14 +319,63 @@ export class ProgrammePage implements OnInit {
 
       this.editing.set(null);
 
-      const renamed = patch.displayName !== undefined && patch.displayName !== target.displayName;
-      const attached = this.classroomsUsing(target);
+      /*
+       * A rename now PROPAGATES rather than being reported as stale.
+       *
+       * Both displayName and programmeName are checked: classrooms copy both,
+       * and teachers copy `displayName || programmeName`, so a change to either
+       * can leave a stale copy behind.
+       *
+       * Runs AFTER the programme itself is saved, so a failure here leaves the
+       * catalogue correct and the copies stale — recoverable by saving again —
+       * rather than the reverse.
+       */
+      const renamed =
+        (patch.displayName !== undefined && patch.displayName !== target.displayName) ||
+        (patch.programmeName !== undefined && patch.programmeName !== target.programmeName);
 
-      this.flashNotice(
-        renamed && attached > 0
-          ? `Updated — ${attached} classroom(s) still show the old name`
-          : 'Programme updated'
-      );
+      if (!renamed) {
+        this.flashNotice('Programme updated');
+        return;
+      }
+
+      const updated = { ...target, ...patch };
+
+      try {
+        const touched = await this.service.propagateRename(updated, this.classrooms());
+
+        // Keep the in-memory classrooms in step, so the page does not have to be
+        // reloaded to stop showing the old name.
+        if (touched.classrooms > 0) {
+          this.classrooms.update(list =>
+            list.map(classroom => {
+              const entry = classroom.programmes?.[updated.programmeId];
+
+              return entry
+                ? {
+                    ...classroom,
+                    programmes: {
+                      ...classroom.programmes,
+                      [updated.programmeId]: {
+                        ...entry,
+                        programmeName: updated.programmeName,
+                        displayName: updated.displayName,
+                        programmeCode: updated.programmeCode
+                      }
+                    }
+                  }
+                : classroom;
+            })
+          );
+        }
+
+        this.flashNotice(renameNotice(touched));
+      } catch {
+        // The programme IS saved; only the copies are behind. Say exactly that,
+        // because "could not save" would be untrue and invite a pointless retry
+        // of the part that worked.
+        this.flashNotice('Programme renamed, but some classrooms and teachers still show the old name');
+      }
 
     } catch (error) {
       this.modalError.set(this.service.describeError(error, 'Could not save the changes.'));
@@ -536,4 +585,25 @@ export class ProgrammePage implements OnInit {
       this.busyRow.set(null);
     }
   }
+}
+
+/**
+ * What a rename actually touched, in words.
+ *
+ * Says nothing about zero counts: "0 teachers updated" is noise on a rename of
+ * a programme nobody has attached yet, and the plain confirmation is the honest
+ * message in that case.
+ */
+function renameNotice(touched: { classrooms: number; teachers: number }): string {
+  const parts: string[] = [];
+
+  if (touched.classrooms > 0) {
+    parts.push(`${touched.classrooms} classroom${touched.classrooms === 1 ? '' : 's'}`);
+  }
+
+  if (touched.teachers > 0) {
+    parts.push(`${touched.teachers} teacher${touched.teachers === 1 ? '' : 's'}`);
+  }
+
+  return parts.length === 0 ? 'Programme updated' : `Renamed — updated ${parts.join(' and ')}`;
 }

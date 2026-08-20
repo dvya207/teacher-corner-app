@@ -328,6 +328,28 @@ export class AddTeachers {
     return this.shows('email') && !isValidEmail(this.entry().email);
   }
 
+  /**
+   * Email left empty. SEPARATE from emailInvalid() because isValidEmail() passes
+   * '' by design, so a blank field would otherwise report nothing at all while
+   * still holding Submit dead.
+   */
+  emailMissing(): boolean {
+    return this.shows('email') && this.entry().email.trim() === '';
+  }
+
+  /**
+   * No class assigned yet, once the user has actually tried to submit.
+   *
+   * Gated on attempted() rather than shows(): there is no control to blur here,
+   * and the requirement is invisible until the ⊕ is pressed, so announcing it
+   * before a submit attempt would be nagging about a form the user is still
+   * filling in. After a submit attempt it is the only thing explaining a dead
+   * button.
+   */
+  classesMissing(): boolean {
+    return this.attempted() && !this.classes().some(row => isCompleteClass(row));
+  }
+
   /** A required field on the teacher left empty. */
   missing(field: 'firstName' | 'lastName'): boolean {
     return this.shows(field) && this.entry()[field].trim() === '';

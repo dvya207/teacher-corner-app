@@ -61,3 +61,6 @@ pubsub-debug.log
 # Internal notes about other teams' systems (not for public mirror)
 /docs
 /final.mjs
+
+# Firebase CLI deploy cache
+/.firebase

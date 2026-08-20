@@ -1,11 +1,13 @@
 import {
   academicYearLabel,
+  classesAreStale,
+  classesWithRenamed,
   normaliseProgramme,
   programmesFor,
   stripTrashMetadata,
   suggestedProgrammeName
 } from './programme.service';
-import { Programme } from '../models/teaching.model';
+import { Programme, TeacherClass } from '../models/teaching.model';
 
 function programme(fields: Partial<Programme>): Programme {
   return {
@@ -220,5 +222,62 @@ describe('suggestedProgrammeName', () => {
 
   it('leaves out the grade for something not grade-scoped', () => {
     expect(suggestedProgrammeName('Oak School', '', 'Robotics')).not.toContain('Grade');
+  });
+});
+
+/**
+ * RENAME PROPAGATION — the array half.
+ *
+ * The classroom half is a dotted-path write and cannot be exercised without a
+ * Firestore double, which this project's vitest setup does not allow (see
+ * configuration.service.spec.ts). The rows logic is the part with a real trap in
+ * it, so it is pulled out and tested directly.
+ */
+describe('rename propagation across teacher class rows', () => {
+  function row(fields: Partial<TeacherClass>): TeacherClass {
+    return { grade: '1', section: 'A', programmeId: 'p-doc', programmeName: 'Science', ...fields };
+  }
+
+  it('spots a row whose stored name has drifted', () => {
+    expect(classesAreStale([row({})], 'p-doc', 'Physics')).toBe(true);
+  });
+
+  it('does not report a row already carrying the new name', () => {
+    expect(classesAreStale([row({})], 'p-doc', 'Science')).toBe(false);
+  });
+
+  /**
+   * THE TRAP. A teacher's row keys on the programme's DOC ID, while a classroom's
+   * programmes map keys on its programmeId. The two differ in real data, and a
+   * cascade that used one for both would silently update nothing.
+   */
+  it('ignores rows keyed on a different id, so the wrong key updates nothing', () => {
+    expect(classesAreStale([row({ programmeId: 'p-doc' })], 'p-programmeId', 'Physics')).toBe(false);
+    expect(classesWithRenamed([row({ programmeId: 'p-doc' })], 'p-programmeId', 'Physics'))
+      .toEqual([row({ programmeId: 'p-doc', programmeName: 'Science' })]);
+  });
+
+  it('renames only the matching rows and leaves the rest verbatim', () => {
+    const classes = [
+      row({ programmeId: 'p-doc', section: 'A' }),
+      row({ programmeId: 'other', section: 'B', programmeName: 'Maths' })
+    ];
+
+    expect(classesWithRenamed(classes, 'p-doc', 'Physics')).toEqual([
+      row({ programmeId: 'p-doc', section: 'A', programmeName: 'Physics' }),
+      row({ programmeId: 'other', section: 'B', programmeName: 'Maths' })
+    ]);
+  });
+
+  it('does not mutate the array it is given', () => {
+    const classes = [row({})];
+    classesWithRenamed(classes, 'p-doc', 'Physics');
+
+    expect(classes[0].programmeName).toBe('Science');
+  });
+
+  it('copes with a teacher who has no class rows', () => {
+    expect(classesAreStale([], 'p-doc', 'Physics')).toBe(false);
+    expect(classesWithRenamed([], 'p-doc', 'Physics')).toEqual([]);
   });
 });

@@ -65,11 +65,13 @@
           placeholder="Enter your email address"
           [value]="entry().email"
           [disabled]="identityLocked()"
-          [class.is-error]="emailInvalid()"
+          [class.is-error]="emailInvalid() || emailMissing()"
           (blur)="markBlurred('email')"
           (input)="update('email', valueOf($event))"
         />
-        @if (emailInvalid()) {
+        @if (emailMissing()) {
+          <span class="field-error">Email is required</span>
+        } @else if (emailInvalid()) {
           <span class="field-error">Enter a valid email address</span>
         }
       </div>
@@ -260,6 +262,13 @@
        is pressed, so the label has to read for that case too. -->
   <!-- WITHDRAWN for a teacher who already exists: there is nothing to add to a
        form that cannot be edited. -->
+  <!-- The requirement is invisible until the ⊕ is pressed, so it has to be said
+       out loud once Submit has been tried. Without this the button just looks
+       broken. -->
+  @if (classesMissing()) {
+    <span class="field-error">Add at least one class using the + below</span>
+  }
+
   @if (canAddClass()) {
     <div class="add-row">
       <button

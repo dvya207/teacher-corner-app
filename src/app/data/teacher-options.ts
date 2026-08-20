@@ -206,21 +206,28 @@ export function isValidEmail(raw: string): boolean {
 export function isCompleteEntry(entry: TeacherEntry): boolean {
   return (
     isValidPhone(entry.phone) &&
+    // EMAIL IS REQUIRED, on instruction. isValidEmail() passes '' so that it can
+    // validate format alone; the non-empty check is separate rather than folded
+    // into it, because the field-level error message needs to distinguish
+    // "missing" from "malformed".
+    entry.email.trim() !== '' &&
     isValidEmail(entry.email) &&
     entry.firstName.trim() !== '' &&
     entry.lastName.trim() !== '' &&
     /**
-     * CLASSES ARE OPTIONAL, and that follows from hiding them behind the ⊕.
+     * AT LEAST ONE CLASS IS REQUIRED, on instruction.
      *
-     * The controls are not shown until the user asks for them, so requiring one
-     * would leave Submit permanently dead on a form that looks finished — the
-     * user would have to guess that pressing ⊕ is compulsory. A teacher with no
-     * class is therefore allowed; one can be added later.
+     * This reverses an earlier decision, and the reason it was optional still
+     * applies: the Grade/Section/Programme controls are hidden until the ⊕ is
+     * pressed, so a user who never presses it sees a form that looks finished
+     * with a dead Submit. `classesMissing()` on the component exists to say so
+     * out loud rather than leaving them to guess.
      *
-     * A row that EXISTS must still be complete. A blank one is tolerated because
-     * that is what a ⊕ pressed one time too many leaves behind and submit() drops
-     * it; a half-filled one is a genuine mistake and blocks.
+     * A blank row is still tolerated — that is what a ⊕ pressed one time too
+     * many leaves behind, and submit() drops it — but it does not satisfy the
+     * requirement on its own. A half-filled row is a genuine mistake and blocks.
      */
+    entry.classes.some(row => isCompleteClass(row)) &&
     entry.classes.every(row => isBlankClass(row) || isCompleteClass(row))
   );
 }
