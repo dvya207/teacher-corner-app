@@ -4,6 +4,7 @@ import { Teacher, TeacherClassroom } from '../models/teaching.model';
 import {
   mergeClassrooms,
   stampedClassrooms,
+  supersededClassroomKeys,
   normaliseTeacher,
   stripImmutableTeacherFields,
   stripTeacherTrashMetadata,
@@ -387,5 +388,73 @@ describe('stampedClassrooms', () => {
 
   it('copes with an empty map', () => {
     expect(stampedClassrooms({})).toEqual({});
+  });
+});
+
+/**
+ * LEGACY KEYS ARE CLEARED, which is what made a re-registered teacher appear to
+ * carry a grade-section key long after that code was gone: both merge paths start
+ * from what is already on the document, so an old entry survived every write.
+ */
+describe('supersededClassroomKeys', () => {
+  function entry(fields: Partial<TeacherClassroom>): TeacherClassroom {
+    return {
+      activeStatus: true,
+      classroomId: 'c1',
+      classroomName: '9 A',
+      grade: '9',
+      section: 'A',
+      institutionId: 'inst-1',
+      institutionName: 'Oak',
+      type: 'CLASSROOM',
+      userRole: 'School Teacher',
+      programmes: [],
+      createdAt: null as never,
+      ...fields
+    };
+  }
+
+  it('drops an unresolved entry a real one now covers', () => {
+    const map = {
+      '9-A': entry({ classroomId: '', classroomName: '' }),
+      c1: entry({})
+    };
+
+    expect(supersededClassroomKeys(map)).toEqual(['9-A']);
+  });
+
+  /**
+   * NOT BY THE SHAPE OF THE KEY. A key is opaque; what makes an entry legacy is
+   * that it references no classroom.
+   */
+  it('judges on the empty classroomId, not on the key looking like grade-section', () => {
+    const map = { '9-A': entry({ classroomName: '9 A' }), c1: entry({}) };
+
+    // '9-A' here HAS a classroomId, so it is a real entry with an odd key.
+    expect(supersededClassroomKeys(map)).toEqual([]);
+  });
+
+  /** A class that genuinely has no classroom must not be silently deleted. */
+  it('keeps an unresolved entry nothing else covers', () => {
+    const map = {
+      '9-A': entry({ classroomId: '', classroomName: '' }),
+      c1: entry({ grade: '4', section: 'B' })
+    };
+
+    expect(supersededClassroomKeys(map)).toEqual([]);
+  });
+
+  it('matches on grade AND section, not either alone', () => {
+    const map = {
+      '9-A': entry({ classroomId: '', classroomName: '' }),
+      c1: entry({ grade: '9', section: 'B' })
+    };
+
+    expect(supersededClassroomKeys(map)).toEqual([]);
+  });
+
+  it('finds nothing in a map with no unresolved entries', () => {
+    expect(supersededClassroomKeys({ c1: entry({}) })).toEqual([]);
+    expect(supersededClassroomKeys({})).toEqual([]);
   });
 });

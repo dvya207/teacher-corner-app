@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import {
   Timestamp,
   deleteDoc,
+  deleteField,
   getDocs,
   runTransaction,
   serverTimestamp,
@@ -272,6 +273,34 @@ export function mergeClassrooms(
  * silently carries null reads as "attached at no time", which is what shipped
  * before this existed.
  */
+/**
+ * Legacy entries that a properly resolved one now supersedes.
+ *
+ * WHY THEY LINGER. Entries used to be keyed by grade-section when no classroom
+ * could be resolved, and both merge paths start from what is already on the
+ * document — mergeClassrooms spreads `existing`, and the profile write uses
+ * merge:true. So an old `2-B` entry survived every subsequent write, and a
+ * teacher ended up carrying BOTH it and the real `<classroomId>` entry for the
+ * same class. Re-registering somebody made the duplicate, not a stale tab.
+ *
+ * IDENTIFIED BY AN EMPTY classroomId, never by the shape of the key. A key is
+ * opaque; what makes an entry legacy is that it references no classroom. An entry
+ * is only dropped when a real one covers the SAME grade and section, so a class
+ * that genuinely has no classroom is left alone rather than silently deleted.
+ */
+export function supersededClassroomKeys(
+  classrooms: Record<string, TeacherClassroom>
+): string[] {
+  const resolved = Object.values(classrooms).filter(entry => entry.classroomId);
+
+  return Object.entries(classrooms)
+    .filter(([, entry]) =>
+      !entry.classroomId &&
+      resolved.some(other => other.grade === entry.grade && other.section === entry.section)
+    )
+    .map(([key]) => key);
+}
+
 export function stampedClassrooms(
   classrooms: Record<string, TeacherClassroom>
 ): Record<string, TeacherClassroom> {
@@ -539,7 +568,11 @@ export class TeacherService {
       return !before || before.programmes.length !== entry.programmes.length;
     });
 
-    if (changed.length === 0) {
+    // Cleared in the SAME write that adds the real entry, so the document is
+    // never briefly carrying both.
+    const superseded = supersededClassroomKeys(classrooms);
+
+    if (changed.length === 0 && superseded.length === 0) {
       return existing;
     }
 
@@ -547,9 +580,16 @@ export class TeacherService {
       ...Object.fromEntries(
         changed.map(([classroomId, entry]) => [`classrooms.${classroomId}`, entry])
       ),
+      ...Object.fromEntries(
+        superseded.map(key => [`classrooms.${key}`, deleteField()])
+      ),
       lastActivityAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
+
+    for (const key of superseded) {
+      delete classrooms[key];
+    }
 
     return { ...existing, classrooms };
   }

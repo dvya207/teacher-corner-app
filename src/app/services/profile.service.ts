@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import {
   Timestamp,
+  deleteField,
   getDoc,
   increment,
   onSnapshot,
@@ -11,6 +12,29 @@ import {
 import { userProfileDoc } from '../core/firestore-paths';
 import { TeacherProfile } from '../models/teaching.model';
 import { AuthService } from './auth.service';
+
+/**
+ * Old request keys that an incoming resolved request supersedes.
+ *
+ * Exported and tested directly: this DELETES data, so the rule that decides what
+ * goes has to be visible rather than inlined in a write.
+ */
+export function supersededRequestKeys(
+  stored: NonNullable<TeacherProfile['selfRegTeacherApproval']>,
+  incoming: NonNullable<TeacherProfile['selfRegTeacherApproval']>
+): string[] {
+  const resolved = Object.values(incoming).filter(request => request.classroomId);
+
+  return Object.entries(stored)
+    .filter(([key, request]) =>
+      !request.classroomId &&
+      !(key in incoming) &&
+      resolved.some(
+        other => other.grade === request.grade && other.section === request.section
+      )
+    )
+    .map(([key]) => key);
+}
 
 @Injectable({
   providedIn: 'root'
@@ -74,10 +98,34 @@ export class ProfileService {
 
     const existing = await getDoc(reference);
 
+    /*
+     * LEGACY REQUEST KEYS ARE CLEARED IN THE SAME WRITE.
+     *
+     * Requests used to be keyed grade-section when no classroom could be
+     * resolved, and this write is merge:true — so an old `9-A` entry survived
+     * every subsequent save and the document ended up carrying both it and the
+     * properly keyed one for the same class.
+     *
+     * Identified by an EMPTY classroomId, never by the shape of the key, and only
+     * dropped when a resolved entry covers the same grade and section.
+     */
+    const stale = supersededRequestKeys(
+      (existing.data() as TeacherProfile | undefined)?.selfRegTeacherApproval ?? {},
+      profile.selfRegTeacherApproval ?? {}
+    );
+
     await setDoc(
       reference,
       {
         ...profile,
+        ...(stale.length
+          ? {
+              selfRegTeacherApproval: {
+                ...(profile.selfRegTeacherApproval ?? {}),
+                ...Object.fromEntries(stale.map(key => [key, deleteField()]))
+              }
+            }
+          : {}),
         uid,
         docId: uid,
         role: this.auth.role(),
