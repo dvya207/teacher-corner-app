@@ -81,10 +81,17 @@
 
         <div class="field">
           <label for="school">School / Institution</label>
+          <!-- NOT DISABLED, deliberately.
+
+               It was, until the pincode found something, and it read as a broken
+               control rather than a waiting one — twice over, even after the
+               disabled text was made legible. An empty-but-live select whose only
+               entry is the instruction says the same thing without looking dead,
+               and nothing can be mis-submitted: canSubmit() still requires a
+               school, so an unanswered one blocks Create Account. -->
           <select
             id="school"
             (change)="onSchoolChange($any($event.target).value)"
-            [disabled]="schools().length === 0"
           >
             <option value="" disabled [selected]="!school()">
               @if (!pincodeComplete()) {
@@ -199,10 +206,10 @@
 
           <div class="field">
             <label for="programme">Programme</label>
+            <!-- Live for the same reason as School above. -->
             <select
               id="programme"
               (change)="programme.set($any($event.target).value)"
-              [disabled]="programmes().length === 0"
             >
               <option value="" disabled [selected]="!programme()">
                 @if (!pincodeComplete()) {
