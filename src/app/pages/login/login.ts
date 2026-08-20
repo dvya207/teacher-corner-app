@@ -16,6 +16,7 @@ import { firebaseConfigured } from '../../core/firebase';
 import { HERO_MODULES } from '../../data/hero-content';
 import { DEFAULT_DIAL, DIAL_CODES } from '../../data/countries';
 import { AuthService } from '../../services/auth.service';
+import { TeacherService } from '../../services/teacher.service';
 import { OTP_CODE_LENGTH, OTP_RESEND_SECONDS, OtpService } from '../../services/otp.service';
 
 /**
@@ -110,6 +111,7 @@ export class Login implements OnDestroy {
 
   private auth = inject(AuthService);
   private otp = inject(OtpService);
+  private teachers = inject(TeacherService);
   private router = inject(Router);
 
   private readonly digitInputs = viewChildren<ElementRef<HTMLInputElement>>('digitInput');
@@ -222,6 +224,7 @@ export class Login implements OnDestroy {
       const token = await this.otp.verifyOtp(this.countryCode(), this.phoneNumber(), this.code());
       await this.auth.loginWithToken(token);
       this.stopCountdown();
+      await this.linkTeacherRecord();
       await this.router.navigate(['/dashboard']);
     } catch (error) {
       this.errorMessage.set(this.auth.describeOtpError(error));
@@ -400,6 +403,24 @@ export class Login implements OnDestroy {
    * Stopping at 43 with no ticker behind it renders a countdown that never
    * counts and a Resend button that never appears.
    */
+  /**
+   * Fills in teacherMeta.uid on the record an admin registered for this number.
+   *
+   * AFTER the session exists, because the uid being recorded is this session's.
+   *
+   * SWALLOWED ON FAILURE, deliberately. This is bookkeeping that links a record to
+   * an account; a refused write or a dropped network must not turn a successful
+   * sign-in into an error the teacher can do nothing about. The next sign-in tries
+   * again, since the field is only filled when blank.
+   */
+  private async linkTeacherRecord(): Promise<void> {
+    try {
+      await this.teachers.linkSignedInUid(this.phoneNumber(), this.auth.currentUid() ?? '');
+    } catch (error) {
+      console.error('Signed in, but could not link the teacher record to this account.', error);
+    }
+  }
+
   private stopCountdown(): void {
     if (this.ticker !== null) {
       clearInterval(this.ticker);

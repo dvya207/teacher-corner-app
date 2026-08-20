@@ -1,8 +1,9 @@
 import { Timestamp } from 'firebase/firestore';
 
-import { Teacher } from '../models/teaching.model';
+import { Teacher, TeacherClassroom } from '../models/teaching.model';
 import {
   mergeClassrooms,
+  stampedClassrooms,
   normaliseTeacher,
   stripImmutableTeacherFields,
   stripTeacherTrashMetadata,
@@ -312,5 +313,68 @@ describe('mergeClassrooms', () => {
 
   it('returns the additions when there is nothing stored yet', () => {
     expect(mergeClassrooms({}, { c1: entry('c1', ['p1']) })['c1'].classroomId).toBe('c1');
+  });
+});
+
+/**
+ * createdAt ON EACH CLASSROOM ENTRY.
+ *
+ * It shipped as a literal null: the component built the entry with a placeholder
+ * and nothing ever replaced it, so every attachment read as "at no time". The
+ * stamping is its own function so it is visible rather than buried in a payload
+ * literal.
+ */
+describe('stampedClassrooms', () => {
+  function entry(overrides: Partial<TeacherClassroom> = {}): TeacherClassroom {
+    return {
+      activeStatus: true,
+      classroomId: 'c1',
+      classroomName: '9 B',
+      grade: '9',
+      section: 'B',
+      institutionId: 'inst-1',
+      institutionName: 'KUVEMPU UNIVERSITY',
+      type: 'CLASSROOM',
+      userRole: 'School Teacher',
+      programmes: [],
+      createdAt: null as never,
+      ...overrides
+    };
+  }
+
+  it('replaces a null createdAt with something', () => {
+    const stamped = stampedClassrooms({ c1: entry() });
+
+    expect(stamped['c1'].createdAt).not.toBeNull();
+    expect(stamped['c1'].createdAt).toBeDefined();
+  });
+
+  it('stamps every entry, not just the first', () => {
+    const stamped = stampedClassrooms({
+      c1: entry(),
+      c2: entry({ classroomId: 'c2', classroomName: '4 A' })
+    });
+
+    expect(stamped['c1'].createdAt).not.toBeNull();
+    expect(stamped['c2'].createdAt).not.toBeNull();
+  });
+
+  it('leaves everything else about the entry untouched', () => {
+    const stamped = stampedClassrooms({ c1: entry() });
+
+    expect(stamped['c1'].classroomName).toBe('9 B');
+    expect(stamped['c1'].grade).toBe('9');
+    expect(stamped['c1'].userRole).toBe('School Teacher');
+  });
+
+  it('does not mutate the map it is given', () => {
+    const before = { c1: entry() };
+    stampedClassrooms(before);
+
+    expect(before['c1'].createdAt).toBeNull();
+  });
+
+  it('copes with an empty map', () => {
+    expect(stampedClassrooms({})).toEqual({});
   });
 });

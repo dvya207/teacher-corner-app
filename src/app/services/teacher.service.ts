@@ -263,6 +263,24 @@ export function mergeClassrooms(
   return merged;
 }
 
+/**
+ * Each classroom entry with `createdAt` set to the server's clock.
+ *
+ * Exported and separate so the stamping is visible and testable: an entry that
+ * silently carries null reads as "attached at no time", which is what shipped
+ * before this existed.
+ */
+export function stampedClassrooms(
+  classrooms: Record<string, TeacherClassroom>
+): Record<string, TeacherClassroom> {
+  return Object.fromEntries(
+    Object.entries(classrooms).map(([classroomId, entry]) => [
+      classroomId,
+      { ...entry, createdAt: serverTimestamp() as unknown as Timestamp }
+    ])
+  );
+}
+
 /** first + last, collapsed. Stored denormalised, as institutions store their representative's. */
 export function teacherFullName(first: string, last: string): string {
   return `${(first ?? '').trim()} ${(last ?? '').trim()}`.trim();
@@ -381,6 +399,17 @@ export class TeacherService {
       ...draft,
       docId: reference.id,
       ownerId: uid,
+      /*
+       * STAMPED HERE, not by the caller. Each classroom entry records when the
+       * teacher was attached to that class, and the component that builds the map
+       * has no business holding a Firestore sentinel.
+       *
+       * serverTimestamp() rather than a client clock, matching every other write
+       * here — and legal at this depth because the entries sit in a MAP. A
+       * sentinel inside an ARRAY would be rejected, which is why `programmes`
+       * carries no timestamp of its own.
+       */
+      classrooms: stampedClassrooms(draft.classrooms),
       teacherMeta: {
         ...draft.teacherMeta,
         // Both names for the same digits, which is production's shape.
@@ -473,7 +502,16 @@ export class TeacherService {
     existing: Teacher,
     additions: Record<string, TeacherClassroom>
   ): Promise<Teacher> {
-    const classrooms = mergeClassrooms(existing.classrooms, additions);
+    // Only the entries that are actually new get a timestamp; an existing one
+    // keeps the date it was first attached.
+    const fresh = Object.fromEntries(
+      Object.entries(additions).filter(([classroomId]) => !existing.classrooms[classroomId])
+    );
+
+    const classrooms = mergeClassrooms(existing.classrooms, {
+      ...additions,
+      ...stampedClassrooms(fresh)
+    });
 
     const changed = Object.entries(classrooms).filter(([classroomId, entry]) => {
       const before = existing.classrooms[classroomId];
@@ -494,6 +532,55 @@ export class TeacherService {
     });
 
     return { ...existing, classrooms };
+  }
+
+  /**
+   * Records a teacher's own Auth uid on their document, once they have one.
+   *
+   * WHY IT IS EMPTY UNTIL NOW. Registering a teacher creates no Auth user — a
+   * Teacher is a record ABOUT a person, not an identity — so at write time there
+   * is no uid in existence to store. Production keys its Teachers by uid because
+   * its teachers arrive with accounts; here the account appears later, the first
+   * time that person signs in with the number an admin registered.
+   *
+   * MATCHED ON THE SUBSCRIBER DIGITS, which is the same key findKnownTeacher uses
+   * to stop a second document being written for one person.
+   *
+   * ONLY FILLS A BLANK. A document that already carries a uid is left alone: two
+   * people sharing a recycled number must not silently take over each other's
+   * record, and a second sign-in by the same person has nothing to change.
+   *
+   * BEST EFFORT. The caller runs this after the session exists, and a failure here
+   * must not cost anybody their sign-in — see the call site in the login page.
+   */
+  async linkSignedInUid(phoneNumber: string, uid: string): Promise<number> {
+    const digits = (phoneNumber ?? '').trim();
+
+    if (!digits || !uid) {
+      return 0;
+    }
+
+    const snapshot = await getDocs(activeTeachersCollection());
+
+    const unlinked = snapshot.docs.filter(document => {
+      const meta = (document.data()['teacherMeta'] ?? {}) as Partial<TeacherMeta>;
+
+      return (meta.phoneNumber ?? meta.phone ?? '') === digits && !meta.uid;
+    });
+
+    await Promise.all(
+      unlinked.map(document =>
+        // Dotted paths, so nothing else on teacherMeta is rewritten from a stale
+        // copy read a moment ago.
+        updateDoc(activeTeacherDoc(document.id), {
+          'teacherMeta.uid': uid,
+          'teacherMeta.updatedAt': serverTimestamp(),
+          updatedAt: serverTimestamp()
+        })
+      )
+    );
+
+    return unlinked.length;
   }
 
   /** Saves an edit. Ownership and school membership are not editable here. */
