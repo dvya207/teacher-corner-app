@@ -12,6 +12,8 @@
   <img alt="Angular" height="26" src="https://img.shields.io/badge/Angular-21-DD0031?style=flat-square&logo=angular&logoColor=white">
   <img alt="TypeScript" height="26" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="RxJS" height="26" src="https://img.shields.io/badge/RxJS-7.8-B7178C?style=flat-square&logo=reactivex&logoColor=white">
+  <img alt="Firebase" height="26" src="https://img.shields.io/badge/Firebase-12-FFCA28?style=flat-square&logo=firebase&logoColor=black">
+  <img alt="Cloud Firestore" height="26" src="https://img.shields.io/badge/Cloud%20Firestore-FFA000?style=flat-square&logo=firebase&logoColor=black">
   <img alt="Node.js" height="26" src="https://img.shields.io/badge/Node.js-20-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white">
 </p>
 
