@@ -38,10 +38,18 @@ describe('Add Teachers', () => {
     role: 'ThinkTac Coach'
   };
 
+  /** The school's classrooms, as step 2 receives them. */
+  const CLASSROOMS = [
+    { id: 'c1', label: '4 A', programmes: 'Science' },
+    { id: 'c2', label: '5 B', programmes: 'Maths, Science' },
+    { id: 'c3', label: 'STEM Forge', programmes: '' }
+  ];
+
   async function render(
     dial = '+91',
     programmes: { id: string; name: string }[] = CATALOGUE,
-    known: KnownTeacher[] = []
+    known: KnownTeacher[] = [],
+    classroomOptions = CLASSROOMS
   ): Promise<void> {
     await TestBed.configureTestingModule({ imports: [AddTeachers] }).compileComponents();
 
@@ -50,6 +58,7 @@ describe('Add Teachers', () => {
     fixture.componentRef.setInput('dial', dial);
     fixture.componentRef.setInput('programmes', programmes);
     fixture.componentRef.setInput('known', known);
+    fixture.componentRef.setInput('classroomOptions', classroomOptions);
 
     emitted = [];
     component.submitted.subscribe(rows => emitted.push(rows));
@@ -83,12 +92,10 @@ describe('Add Teachers', () => {
    * The rows are hidden until the ⊕ is pressed, so every test that needs one has
    * to ask for it the way a user would.
    */
-  function addClass(section = 'A', programmeId = 'prog-1', grade = '1'): void {
-    component.addClass();
-    const index = component.classes().length - 1;
-    component.updateClass(index, 'grade', grade);
-    component.updateClass(index, 'section', section);
-    component.updateClass(index, 'programmeId', programmeId);
+  function addClassroom(classroomId = 'c1'): void {
+    component.addClassroom();
+    const index = component.classrooms().length - 1;
+    component.updateClassroom(index, 'classroomId', classroomId);
   }
 
   /* ---- What the form opens on --------------------------------------------- */
@@ -108,11 +115,11 @@ describe('Add Teachers', () => {
   it('reveals the first class row when the ⊕ is pressed', async () => {
     await render();
 
-    component.addClass();
+    component.addClassroom();
     fixture.detectChanges();
 
     expect(classRows()).toBe(1);
-    expect(el().querySelector('#tc-grade-0')).not.toBeNull();
+    expect(el().querySelector('#tc-classroom-0')).not.toBeNull();
   });
 
   it('shows the person’s fields, with only Email and Role unmarked', async () => {
@@ -130,15 +137,17 @@ describe('Add Teachers', () => {
     ]);
   });
 
-  it('adds the three class labels once a row exists', async () => {
+  it('adds one Classroom label once a row exists', async () => {
     await render();
-    component.addClass();
+    component.addClassroom();
     fixture.detectChanges();
 
     const labels = [...el().querySelectorAll('.field > label')]
       .map(label => label.textContent?.replace(/\s+/g, ' ').trim());
 
-    expect(labels.slice(5)).toEqual(['Grade *', 'Section *', 'Programme *']);
+    // ONE CONTROL, not three: grade, section and programme come from the
+    // classroom document rather than being asked for again here.
+    expect(labels.slice(5)).toEqual(['Classroom *']);
   });
 
   /** The prefix comes from step 1's Country, so the two cannot disagree. */
@@ -175,9 +184,9 @@ describe('Add Teachers', () => {
    */
   it('adds a class row, not another teacher', async () => {
     await render();
-    addClass();
+    addClassroom();
 
-    component.addClass();
+    component.addClassroom();
     fixture.detectChanges();
 
     expect(classRows()).toBe(2);
@@ -188,52 +197,55 @@ describe('Add Teachers', () => {
    * A ⊕ pressed over a half-filled row would lock it unfinished, and the only way
    * back would be deleting it.
    */
-  it('refuses to add a row while the current one is incomplete', async () => {
+  /**
+   * ONE CONTROL NOW, so a row is either blank or complete — there is no
+   * half-filled state to test any more. An unanswered row still blocks the ⊕.
+   */
+  it('refuses to add a row while the current one has no classroom', async () => {
     await render();
-    component.addClass();
-    component.updateClass(0, 'section', 'A');
+    component.addClassroom();
 
-    component.addClass();
+    component.addClassroom();
+    component.submit();
     fixture.detectChanges();
 
     expect(classRows()).toBe(1);
-    expect(component.missingClass(0, 'programmeId')).toBe(true);
+    expect(component.missingClassroom(0, 'classroomId')).toBe(true);
   });
 
   it('locks every row but the last', async () => {
     await render();
-    addClass();
-    addClass('B', 'prog-2');
-    component.addClass();
+    addClassroom('c1');
+    addClassroom('c2');
+    component.addClassroom();
     fixture.detectChanges();
 
     expect(component.locked(0)).toBe(true);
     expect(component.locked(1)).toBe(true);
     expect(component.locked(2)).toBe(false);
-    expect(el().querySelector<HTMLSelectElement>('#tc-grade-0')?.disabled).toBe(true);
-    expect(el().querySelector<HTMLSelectElement>('#tc-grade-2')?.disabled).toBe(false);
+    expect(el().querySelector<HTMLSelectElement>('#tc-classroom-0')?.disabled).toBe(true);
+    expect(el().querySelector<HTMLSelectElement>('#tc-classroom-2')?.disabled).toBe(false);
   });
 
   it('keeps a locked row visible with its values', async () => {
     await render();
-    addClass('C', 'prog-2');
-    component.addClass();
+    addClassroom('c3');
+    component.addClassroom();
     fixture.detectChanges();
 
-    expect(el().querySelector<HTMLSelectElement>('#tc-section-0')?.value).toBe('C');
-    expect(el().querySelector<HTMLSelectElement>('#tc-programme-0')?.value).toBe('prog-2');
+    expect(el().querySelector<HTMLSelectElement>('#tc-classroom-0')?.value).toBe('c3');
     expect(el().querySelector('.class-row.is-locked')).not.toBeNull();
   });
 
   it('marks a required control only on the row still being filled', async () => {
     await render();
-    addClass();
-    component.addClass();
+    addClassroom();
+    component.addClassroom();
     component.submit();
     fixture.detectChanges();
 
-    expect(component.missingClass(0, 'section')).toBe(false);
-    expect(component.missingClass(1, 'section')).toBe(true);
+    expect(component.missingClassroom(0, 'classroomId')).toBe(false);
+    expect(component.missingClassroom(1, 'classroomId')).toBe(true);
   });
 
   /**
@@ -242,13 +254,13 @@ describe('Add Teachers', () => {
    */
   it('edits only the row it was given', async () => {
     await render();
-    addClass();
-    component.addClass();
+    addClassroom('c1');
+    component.addClassroom();
 
-    component.updateClass(1, 'section', 'Z');
+    component.updateClassroom(1, 'classroomId', 'c2');
 
-    expect(component.classes()[0].section).toBe('A');
-    expect(component.classes()[1].section).toBe('Z');
+    expect(component.classrooms()[0].classroomId).toBe('c1');
+    expect(component.classrooms()[1].classroomId).toBe('c2');
   });
 
   /* ---- The bin ------------------------------------------------------------ */
@@ -256,7 +268,7 @@ describe('Add Teachers', () => {
   /** With one row there is nothing to remove; a bin that clears is not a bin. */
   it('hides the bin while there is only one class row', async () => {
     await render();
-    component.addClass();
+    component.addClassroom();
     fixture.detectChanges();
 
     expect(el().querySelectorAll('.class-remove').length).toBe(0);
@@ -264,9 +276,9 @@ describe('Add Teachers', () => {
 
   it('shows a bin on every row once the ⊕ has produced a second', async () => {
     await render();
-    addClass();
+    addClassroom();
 
-    component.addClass();
+    component.addClassroom();
     fixture.detectChanges();
 
     expect(el().querySelectorAll('.class-remove').length).toBe(2);
@@ -274,12 +286,12 @@ describe('Add Teachers', () => {
 
   it('hides the bin again when a delete leaves one row', async () => {
     await render();
-    addClass();
-    component.addClass();
+    addClassroom();
+    component.addClassroom();
     fixture.detectChanges();
     expect(el().querySelectorAll('.class-remove').length).toBe(2);
 
-    component.removeClass(1);
+    component.removeClassroom(1);
     fixture.detectChanges();
 
     expect(el().querySelectorAll('.class-remove').length).toBe(0);
@@ -287,22 +299,22 @@ describe('Add Teachers', () => {
 
   it('removes the row asked for, not the last one', async () => {
     await render();
-    addClass('A');
-    addClass('B');
-    addClass('C');
+    addClassroom('c1');
+    addClassroom('c2');
+    addClassroom('c3');
 
-    component.removeClass(1);
+    component.removeClassroom(1);
     fixture.detectChanges();
 
-    expect(component.classes().map(row => row.section)).toEqual(['A', 'C']);
+    expect(component.classrooms().map(row => row.classroomId)).toEqual(['c1', 'c3']);
   });
 
   /** Classes are optional, so removing the last one is allowed outright. */
   it('removes the only row rather than clearing it', async () => {
     await render();
-    addClass();
+    addClassroom();
 
-    component.removeClass(0);
+    component.removeClassroom(0);
     fixture.detectChanges();
 
     expect(classRows()).toBe(0);
@@ -310,11 +322,11 @@ describe('Add Teachers', () => {
 
   it('unlocks the row that becomes last after a delete', async () => {
     await render();
-    addClass();
-    component.addClass();
+    addClassroom();
+    component.addClassroom();
     expect(component.locked(0)).toBe(true);
 
-    component.removeClass(1);
+    component.removeClassroom(1);
     fixture.detectChanges();
 
     expect(component.locked(0)).toBe(false);
@@ -347,7 +359,7 @@ describe('Add Teachers', () => {
   it('requires an email, and says so rather than failing silently', async () => {
     await render();
     fillTeacher();
-    addClass();
+    addClassroom();
     component.update('email', '');
     component.markBlurred('email');
     fixture.detectChanges();
@@ -373,62 +385,72 @@ describe('Add Teachers', () => {
 
   /* ---- Grade, Section, Programme ------------------------------------------ */
 
-  it('labels the numbered grades and leaves the pre-primary years alone', async () => {
+  /**
+   * NO GRADE CONTROL ANY MORE. The grade comes from the classroom document, so
+   * there is no grade option list here to label — the classroom's own name is
+   * what the select shows. Kept as a note rather than deleted silently, because
+   * the old test guarded a real rule (never prettify a stored grade) that still
+   * applies wherever grades ARE rendered.
+   */
+  it('shows the classroom label, not a grade, in the row', async () => {
     await render();
-    component.addClass();
+    component.addClassroom();
     fixture.detectChanges();
 
-    const options = [...el().querySelectorAll('#tc-grade-0 option')]
+    expect(el().querySelector('#tc-grade-0')).toBeNull();
+    expect(el().querySelector('#tc-classroom-0')).not.toBeNull();
+  });
+
+  it('stores the classroom id, not the label shown in the select', async () => {
+    await render();
+    component.addClassroom();
+
+    component.updateClassroom(0, 'classroomId', 'c2');
+
+    expect(component.classrooms()[0].classroomId).toBe('c2');
+  });
+
+  /**
+   * GRADE AND SECTION ARE NO LONGER ASKED FOR. They come from the classroom
+   * document, so the form offers the classrooms and nothing else — this replaces
+   * the old grade and section option-list tests.
+   */
+  it('lists the school’s classrooms by label, with a blank first option', async () => {
+    await render();
+    component.addClassroom();
+    fixture.detectChanges();
+
+    const options = [...el().querySelectorAll('#tc-classroom-0 option')]
       .map(o => o.textContent?.trim());
 
-    expect(options).toContain('Class 1');
-    expect(options).toContain('Pre-primary 1');
-    expect(options).not.toContain('Class Pre-primary 1');
+    expect(options[0]).toBe('');
+    expect(options).toContain('4 A');
+    expect(options).toContain('STEM Forge');
   });
 
-  /** Stored bare: prettifying would write a value no imported row would match. */
-  it('stores the bare grade, not its label', async () => {
+  /** Not chosen here, so it has to be visible: the teacher inherits them. */
+  it('shows the programmes a chosen classroom will contribute', async () => {
     await render();
-    component.addClass();
-
-    component.updateClass(0, 'grade', '8');
-
-    expect(component.classes()[0].grade).toBe('8');
-  });
-
-  it('includes production’s NA section', async () => {
-    await render();
-    component.addClass();
+    addClassroom('c2');
     fixture.detectChanges();
 
-    const options = [...el().querySelectorAll('#tc-section-0 option')]
-      .map(o => o.textContent?.trim());
-
-    expect(options[0]).toBe('Select');
-    expect(options).toContain('NA');
+    expect(el().textContent).toContain('Programmes: Maths, Science');
   });
 
-  it('lists the programmes it was given, by name', async () => {
-    await render();
-    component.addClass();
+  /**
+   * THE PROGRAMME SELECT IS GONE. A teacher inherits the classroom's programmes,
+   * so there is nothing to choose and nothing to disable when the catalogue is
+   * empty — the equivalent state is a school with no CLASSROOMS, which is what
+   * the warning now covers.
+   */
+  it('says how to fix it when the school has no classrooms yet', async () => {
+    await render('+91', [], [], []);
+    component.addClassroom();
     fixture.detectChanges();
 
-    const options = [...el().querySelectorAll('#tc-programme-0 option')]
-      .map(o => o.textContent?.trim())
-      .filter(Boolean);
-
-    expect(options).toEqual(['Oak 26-27 Grade 1 - Science', 'Oak 26-27 Grade 2 - Maths']);
-  });
-
-  /** An empty catalogue is work to do elsewhere, so the control says so once. */
-  it('disables Programme and explains itself when the catalogue is empty', async () => {
-    await render('+91', []);
-    component.addClass();
-    fixture.detectChanges();
-
-    expect(el().querySelector<HTMLSelectElement>('#tc-programme-0')?.disabled).toBe(true);
+    expect(el().querySelector<HTMLSelectElement>('#tc-classroom-0')?.disabled).toBe(true);
     expect(el().querySelector('.field-hint.is-warn')?.textContent)
-      .toContain('no live programmes yet');
+      .toContain('no classrooms yet');
   });
 
   /* ---- Submit ------------------------------------------------------------- */
@@ -458,7 +480,7 @@ describe('Add Teachers', () => {
     fixture.detectChanges();
 
     expect(emitted.length).toBe(0);
-    expect(component.classesMissing()).toBe(true);
+    expect(component.classroomsMissing()).toBe(true);
 
     const errors = [...el().querySelectorAll('.field-error')].map(e => e.textContent?.trim());
     expect(errors).toContain('Add at least one class using the + below');
@@ -471,21 +493,22 @@ describe('Add Teachers', () => {
    * is tolerated and dropped on submit. One with a section but no programme is a
    * genuine mistake, and blocks.
    */
-  it('tolerates a blank added row but blocks a half-filled one', async () => {
+  /**
+   * NO HALF-FILLED STATE ANY MORE. With one control per row a row is either
+   * blank or complete, so this now only asserts the blank-row tolerance.
+   */
+  it('tolerates a blank added row beside a complete one', async () => {
     await render();
     fillTeacher();
     // A COMPLETE ROW FIRST, because one is now required: a blank row on its own
     // no longer satisfies the requirement, so this test would otherwise be
     // asserting the class rule rather than the blank-row rule.
-    addClass('A', 'prog-1');
+    addClassroom('c1');
 
-    component.addClass();
+    component.addClassroom();
     expect(component.canSubmit()).toBe(true);
 
-    component.updateClass(1, 'section', 'B');
-    expect(component.canSubmit()).toBe(false);
-
-    component.updateClass(1, 'programmeId', 'prog-2');
+    component.updateClassroom(1, 'classroomId', 'c2');
     expect(component.canSubmit()).toBe(true);
   });
 
@@ -509,7 +532,7 @@ describe('Add Teachers', () => {
     // Still dead: the person is complete but they have no class yet.
     expect(button().disabled).toBe(true);
 
-    addClass();
+    addClassroom();
     fixture.detectChanges();
 
     expect(button().disabled).toBe(false);
@@ -539,19 +562,21 @@ describe('Add Teachers', () => {
     expect(errors).toContain('Last name is required');
   });
 
-  it('emits the teacher with every class they take', async () => {
+  it('emits the teacher with every classroom they take', async () => {
     await render();
     fillTeacher();
-    addClass('A', 'prog-1');
-    addClass('B', 'prog-2');
+    addClassroom('c1');
+    addClassroom('c2');
 
     component.submit();
 
     expect(emitted.length).toBe(1);
     expect(emitted[0].length).toBe(1);
-    expect(emitted[0][0].classes).toEqual([
-      { grade: '1', section: 'A', programmeId: 'prog-1' },
-      { grade: '1', section: 'B', programmeId: 'prog-2' }
+    // IDS ONLY. The form holds nothing but the choice; the wizard resolves each
+    // one against the classroom document when it builds the write.
+    expect(emitted[0][0].classrooms).toEqual([
+      { classroomId: 'c1' },
+      { classroomId: 'c2' }
     ]);
   });
 
@@ -559,20 +584,20 @@ describe('Add Teachers', () => {
   it('drops a trailing blank class row rather than rejecting the submit', async () => {
     await render();
     fillTeacher();
-    addClass();
-    component.addClass();
+    addClassroom();
+    component.addClassroom();
 
     component.submit();
 
     expect(emitted.length).toBe(1);
-    expect(emitted[0][0].classes.length).toBe(1);
+    expect(emitted[0][0].classrooms.length).toBe(1);
   });
 
   it('resets to a blank teacher with no class rows after a successful submit', async () => {
     await render();
     fillTeacher();
-    addClass();
-    addClass('B');
+    addClassroom();
+    addClassroom('B');
     component.submit();
     fixture.detectChanges();
 
@@ -675,7 +700,7 @@ describe('Add Teachers', () => {
     component.update('phone', '9876543210');
     fixture.detectChanges();
 
-    expect(component.canAddClass()).toBe(false);
+    expect(component.canAddClassroom()).toBe(false);
     expect(el().querySelector('.add-entry')).toBeNull();
   });
 
@@ -683,7 +708,7 @@ describe('Add Teachers', () => {
     await render('+91', CATALOGUE, [ANITA]);
     component.update('phone', '9876543210');
 
-    component.addClass();
+    component.addClassroom();
     fixture.detectChanges();
 
     expect(classRows()).toBe(0);
@@ -695,16 +720,14 @@ describe('Add Teachers', () => {
    */
   it('locks class rows added before the number was recognised', async () => {
     await render('+91', CATALOGUE, [ANITA]);
-    addClass();
+    addClassroom();
     fixture.detectChanges();
-    expect(el().querySelector<HTMLSelectElement>('#tc-section-0')?.disabled).toBe(false);
+    expect(el().querySelector<HTMLSelectElement>('#tc-classroom-0')?.disabled).toBe(false);
 
     component.update('phone', '9876543210');
     fixture.detectChanges();
 
-    expect(el().querySelector<HTMLSelectElement>('#tc-grade-0')?.disabled).toBe(true);
-    expect(el().querySelector<HTMLSelectElement>('#tc-section-0')?.disabled).toBe(true);
-    expect(el().querySelector<HTMLSelectElement>('#tc-programme-0')?.disabled).toBe(true);
+    expect(el().querySelector<HTMLSelectElement>('#tc-classroom-0')?.disabled).toBe(true);
   });
 
   it('will not submit a recognised teacher', async () => {
@@ -728,7 +751,7 @@ describe('Add Teachers', () => {
     fixture.detectChanges();
 
     expect(component.identityLocked()).toBe(false);
-    expect(component.canAddClass()).toBe(true);
+    expect(component.canAddClassroom()).toBe(true);
     expect(el().querySelector<HTMLInputElement>('#tc-first')?.disabled).toBe(false);
   });
 

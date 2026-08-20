@@ -2,8 +2,7 @@ import { Timestamp } from 'firebase/firestore';
 
 import { Teacher } from '../models/teaching.model';
 import {
-  classKey,
-  mergeClasses,
+  mergeClassrooms,
   normaliseTeacher,
   stripImmutableTeacherFields,
   stripTeacherTrashMetadata,
@@ -28,26 +27,19 @@ describe('stripImmutableTeacherFields', () => {
   });
 
   it('removes docId, which mirrors the document path rather than being editable', () => {
-    expect(stripImmutableTeacherFields({ docId: 'abc', role: 'ThinkTac Coach' }))
-      .toEqual({ role: 'ThinkTac Coach' });
+    expect(stripImmutableTeacherFields({ docId: 'abc', classrooms: {} }))
+      .toEqual({ classrooms: {} });
   });
 
   /**
-   * NOT a rules requirement — a judgement.
-   *
-   * Moving a teacher between schools is a real operation, but it is not an EDIT
-   * of their details. Letting a name change carry a school change alongside it
-   * is how a teacher silently ends up at the wrong institution.
+   * THE SCHOOL IS NO LONGER AT THIS LEVEL to be stripped: it lives on each
+   * classroom entry, so an edit cannot move a teacher between schools by
+   * touching one field. The guard here is now only docId and ownerId.
    */
-  it('removes institutionId, so an edit cannot quietly move a teacher between schools', () => {
-    const patch = { firstName: 'Anita', institutionId: 'other-school' } as Partial<Teacher>;
+  it('removes docId, which mirrors the path rather than being editable', () => {
+    const patch = { docId: 'other-id', classrooms: {} } as Partial<Teacher>;
 
-    expect(stripImmutableTeacherFields(patch)).toEqual({ firstName: 'Anita' });
-  });
-
-  it('removes createdAt, which is set once', () => {
-    expect(stripImmutableTeacherFields({ createdAt: Timestamp.now(), role: 'ThinkTac Coach' }))
-      .toEqual({ role: 'ThinkTac Coach' });
+    expect(stripImmutableTeacherFields(patch)).toEqual({ classrooms: {} });
   });
 
   it('leaves updatedAt alone, since every edit is meant to move it', () => {
@@ -57,14 +49,13 @@ describe('stripImmutableTeacherFields', () => {
   });
 
   it('leaves falsy values untouched rather than treating them as absent', () => {
-    const patch: Partial<Teacher> = { firstName: '', email: '', active: false };
+    const patch: Partial<Teacher> = { classrooms: {} };
 
     expect(stripImmutableTeacherFields(patch)).toEqual(patch);
   });
 
   it('returns an empty object when the patch held only immutable fields', () => {
-    expect(stripImmutableTeacherFields({ docId: 'a', ownerId: 'b', institutionId: 'c' }))
-      .toEqual({});
+    expect(stripImmutableTeacherFields({ docId: 'a', ownerId: 'b' })).toEqual({});
   });
 });
 
@@ -82,7 +73,7 @@ describe('withoutUndefinedTeacherFields', () => {
   });
 
   it('keeps empty strings and false, which are real values', () => {
-    const fields: Partial<Teacher> = { email: '', active: false };
+    const fields: Partial<Teacher> = { classrooms: {} };
 
     expect(withoutUndefinedTeacherFields(fields)).toEqual(fields);
   });
@@ -140,16 +131,18 @@ describe('normaliseTeacher', () => {
 
     expect(teacher).toEqual({
       docId: 't1',
-      institutionId: '',
-      firstName: '',
-      lastName: '',
-      teacherName: '',
-      email: '',
-      countryCode: '',
-      phoneNumber: '',
-      role: '',
-      classes: [],
-      active: true
+      teacherMeta: {
+        countryCode: '',
+        email: '',
+        firstName: '',
+        lastName: '',
+        fullNameLowerCase: '',
+        phone: '',
+        phoneNumber: '',
+        uid: '',
+        updatedAt: null
+      },
+      classrooms: {}
     });
   });
 
@@ -159,71 +152,88 @@ describe('normaliseTeacher', () => {
     expect(teacher.docId).toBe('real-id');
   });
 
-  /** Absent means active; only an explicit false means inactive. */
-  it('treats a missing active as true and a stored false as false', () => {
-    expect(normaliseTeacher<Teacher>('t1', {}).active).toBe(true);
-    expect(normaliseTeacher<Teacher>('t1', { active: false }).active).toBe(false);
-    expect(normaliseTeacher<Teacher>('t1', { active: true }).active).toBe(true);
-  });
-
-  it('leaves stored values alone', () => {
+  it('lifts the flat legacy identity fields into teacherMeta', () => {
     const teacher = normaliseTeacher<Teacher>('t1', {
       firstName: 'Anita',
       lastName: 'Rao',
-      teacherName: 'Anita Rao',
       email: 'anita@example.com',
       countryCode: '+91',
-      phoneNumber: '9876543210',
-      role: 'School Teacher',
-      institutionId: 'inst-1'
+      phoneNumber: '9876543210'
     });
 
-    expect(teacher.firstName).toBe('Anita');
-    expect(teacher.phoneNumber).toBe('9876543210');
-    expect(teacher.institutionId).toBe('inst-1');
-    expect(teacher.role).toBe('School Teacher');
+    expect(teacher.teacherMeta.firstName).toBe('Anita');
+    expect(teacher.teacherMeta.phoneNumber).toBe('9876543210');
+    expect(teacher.teacherMeta.phone).toBe('9876543210');
+    expect(teacher.teacherMeta.countryCode).toBe('+91');
+  });
+
+  it('prefers a stored teacherMeta over the flat fields beside it', () => {
+    const teacher = normaliseTeacher<Teacher>('t1', {
+      firstName: 'Stale',
+      teacherMeta: { firstName: 'Anita', lastName: 'Rao', phoneNumber: '9876543210' }
+    });
+
+    expect(teacher.teacherMeta.firstName).toBe('Anita');
+  });
+
+  /** Production's search key: lowercased, whitespace removed. */
+  it('derives fullNameLowerCase when the stored document has none', () => {
+    const teacher = normaliseTeacher<Teacher>('t1', { firstName: 'Santosh', lastName: 'Kanta' });
+
+    expect(teacher.teacherMeta.fullNameLowerCase).toBe('santoshkanta');
+  });
+
+  it('leaves uid empty, because registering a teacher creates no Auth user', () => {
+    expect(normaliseTeacher<Teacher>('t1', { firstName: 'Anita' }).teacherMeta.uid).toBe('');
+  });
+
+  it('reads a stored classrooms map, keeping its key as the classroom id', () => {
+    const teacher = normaliseTeacher<Teacher>('t1', {
+      classrooms: { c1: { classroomName: '4 A', institutionName: 'Airaa Academy' } }
+    });
+
+    expect(teacher.classrooms['c1'].classroomId).toBe('c1');
+    expect(teacher.classrooms['c1'].classroomName).toBe('4 A');
+    expect(teacher.classrooms['c1'].type).toBe('CLASSROOM');
+    expect(teacher.classrooms['c1'].programmes).toEqual([]);
   });
 
   /**
-   * THE MIGRATION. The first teachers written here carried grade, section,
-   * programmeId and programmeName as four FLAT fields, before the form grew a ⊕
-   * that adds a second class. Those documents are real and must not read back as
-   * a teacher who takes nothing.
+   * LEGACY. The first teachers here carried a flat `classes` array of
+   * grade/section/programme with no classroom behind it, because the wizard
+   * collected those before the school had any classrooms. Those rows must not
+   * read back as a teacher who takes nothing.
    */
-  it('folds the legacy single-class shape into a one-element array', () => {
+  it('folds a legacy classes array into classrooms, keyed by programme', () => {
     const teacher = normaliseTeacher<Teacher>('t1', {
-      grade: '1',
-      section: 'A',
-      programmeId: 'prog-1',
-      programmeName: 'Science'
+      classes: [{ grade: '1', section: 'A', programmeId: 'prog-1', programmeName: 'Science' }]
     });
 
-    expect(teacher.classes).toEqual([
-      { grade: '1', section: 'A', programmeId: 'prog-1', programmeName: 'Science' }
-    ]);
+    expect(teacher.classrooms['prog-1'].grade).toBe('1');
+    expect(teacher.classrooms['prog-1'].section).toBe('A');
+    expect(teacher.classrooms['prog-1'].programmes[0].programmeName).toBe('Science');
   });
 
-  it('prefers a real classes array over any legacy fields beside it', () => {
+  /** No classroom existed to reference, so the id stays visibly empty. */
+  it('leaves a legacy entry with no classroomId rather than inventing one', () => {
     const teacher = normaliseTeacher<Teacher>('t1', {
-      grade: '9',
-      section: 'Z',
-      classes: [{ grade: '1', section: 'A', programmeId: 'p', programmeName: 'Science' }]
+      classes: [{ grade: '1', section: 'A', programmeId: 'prog-1', programmeName: 'Science' }]
     });
 
-    expect(teacher.classes.length).toBe(1);
-    expect(teacher.classes[0].section).toBe('A');
+    expect(teacher.classrooms['prog-1'].classroomId).toBe('');
   });
 
-  it('reads a teacher with neither shape as taking no classes', () => {
-    expect(normaliseTeacher<Teacher>('t1', { firstName: 'Anita' }).classes).toEqual([]);
-  });
-
-  it('fills gaps inside a stored class entry', () => {
-    const teacher = normaliseTeacher<Teacher>('t1', { classes: [{ grade: '1' }] });
-
-    expect(teacher.classes[0]).toEqual({
-      grade: '1', section: '', programmeId: '', programmeName: ''
+  it('prefers a real classrooms map over a legacy classes array beside it', () => {
+    const teacher = normaliseTeacher<Teacher>('t1', {
+      classes: [{ grade: '9', section: 'Z', programmeId: 'old' }],
+      classrooms: { c1: { classroomName: '4 A' } }
     });
+
+    expect(Object.keys(teacher.classrooms)).toEqual(['c1']);
+  });
+
+  it('reads a teacher with neither shape as taking no classrooms', () => {
+    expect(normaliseTeacher<Teacher>('t1', { firstName: 'Anita' }).classrooms).toEqual({});
   });
 
   /**
@@ -237,63 +247,70 @@ describe('normaliseTeacher', () => {
   });
 });
 
-describe('mergeClasses', () => {
+describe('mergeClassrooms', () => {
 
-  const cls = (grade: string, section: string, programmeId: string, programmeName = 'Science') =>
-    ({ grade, section, programmeId, programmeName });
+  function entry(classroomId: string, programmeIds: string[]) {
+    return {
+      activeStatus: true,
+      classroomId,
+      classroomName: '4 A',
+      grade: '4',
+      section: 'A',
+      institutionId: 'inst-1',
+      institutionName: 'Airaa Academy',
+      type: 'CLASSROOM' as const,
+      userRole: 'schoolTeacher',
+      programmes: programmeIds.map(programmeId => ({
+        programmeId,
+        programmeName: 'Science',
+        displayName: 'Science',
+        programmeCode: 'P1',
+        sequentiallyLocked: false
+      })),
+      createdAt: null as never
+    };
+  }
 
-  it('appends a class the teacher does not have', () => {
-    const merged = mergeClasses([cls('1', 'A', 'p1')], [cls('2', 'B', 'p2')]);
+  it('adds a classroom the teacher does not have', () => {
+    const merged = mergeClassrooms({ c1: entry('c1', ['p1']) }, { c2: entry('c2', ['p2']) });
 
-    expect(merged.map(classKey)).toEqual(['1|A|p1', '2|B|p2']);
+    expect(Object.keys(merged).sort()).toEqual(['c1', 'c2']);
   });
 
   /**
-   * THE BUG THIS CATCHES: the lookup makes re-submitting the same class easy to
-   * do by accident, and a growing list of identical entries is the result.
+   * THE POINT OF THE MERGE. Re-registering a teacher against a classroom they
+   * already have must not discard the programmes already on that entry.
    */
-  it('drops a class the teacher already has', () => {
-    const merged = mergeClasses([cls('1', 'A', 'p1')], [cls('1', 'A', 'p1')]);
+  it('unions the programmes on a classroom the teacher already has', () => {
+    const merged = mergeClassrooms({ c1: entry('c1', ['p1']) }, { c1: entry('c1', ['p2']) });
 
-    expect(merged.length).toBe(1);
+    expect(merged['c1'].programmes.map(p => p.programmeId)).toEqual(['p1', 'p2']);
   });
 
-  /**
-   * programmeName is a denormalised SNAPSHOT, so two entries for the same class
-   * written either side of a rename must not read as different classes.
-   */
-  it('ignores the programme name when deciding what is a duplicate', () => {
-    const merged = mergeClasses(
-      [cls('1', 'A', 'p1', 'Science')],
-      [cls('1', 'A', 'p1', 'Science — renamed')]
-    );
+  it('does not duplicate a programme already on the entry', () => {
+    const merged = mergeClassrooms({ c1: entry('c1', ['p1']) }, { c1: entry('c1', ['p1']) });
 
-    expect(merged.length).toBe(1);
-    expect(merged[0].programmeName).toBe('Science');
+    expect(merged['c1'].programmes.length).toBe(1);
   });
 
-  it('keeps the stored entry rather than the incoming one', () => {
-    const merged = mergeClasses([cls('1', 'A', 'p1', 'Original')], [cls('1', 'A', 'p1', 'New')]);
+  /** The stored entry keeps its own snapshot rather than being overwritten. */
+  it('keeps the existing programme entry when the addition matches it', () => {
+    const existing = entry('c1', ['p1']);
+    existing.programmes[0].programmeName = 'Science (stored)';
 
-    expect(merged[0].programmeName).toBe('Original');
+    const merged = mergeClassrooms({ c1: existing }, { c1: entry('c1', ['p1']) });
+
+    expect(merged['c1'].programmes[0].programmeName).toBe('Science (stored)');
   });
 
-  it('deduplicates within the additions themselves', () => {
-    const merged = mergeClasses([], [cls('1', 'A', 'p1'), cls('1', 'A', 'p1')]);
+  it('does not mutate either input', () => {
+    const existing = { c1: entry('c1', ['p1']) };
+    mergeClassrooms(existing, { c1: entry('c1', ['p2']) });
 
-    expect(merged.length).toBe(1);
+    expect(existing['c1'].programmes.length).toBe(1);
   });
 
-  it('leaves the existing list alone when there is nothing to add', () => {
-    const existing = [cls('1', 'A', 'p1')];
-
-    expect(mergeClasses(existing, [])).toEqual(existing);
-  });
-
-  it('does not mutate its input', () => {
-    const existing = [cls('1', 'A', 'p1')];
-    mergeClasses(existing, [cls('2', 'B', 'p2')]);
-
-    expect(existing.length).toBe(1);
+  it('returns the additions when there is nothing stored yet', () => {
+    expect(mergeClassrooms({}, { c1: entry('c1', ['p1']) })['c1'].classroomId).toBe('c1');
   });
 });

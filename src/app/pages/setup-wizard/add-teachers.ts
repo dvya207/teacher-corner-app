@@ -5,14 +5,14 @@ import { Icon } from '../../components/icon/icon';
 import { gradeLabel } from '../../data/classroom-options';
 import {
   KnownTeacher,
-  TeacherClassEntry,
+  TeacherClassroomEntry,
   TeacherEntry,
-  emptyClassEntry,
+  emptyClassroomEntry,
   emptyTeacherEntry,
   findKnownTeacher,
-  isBlankClass,
+  isBlankClassroom,
   isBlankEntry,
-  isCompleteClass,
+  isCompleteClassroom,
   isCompleteEntry,
   isValidEmail,
   isValidPhone,
@@ -93,6 +93,15 @@ export class AddTeachers {
   readonly saving = input(false);
 
   /**
+   * The chosen school's classrooms, as pickable options.
+   *
+   * `programmes` is the label of what each one runs, shown under the select
+   * because a teacher inherits it rather than choosing it. Resolved by the
+   * wizard, which owns the classroom read.
+   */
+  readonly classroomOptions = input<readonly { id: string; label: string; programmes: string }[]>([]);
+
+  /**
    * The chosen institution's programme catalogue.
    *
    * Passed in rather than read here, because WHICH catalogue is a wizard
@@ -129,8 +138,13 @@ export class AddTeachers {
   /** The one teacher being entered, with the class rows they take. */
   readonly entry = signal<TeacherEntry>(emptyTeacherEntry());
 
-  /** The class rows, read straight off the teacher. */
-  readonly classes = computed(() => this.entry().classes);
+  /** The programme names a chosen classroom will contribute, or '' for none. */
+  programmesFor(classroomId: string): string {
+    return this.classroomOptions().find(option => option.id === classroomId)?.programmes ?? '';
+  }
+
+  /** The classroom rows, read straight off the teacher. */
+  readonly classrooms = computed(() => this.entry().classrooms);
 
   /**
    * Which controls have been left, and whether Submit has been pressed.
@@ -142,7 +156,7 @@ export class AddTeachers {
   private readonly blurred = signal<ReadonlySet<string>>(new Set());
   private readonly attempted = signal(false);
 
-  readonly count = computed(() => this.classes().length);
+  readonly count = computed(() => this.classrooms().length);
 
   /**
    * The registered teacher this number belongs to, or undefined.
@@ -161,11 +175,11 @@ export class AddTeachers {
   readonly identityLocked = computed(() => !!this.matched());
 
   /** No ⊕ for a teacher who already exists — there is nothing to add. */
-  readonly canAddClass = computed(() => !this.identityLocked());
+  readonly canAddClassroom = computed(() => !this.identityLocked());
 
   /** Only the last class row is editable; the ones above it are committed. */
   locked(index: number): boolean {
-    return index < this.classes().length - 1;
+    return index < this.classrooms().length - 1;
   }
 
   /**
@@ -249,10 +263,10 @@ export class AddTeachers {
   }
 
   /** A field on one class row. */
-  updateClass(index: number, field: keyof TeacherClassEntry, value: string): void {
+  updateClassroom(index: number, field: keyof TeacherClassroomEntry, value: string): void {
     this.entry.update(current => ({
       ...current,
-      classes: current.classes.map((row, position) =>
+      classrooms: current.classrooms.map((row, position) =>
         position === index ? { ...row, [field]: value } : row
       )
     }));
@@ -266,20 +280,20 @@ export class AddTeachers {
    * way back would be deleting it. With no rows yet there is nothing to refuse
    * over, so the first press always works.
    */
-  addClass(): void {
-    if (!this.canAddClass()) {
+  addClassroom(): void {
+    if (!this.canAddClassroom()) {
       return;
     }
 
-    const rows = this.classes();
+    const rows = this.classrooms();
     const last = rows[rows.length - 1];
 
-    if (last && !isCompleteClass(last)) {
+    if (last && !isCompleteClassroom(last)) {
       this.attempted.set(true);
       return;
     }
 
-    this.entry.update(current => ({ ...current, classes: [...current.classes, emptyClassEntry()] }));
+    this.entry.update(current => ({ ...current, classrooms: [...current.classrooms, emptyClassroomEntry()] }));
   }
 
   /**
@@ -294,10 +308,10 @@ export class AddTeachers {
    * row means a keyboard or programmatic caller; it is handled rather than
    * guarded against.
    */
-  removeClass(index: number): void {
+  removeClassroom(index: number): void {
     this.entry.update(current => ({
       ...current,
-      classes: current.classes.filter((_, position) => position !== index)
+      classrooms: current.classrooms.filter((_, position) => position !== index)
     }));
 
     this.blurred.set(new Set());
@@ -346,8 +360,8 @@ export class AddTeachers {
    * filling in. After a submit attempt it is the only thing explaining a dead
    * button.
    */
-  classesMissing(): boolean {
-    return this.attempted() && !this.classes().some(row => isCompleteClass(row));
+  classroomsMissing(): boolean {
+    return this.attempted() && !this.classrooms().some(row => isCompleteClassroom(row));
   }
 
   /** A required field on the teacher left empty. */
@@ -362,8 +376,8 @@ export class AddTeachers {
    * blank trailing row is only wrong once Submit has been pressed, because until
    * then the user may simply not have reached it.
    */
-  missingClass(index: number, field: keyof TeacherClassEntry): boolean {
-    const row = this.classes()[index];
+  missingClassroom(index: number, field: keyof TeacherClassroomEntry): boolean {
+    const row = this.classrooms()[index];
 
     // A read-only row cannot be wrong, whether it is read-only because it was
     // committed or because the teacher already exists.
@@ -371,7 +385,7 @@ export class AddTeachers {
       return false;
     }
 
-    if (isBlankClass(row) && !this.attempted()) {
+    if (isBlankClassroom(row) && !this.attempted()) {
       return false;
     }
 
@@ -388,7 +402,7 @@ export class AddTeachers {
    * Hands the teacher up, then resets to a blank one.
    *
    * The button is disabled while incomplete, so this rarely runs against a bad
-   * form — but the guard stays, because `addClass()` also sets `attempted` and a
+   * form — but the guard stays, because `addClassroom()` also sets `attempted` and a
    * keyboard or programmatic call must not slip past.
    */
   submit(): void {
@@ -412,7 +426,7 @@ export class AddTeachers {
 
     this.submitted.emit([{
       ...entry,
-      classes: entry.classes.filter(row => !isBlankClass(row))
+      classrooms: entry.classrooms.filter(row => !isBlankClassroom(row))
     }]);
 
     this.entry.set(emptyTeacherEntry());

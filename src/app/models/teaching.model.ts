@@ -684,23 +684,103 @@ export interface PickableUnit {
 /**
  * One class a teacher takes: a grade, a section and the programme running in it.
  */
-export interface TeacherClass {
-  /** Bare, as stored: '1', not 'Class 1'. */
+/**
+ * One programme on a teacher's classroom entry.
+ *
+ * PRODUCTION'S SHAPE AND NAMES, taken from Teachers/{id}.classrooms[].programmes
+ * in thinktac-india-production: an ARRAY on the classroom entry, carrying the
+ * same five keys ClassroomProgramme does minus the workflow. Kept identical so a
+ * document written here is readable by production and vice versa.
+ *
+ * The names are a SNAPSHOT at assignment time, the same trade ClassroomProgramme
+ * makes. ProgrammeService.propagateRename refreshes them on a rename.
+ */
+export interface TeacherProgramme {
+  /** programmes/{docId}. */
+  programmeId: string;
+  programmeName: string;
+  displayName: string;
+  programmeCode: string;
+  sequentiallyLocked: boolean;
+}
+
+/**
+ * One classroom a teacher takes, as stored ON THE TEACHER.
+ *
+ * A DENORMALISED COPY of classrooms/{docId}, not a reference. Production does
+ * the same: a teacher's classrooms map carries the classroom's name, grade,
+ * section, type and its school's name, so rendering a teacher costs one read
+ * rather than one per classroom.
+ *
+ * `userRole` is PER CLASSROOM, not per teacher — production models a person who
+ * is a schoolTeacher in one classroom and something else in another, and this
+ * follows it rather than hoisting one role onto the teacher.
+ */
+export interface TeacherClassroom {
+  /** In use or not. Production's per-classroom flag. */
+  activeStatus: boolean;
+
+  /** classrooms/{docId}. The key this entry is stored under, repeated inside. */
+  classroomId: string;
+  classroomName: string;
+
+  /** Bare, as stored: '1', not 'Class 1'. Empty for a STEM club. */
   grade: string;
-  /** A–Z, or 'NA' for a school that does not section its grades. */
+  /** A–Z, or 'NA'. Empty for a STEM club. */
   section: string;
 
-  /** programmes/{docId}, from the institution's catalogue. */
-  programmeId: string;
-  /**
-   * The programme's name at the time of assignment.
-   *
-   * Denormalised so a teacher list renders without reading the whole catalogue,
-   * the same trade `ClassroomProgramme` already makes. It is a snapshot: a
-   * programme later renamed does not rewrite it.
-   */
-  programmeName: string;
+  /** institutions/{docId}, and its name denormalised alongside. */
+  institutionId: string;
+  institutionName: string;
+
+  type: ClassroomType;
+
+  /** This teacher's role IN THIS CLASSROOM, e.g. 'schoolTeacher'. */
+  userRole: string;
+
+  programmes: TeacherProgramme[];
+
+  createdAt: Timestamp;
 }
+
+/**
+ * The person, grouped into one map.
+ *
+ * PRODUCTION'S `teacherMeta`. Identity lives here rather than at the top level
+ * so the document splits cleanly into "who they are" and "what they teach", and
+ * so a profile edit writes one field.
+ *
+ * `phone` AND `phoneNumber` both carry the subscriber digits. That duplication is
+ * production's, kept deliberately: dropping either makes a document this app
+ * writes unreadable to a production reader that expects the other.
+ *
+ * `uid` is the teacher's Firebase Auth uid, and is EMPTY until they sign in.
+ * Registering a teacher creates no Auth user — see the Teacher/TeacherProfile
+ * distinction above — so there is nothing to put here at creation time.
+ */
+export interface TeacherMeta {
+  /** Dial code only, e.g. '+91'. Never folded into the number. */
+  countryCode: string;
+
+  email: string;
+
+  firstName: string;
+  lastName: string;
+
+  /** first + last, lowercased and stripped of spaces. Production's search key. */
+  fullNameLowerCase: string;
+
+  /** Subscriber digits only — no dial code, no separators. */
+  phone: string;
+  /** The same digits under production's other name for them. */
+  phoneNumber: string;
+
+  /** Firebase Auth uid, or '' until this teacher has signed in. */
+  uid: string;
+
+  updatedAt: Timestamp;
+}
+
 
 /**
  * teachers/{teacherId} — a teacher registered against one institution.
@@ -717,69 +797,45 @@ export interface TeacherClass {
  * string — so the two can never disagree about which country a number is from.
  */
 export interface Teacher {
-  /** Mirrors the Firestore document id, as every other collection here does. */
+  /**
+   * Mirrors the Firestore document id, which is the teacher's SUBSCRIBER DIGITS.
+   *
+   * Keyed by phone rather than by a random id: the phone number is what the OTP
+   * flow resolves a person by, so a teacher registered by an admin is findable
+   * the moment that person signs in. Production keys by Auth uid instead, which
+   * is not available here because registering a teacher creates no Auth user.
+   *
+   * Matching is on the subscriber digits ALONE, without the dial code, which is
+   * what findKnownTeacher already does.
+   */
   docId: string;
 
-  /** The admin who registered them. Set from the session, never from a form. */
+  /**
+   * The admin who registered them. Set from the session, never from a form.
+   *
+   * NOT PRODUCTION'S, and kept regardless: the trash queries and
+   * ownedActiveTeachers filter on it, and the rules' ownership helpers read it.
+   */
   ownerId: string;
 
-  /** The institution this teacher belongs to: institutions/{docId}. */
-  institutionId: string;
-
-  firstName: string;
-  lastName: string;
+  /** Who they are. */
+  teacherMeta: TeacherMeta;
 
   /**
-   * first + last, collapsed.
+   * What they teach, KEYED BY classroomId.
    *
-   * Denormalised for the same reason `representativeName` is on an institution:
-   * lists and search read one field rather than concatenating on every render,
-   * and the service is the only thing that writes it.
+   * A MAP rather than an array, following production, and it is the better shape
+   * here too: attaching one classroom is a single dotted-path write that cannot
+   * disturb the others, where an array has to be rewritten whole.
    */
-  teacherName: string;
+  classrooms: Record<string, TeacherClassroom>;
 
-  /**
-   * OPTIONAL AT THE FORM, always present as a field.
-   *
-   * Stored as '' rather than omitted when not given. A missing key and an empty
-   * string are the same thing to a reader but not to Firestore, and the empty
-   * string is the one that does not break an update built by reading keys off a
-   * loaded document.
-   */
-  email: string;
+  /** Touched by activity, not by an edit. Production's field. */
+  lastActivityAt: Timestamp;
 
-  /** Dial code only, e.g. '+91'. Never folded into phoneNumber. */
-  countryCode: string;
-  /** Subscriber digits only — no dial code, no separators. */
-  phoneNumber: string;
-
-  /** One of TEACHER_ROLES in data/teacher-options.ts. */
-  role: string;
-
-  /**
-   * The classes this teacher takes. AN ARRAY, because a teacher takes several.
-   *
-   * NOT CLASSROOM REFERENCES. Grade, section and programme describe a class, and
-   * `classrooms/{id}` already models exactly that — but the Set Up Wizard
-   * collects these immediately after creating an institution, when that
-   * institution has no classrooms at all. Referencing one would make the step
-   * unreachable; creating one as a side effect would have the wizard silently
-   * writing a second collection the form never mentions. A `classroomId` can be
-   * added to each entry later without reshaping the teacher.
-   *
-   * An ARRAY OF MAPS rather than a subcollection: a teacher takes a handful of
-   * classes, they are always read with the teacher, and they are rewritten as a
-   * set rather than individually — which is precisely when a map array beats a
-   * subcollection that would cost another read and another rule block.
-   */
-  classes: TeacherClass[];
-
-  /** In use or not. Mirrors an institution's `active`; nothing toggles it yet. */
-  active: boolean;
-
-  createdAt: Timestamp;
   updatedAt: Timestamp;
 }
+
 
 /**
  * What the caller supplies. Everything else is the service's to set.
@@ -790,7 +846,7 @@ export interface Teacher {
  */
 export type TeacherDraft = Omit<
   Teacher,
-  'docId' | 'ownerId' | 'teacherName' | 'createdAt' | 'updatedAt'
+  'docId' | 'ownerId' | 'lastActivityAt' | 'updatedAt'
 >;
 
 /**

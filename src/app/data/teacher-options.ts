@@ -17,18 +17,19 @@
  * set of contact details, not another teacher — so this is the repeated unit and
  * the teacher above it is not.
  */
-export interface TeacherClassEntry {
+export interface TeacherClassroomEntry {
   /**
-   * Stored bare — '1', not 'Class 1'. `gradeLabel()` in classroom-options.ts is
-   * what the control shows; prettifying the stored value would write something no
-   * other screen and no imported row would match.
+   * A classrooms/{docId} from the chosen school.
+   *
+   * ONE FIELD, not grade + section + programme. The classroom document already
+   * carries its grade, section, type and the programmes it runs, so the form
+   * picks the classroom and the write copies the rest from it. Choosing a
+   * programme separately would let a teacher be attached to a programme the
+   * classroom does not actually run.
    */
-  grade: string;
-  /** A–Z, or production's 'NA' for a school that does not section its grades. */
-  section: string;
-  /** A programmes/{docId} from the chosen institution's catalogue. */
-  programmeId: string;
+  classroomId: string;
 }
+
 
 /**
  * The shape the form needs to recognise a number it has seen before.
@@ -57,14 +58,14 @@ export interface TeacherEntry {
   lastName: string;
   role: string;
 
-  /** The classes this teacher takes. At least one, and the ⊕ adds more. */
-  classes: TeacherClassEntry[];
+  /** The classrooms this teacher takes. At least one, and the ⊕ adds more. */
+  classrooms: TeacherClassroomEntry[];
 
   /**
    * The teachers/{docId} this phone number already belongs to, or ''.
    *
    * SET BY LOOKUP, never typed. Its presence is what tells the wizard to append
-   * these classes to somebody who exists rather than writing a second teacher
+   * these classrooms to somebody who exists rather than writing a second teacher
    * with the same phone number.
    */
   existingId: string;
@@ -116,8 +117,8 @@ export const DEFAULT_TEACHER_GRADE = '1';
  * Grade opens on Class 1 as the reference does; Section and Programme get no
  * default, because guessing either would be guessing which class a teacher takes.
  */
-export function emptyClassEntry(): TeacherClassEntry {
-  return { grade: DEFAULT_TEACHER_GRADE, section: '', programmeId: '' };
+export function emptyClassroomEntry(): TeacherClassroomEntry {
+  return { classroomId: '' };
 }
 
 /**
@@ -134,7 +135,7 @@ export function emptyTeacherEntry(): TeacherEntry {
     firstName: '',
     lastName: '',
     role: DEFAULT_TEACHER_ROLE,
-    classes: [],
+    classrooms: [],
     existingId: ''
   };
 }
@@ -220,27 +221,28 @@ export function isCompleteEntry(entry: TeacherEntry): boolean {
      * This reverses an earlier decision, and the reason it was optional still
      * applies: the Grade/Section/Programme controls are hidden until the ⊕ is
      * pressed, so a user who never presses it sees a form that looks finished
-     * with a dead Submit. `classesMissing()` on the component exists to say so
+     * with a dead Submit. `classroomsMissing()` on the component exists to say so
      * out loud rather than leaving them to guess.
      *
      * A blank row is still tolerated — that is what a ⊕ pressed one time too
      * many leaves behind, and submit() drops it — but it does not satisfy the
      * requirement on its own. A half-filled row is a genuine mistake and blocks.
      */
-    entry.classes.some(row => isCompleteClass(row)) &&
-    entry.classes.every(row => isBlankClass(row) || isCompleteClass(row))
+    entry.classrooms.some(row => isCompleteClassroom(row)) &&
+    entry.classrooms.every(row => isBlankClassroom(row) || isCompleteClassroom(row))
   );
 }
 
-/** Every one of a class row's three controls answered. */
-export function isCompleteClass(row: TeacherClassEntry): boolean {
-  return row.grade !== '' && row.section !== '' && row.programmeId !== '';
+/** A classroom row with a classroom actually chosen. */
+export function isCompleteClassroom(row: TeacherClassroomEntry): boolean {
+  return row.classroomId !== '';
 }
 
 /** A class row nobody has touched beyond its defaulted grade. */
-export function isBlankClass(row: TeacherClassEntry): boolean {
-  return row.section === '' && row.programmeId === '';
+export function isBlankClassroom(row: TeacherClassroomEntry): boolean {
+  return row.classroomId === '';
 }
+
 
 /**
  * Whether the row is still untouched, and so safe to skip on submit.
@@ -256,7 +258,7 @@ export function isBlankEntry(entry: TeacherEntry): boolean {
     entry.email === '' &&
     entry.firstName === '' &&
     entry.lastName === '' &&
-    entry.classes.every(isBlankClass)
+    entry.classrooms.every(isBlankClassroom)
   );
 }
 

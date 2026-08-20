@@ -14,16 +14,21 @@ import {
   toPincodeDigits
 } from '../../data/setup-wizard-options';
 import {
+  Classroom,
   Institution,
   InstitutionDraft,
   Programme,
   Teacher,
+  TeacherClassroom,
   TeacherDraft
 } from '../../models/teaching.model';
+import { Timestamp } from 'firebase/firestore';
 import { InstitutionService } from '../../services/institution.service';
 import { ProgrammeService } from '../../services/programme.service';
 import { TeacherService } from '../../services/teacher.service';
 import { TeacherEntry } from '../../data/teacher-options';
+import { classroomTitle } from '../../data/classroom-options';
+import { ClassroomService } from '../../services/classroom.service';
 import { AddInstitutionInline } from '../classrooms/add-institution-inline';
 import { AddTeachers } from './add-teachers';
 import { BulkUploadSchools } from './bulk-upload-schools';
@@ -39,12 +44,17 @@ import { BulkUploadSchools } from './bulk-upload-schools';
  * Falls back to the plain sentence when the name is empty, and counts instead
  * when more than one teacher came back at once.
  */
-export function registeredMessage(saved: readonly { teacherName?: string }[]): string {
+export function registeredMessage(
+  saved: readonly { teacherMeta?: { firstName?: string; lastName?: string } }[]
+): string {
   if (saved.length > 1) {
     return `${saved.length} teachers registered successfully`;
   }
 
-  const name = saved[0]?.teacherName?.trim();
+  // Composed here rather than read off a stored field: identity moved into
+  // teacherMeta and there is no denormalised full name on the document any more.
+  const meta = saved[0]?.teacherMeta;
+  const name = `${meta?.firstName ?? ''} ${meta?.lastName ?? ''}`.trim();
 
   return name ? `${name} registered successfully` : 'Teacher registered successfully';
 }
@@ -99,6 +109,7 @@ export class SetupWizard implements OnInit, OnDestroy {
 
   private institutionService = inject(InstitutionService);
   private teacherService = inject(TeacherService);
+  private classroomService = inject(ClassroomService);
   private programmeService = inject(ProgrammeService);
 
   readonly steps = SETUP_WIZARD_STEPS;
@@ -175,6 +186,30 @@ export class SetupWizard implements OnInit, OnDestroy {
   private readonly programmes = signal<Programme[]>([]);
 
   /**
+   * The registered teachers as the lookup wants them.
+   *
+   * FLATTENED OUT OF teacherMeta: findKnownTeacher matches on subscriber digits
+   * and the form fills identity fields from the result, neither of which should
+   * have to know that identity moved into a nested map.
+   */
+  readonly knownTeachers = computed(() =>
+    this.registered().map(teacher => ({
+      docId: teacher.docId,
+      countryCode: teacher.teacherMeta.countryCode,
+      phoneNumber: teacher.teacherMeta.phoneNumber,
+      firstName: teacher.teacherMeta.firstName,
+      lastName: teacher.teacherMeta.lastName,
+      email: teacher.teacherMeta.email,
+      // Per classroom now, so there is no single role to report. The form only
+      // reads this to prefill its Role select, which the teacher can change.
+      role: Object.values(teacher.classrooms)[0]?.userRole ?? ''
+    }))
+  );
+
+  /** The classrooms step 2 attaches teachers to. Loaded with the rest. */
+  private readonly classrooms = signal<Classroom[]>([]);
+
+  /**
    * The programmes step 2 may assign, as {id, name} for the control.
    *
    * THREE FILTERS, each load-bearing:
@@ -198,6 +233,74 @@ export class SetupWizard implements OnInit, OnDestroy {
       .sort((a, b) => (a.displayName || a.programmeName).localeCompare(b.displayName || b.programmeName))
       .map(programme => ({ id: programme.docId, name: programme.displayName || programme.programmeName }))
   );
+
+  /**
+   * The chosen school's classrooms, as options for step 2.
+   *
+   * Filtered to the school step 1 selected, for the same reason
+   * assignableProgrammes is: attaching a teacher to another school's classroom
+   * would be a data error the form should not make reachable.
+   */
+  readonly classroomOptions = computed(() =>
+    this.classrooms()
+      .filter(classroom => classroom.institutionId === this.school())
+      .map(classroom => ({
+        id: classroom.docId,
+        label: classroomTitle(classroom),
+        programmes: Object.values(classroom.programmes ?? {})
+          .map(entry => entry.displayName || entry.programmeName)
+          .filter(Boolean)
+          .join(', ')
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  );
+
+  /**
+   * The teacher's classrooms map, COPIED FROM THE CLASSROOM DOCUMENTS.
+   *
+   * Everything but the role comes from the classroom itself, so a teacher can
+   * never carry a grade, a school or a programme the classroom does not have.
+   * The role is the one per-classroom value the form supplies.
+   *
+   * Rows whose classroom has since disappeared are dropped rather than written
+   * as an entry with empty fields.
+   */
+  private classroomsMapFor(
+    rows: readonly { classroomId: string }[],
+    userRole: string
+  ): Record<string, TeacherClassroom> {
+    const byId = new Map(this.classrooms().map(classroom => [classroom.docId, classroom]));
+
+    const entries = rows
+      .map(row => byId.get(row.classroomId))
+      .filter((classroom): classroom is Classroom => classroom !== undefined)
+      .map(classroom => [
+        classroom.docId,
+        {
+          activeStatus: true,
+          classroomId: classroom.docId,
+          classroomName: classroom.type === 'STEM-CLUB'
+            ? classroom.stemClubName
+            : classroom.classroomName,
+          grade: classroom.grade,
+          section: classroom.section,
+          institutionId: classroom.institutionId,
+          institutionName: classroom.institutionName,
+          type: classroom.type,
+          userRole,
+          programmes: Object.values(classroom.programmes ?? {}).map(programme => ({
+            programmeId: programme.programmeId,
+            programmeName: programme.programmeName,
+            displayName: programme.displayName,
+            programmeCode: programme.programmeCode,
+            sequentiallyLocked: programme.sequentiallyLocked === true
+          })),
+          createdAt: null as unknown as Timestamp
+        } satisfies TeacherClassroom
+      ] as const);
+
+    return Object.fromEntries(entries);
+  }
 
   /** The dial code step 2's phone prefix shows, from step 1's country. */
   readonly dialCode = computed(() => dialFor(this.country()));
@@ -236,10 +339,11 @@ export class SetupWizard implements OnInit, OnDestroy {
      * blocking the institution choice — so a failing catalogue must not take the
      * whole page down with it. Step 2 says so itself when the list is empty.
      */
-    const [institutions, programmes, teachers] = await Promise.allSettled([
+    const [institutions, programmes, teachers, classrooms] = await Promise.allSettled([
       this.institutionService.list(),
       this.programmeService.list(),
-      this.teacherService.list()
+      this.teacherService.list(),
+      this.classroomService.list()
     ]);
 
     if (institutions.status === 'fulfilled') {
@@ -254,6 +358,12 @@ export class SetupWizard implements OnInit, OnDestroy {
 
     if (programmes.status === 'fulfilled') {
       this.programmes.set(programmes.value);
+    }
+
+    // Same treatment as the catalogue: step 2 reports an empty list itself, so a
+    // failed classroom read must not take step 1 down with it.
+    if (classrooms.status === 'fulfilled') {
+      this.classrooms.set(classrooms.value);
     }
 
     /**
@@ -554,25 +664,22 @@ export class SetupWizard implements OnInit, OnDestroy {
     this.savingTeachers.set(true);
     this.teacherError.set('');
 
-    const byId = new Map(this.assignableProgrammes().map(option => [option.id, option.name]));
-
     const drafts: TeacherDraft[] = entries.map(entry => ({
-      institutionId: this.school(),
-      firstName: entry.firstName.trim(),
-      lastName: entry.lastName.trim(),
-      email: entry.email.trim(),
-      countryCode: this.dialCode(),
-      phoneNumber: entry.phone,
-      role: entry.role,
-      // Snapshot of each name at assignment time, resolved here because the form
-      // only ever holds ids. A programme later renamed does not rewrite these.
-      classes: entry.classes.map(row => ({
-        grade: row.grade,
-        section: row.section,
-        programmeId: row.programmeId,
-        programmeName: byId.get(row.programmeId) ?? ''
-      })),
-      active: true
+      teacherMeta: {
+        countryCode: this.dialCode(),
+        email: entry.email.trim(),
+        firstName: entry.firstName.trim(),
+        lastName: entry.lastName.trim(),
+        // Derived by the service on write; present here so the draft is complete.
+        fullNameLowerCase: '',
+        phone: entry.phone,
+        phoneNumber: entry.phone,
+        // EMPTY BY DESIGN: registering a teacher creates no Auth user, so there
+        // is no uid until that person signs in for themselves.
+        uid: '',
+        updatedAt: null as unknown as Timestamp
+      },
+      classrooms: this.classroomsMapFor(entry.classrooms, entry.role)
     }));
 
     try {
@@ -593,7 +700,7 @@ export class SetupWizard implements OnInit, OnDestroy {
 
         saved.push(
           existing
-            ? await this.teacherService.appendClasses(existing, drafts[index].classes)
+            ? await this.teacherService.appendClassrooms(existing, drafts[index].classrooms)
             : (await this.teacherService.createMany([drafts[index]]))[0]
         );
       }

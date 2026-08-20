@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Timestamp } from 'firebase/firestore';
 
 import {
+  Classroom,
   Institution,
   InstitutionDraft,
   Programme,
@@ -10,6 +11,7 @@ import {
   TeacherDraft
 } from '../../models/teaching.model';
 import { InstitutionService } from '../../services/institution.service';
+import { ClassroomService } from '../../services/classroom.service';
 import { ProgrammeService } from '../../services/programme.service';
 import { TeacherService } from '../../services/teacher.service';
 import { SetupWizard, registeredMessage } from './setup-wizard';
@@ -83,6 +85,47 @@ function programme(overrides: Partial<Programme> = {}): Programme {
   } as Programme;
 }
 
+/**
+ * The classrooms step 2 attaches teachers to.
+ *
+ * REQUIRED NOW: the form picks a classroom rather than a grade and a programme,
+ * so a wizard with no classrooms cannot register anybody.
+ */
+function classroomFixture(fields: Partial<Classroom> = {}): Classroom {
+  return {
+    docId: 'c1',
+    classroomId: 'c1',
+    classroomCode: 'C1',
+    type: 'CLASSROOM',
+    classroomName: '4 A',
+    stemClubName: '',
+    grade: '4',
+    section: 'A',
+    board: 'CBSE',
+    institutionId: 'inst-1',
+    institutionName: 'Oak School',
+    programmes: {
+      'prog-1': {
+        programmeId: 'prog-1',
+        programmeName: 'Science',
+        programmeCode: 'P1',
+        displayName: 'Science',
+        sequentiallyLocked: false
+      }
+    },
+    studentCounter: 0,
+    studentCredentialStoragePath: '',
+    ownerId: 'teacher-1',
+    ...fields
+  } as Classroom;
+}
+
+class StubClassroomService {
+  constructor(public classrooms: Classroom[] = [classroomFixture()]) {}
+  list = async (): Promise<Classroom[]> => this.classrooms;
+  describeError = (_error: unknown, fallback: string): string => fallback;
+}
+
 class StubProgrammeService {
   constructor(public programmes: Programme[] = [programme()]) {}
   list = async (): Promise<Programme[]> => this.programmes;
@@ -92,15 +135,22 @@ class StubProgrammeService {
 class StubTeacherService {
   createError: (Error & { created?: Teacher[] }) | null = null;
   calls: TeacherDraft[][] = [];
-  appended: { docId: string; classes: readonly unknown[] }[] = [];
+  appended: { docId: string; classrooms: Record<string, unknown> }[] = [];
   existing: Teacher[] = [];
   private next = 0;
 
   list = async (): Promise<Teacher[]> => this.existing;
 
-  appendClasses = async (teacher: Teacher, additions: readonly unknown[]): Promise<Teacher> => {
-    this.appended.push({ docId: teacher.docId, classes: additions });
-    return { ...teacher, classes: [...teacher.classes, ...additions] as Teacher['classes'] };
+  appendClassrooms = async (
+    teacher: Teacher,
+    additions: Record<string, unknown>
+  ): Promise<Teacher> => {
+    this.appended.push({ docId: teacher.docId, classrooms: additions });
+
+    return {
+      ...teacher,
+      classrooms: { ...teacher.classrooms, ...additions } as Teacher['classrooms']
+    };
   };
 
   createMany = async (drafts: TeacherDraft[]): Promise<Teacher[]> => {
@@ -112,10 +162,10 @@ class StubTeacherService {
 
     return drafts.map(draft => ({
       ...draft,
-      docId: `t${++this.next}`,
-      ownerId: 'teacher-1',
-      teacherName: `${draft.firstName} ${draft.lastName}`.trim()
-    } as Teacher));
+      // Keyed by phone, as the real service does.
+      docId: draft.teacherMeta.phoneNumber || `t${++this.next}`,
+      ownerId: 'teacher-1'
+    } as unknown as Teacher));
   };
 
   describeError = (_error: unknown, fallback: string): string => fallback;
@@ -158,7 +208,8 @@ describe('Set Up Wizard — Institution Selection', () => {
       providers: [
         { provide: InstitutionService, useValue: service },
         { provide: TeacherService, useValue: new StubTeacherService() },
-        { provide: ProgrammeService, useValue: new StubProgrammeService() }
+        { provide: ProgrammeService, useValue: new StubProgrammeService() },
+        { provide: ClassroomService, useValue: new StubClassroomService() }
       ]
     }).compileComponents();
 
@@ -596,7 +647,8 @@ describe('Set Up Wizard — Institution Selection', () => {
           }
         },
         { provide: TeacherService, useValue: new StubTeacherService() },
-        { provide: ProgrammeService, useValue: new StubProgrammeService() }
+        { provide: ProgrammeService, useValue: new StubProgrammeService() },
+        { provide: ClassroomService, useValue: new StubClassroomService() }
       ]
     }).compileComponents();
 
@@ -630,7 +682,8 @@ describe('Set Up Wizard — Add a New Institution', () => {
       providers: [
         { provide: InstitutionService, useValue: service },
         { provide: TeacherService, useValue: teacherService },
-        { provide: ProgrammeService, useValue: new StubProgrammeService() }
+        { provide: ProgrammeService, useValue: new StubProgrammeService() },
+        { provide: ClassroomService, useValue: new StubClassroomService() }
       ]
     }).compileComponents();
 
@@ -900,10 +953,12 @@ describe('Set Up Wizard — registering teachers', () => {
   let component: SetupWizard;
   let teacherService: StubTeacherService;
   let programmeService: StubProgrammeService;
+  let classroomService: StubClassroomService;
 
   async function reachStepTwo(programmes: Programme[] = [programme()]): Promise<void> {
     teacherService = new StubTeacherService();
     programmeService = new StubProgrammeService(programmes);
+    classroomService = new StubClassroomService();
 
     await TestBed.configureTestingModule({
       imports: [SetupWizard],
@@ -915,7 +970,8 @@ describe('Set Up Wizard — registering teachers', () => {
           ])
         },
         { provide: TeacherService, useValue: teacherService },
-        { provide: ProgrammeService, useValue: programmeService }
+        { provide: ProgrammeService, useValue: programmeService },
+        { provide: ClassroomService, useValue: classroomService }
       ]
     }).compileComponents();
 
@@ -938,22 +994,65 @@ describe('Set Up Wizard — registering teachers', () => {
     firstName: first,
     lastName: 'Rao',
     role: 'School Teacher',
-    classes: [{ grade: '1', section: 'A', programmeId: 'prog-1' }],
+    classrooms: [{ classroomId: 'c1' }],
     existingId: ''
   });
 
   /**
-   * institutionId comes from the WIZARD, not the form — the form never asks
-   * which school, and a form-supplied one would be a value the user could point
-   * anywhere.
+   * THE SCHOOL COMES FROM THE CLASSROOM, not from the form and no longer from
+   * the wizard either. Every field on a teacher's classroom entry is copied from
+   * the classroom document, so a teacher can never carry a school the classroom
+   * does not have.
    */
-  it('registers each row against the institution chosen in step 1', async () => {
+  it('copies the school off the classroom the teacher was attached to', async () => {
     await reachStepTwo();
 
     await component.addTeachers([row('9876543210')]);
 
     expect(teacherService.calls.length).toBe(1);
-    expect(teacherService.calls[0][0].institutionId).toBe('inst-1');
+    expect(teacherService.calls[0][0].classrooms['c1'].institutionId).toBe('inst-1');
+    expect(teacherService.calls[0][0].classrooms['c1'].institutionName).toBe('Oak School');
+  });
+
+  /** Grade, section and type are the classroom's, never re-typed on the form. */
+  it('copies the classroom’s own grade, section, name and type', async () => {
+    await reachStepTwo();
+
+    await component.addTeachers([row('9876543210')]);
+    const entry = teacherService.calls[0][0].classrooms['c1'];
+
+    expect(entry.classroomName).toBe('4 A');
+    expect(entry.grade).toBe('4');
+    expect(entry.section).toBe('A');
+    expect(entry.type).toBe('CLASSROOM');
+  });
+
+  /**
+   * THE TEACHER INHERITS THE CLASSROOM'S PROGRAMMES rather than choosing one.
+   * Picking a programme separately would allow attaching a teacher to a
+   * programme the classroom does not actually run.
+   */
+  it('inherits the programmes the classroom runs, in production’s shape', async () => {
+    await reachStepTwo();
+
+    await component.addTeachers([row('9876543210')]);
+
+    expect(teacherService.calls[0][0].classrooms['c1'].programmes).toEqual([{
+      programmeId: 'prog-1',
+      programmeName: 'Science',
+      displayName: 'Science',
+      programmeCode: 'P1',
+      sequentiallyLocked: false
+    }]);
+  });
+
+  /** Per classroom, following production, not hoisted onto the teacher. */
+  it('stores the role on the classroom entry', async () => {
+    await reachStepTwo();
+
+    await component.addTeachers([row('9876543210')]);
+
+    expect(teacherService.calls[0][0].classrooms['c1'].userRole).toBe('School Teacher');
   });
 
   /** The dial code follows step 1's country, and is stored apart from the digits. */
@@ -963,8 +1062,10 @@ describe('Set Up Wizard — registering teachers', () => {
     await component.addTeachers([row('9876543210')]);
     const draft = teacherService.calls[0][0];
 
-    expect(draft.countryCode).toBe('+91');
-    expect(draft.phoneNumber).toBe('9876543210');
+    expect(draft.teacherMeta.countryCode).toBe('+91');
+    expect(draft.teacherMeta.phoneNumber).toBe('9876543210');
+    // Production carries the same digits under both names.
+    expect(draft.teacherMeta.phone).toBe('9876543210');
   });
 
   it('keeps what came back, so the count survives more than one Submit', async () => {
@@ -974,7 +1075,9 @@ describe('Set Up Wizard — registering teachers', () => {
     await component.addTeachers([row('9123456780', 'Bhavana')]);
 
     expect(component.teachers().length).toBe(2);
-    expect(component.teachers().map(teacher => teacher.docId)).toEqual(['t1', 't2']);
+    // Keyed by phone now, not by a generated id.
+    expect(component.teachers().map(teacher => teacher.docId))
+      .toEqual(['9876543210', '9123456780']);
   });
 
   it('trims the names it was given', async () => {
@@ -982,7 +1085,7 @@ describe('Set Up Wizard — registering teachers', () => {
 
     await component.addTeachers([{ ...row('9876543210'), firstName: '  Anita  ' }]);
 
-    expect(teacherService.calls[0][0].firstName).toBe('Anita');
+    expect(teacherService.calls[0][0].teacherMeta.firstName).toBe('Anita');
   });
 
   /**
@@ -995,7 +1098,13 @@ describe('Set Up Wizard — registering teachers', () => {
   it('keeps the teachers that landed when a later one fails', async () => {
     await reachStepTwo();
     const partial = Object.assign(new Error('permission-denied'), {
-      created: [{ docId: 't99' } as Teacher]
+      // teacherMeta is required: the lookup pool reads identity out of it, so a
+      // fixture without one throws when the step re-renders.
+      created: [{
+        docId: 't99',
+        teacherMeta: { countryCode: '+91', phoneNumber: 't99', firstName: 'X', lastName: 'Y', email: '' },
+        classrooms: {}
+      } as unknown as Teacher]
     });
     teacherService.createError = partial;
 
@@ -1038,65 +1147,85 @@ describe('Set Up Wizard — registering teachers', () => {
     expect(teacherService.calls.length).toBe(1);
   });
 
-  /* ---- The class fields --------------------------------------------------- */
+  /* ---- The classroom entries ---------------------------------------------- */
 
-  it('carries grade, section and programme onto the teacher', async () => {
+  /**
+   * GRADE, SECTION AND PROGRAMME ARE NO LONGER COLLECTED. The form picks a
+   * classroom and the write copies everything from that document, which is what
+   * these tests replace: there is no form-supplied grade to carry, and no
+   * programme id to resolve a name for.
+   */
+  it('carries every classroom a teacher takes, keyed by classroom id', async () => {
     await reachStepTwo();
-
-    await component.addTeachers([row('9876543210')]);
-    const draft = teacherService.calls[0][0];
-
-    expect(draft.classes).toEqual([{
-      grade: '1',
-      section: 'A',
-      programmeId: 'prog-1',
-      programmeName: 'Oak 26-27 Grade 1 - Science'
-    }]);
-  });
-
-  /** A teacher takes several classes, and every one must reach the document. */
-  it('carries every class a teacher takes', async () => {
-    await reachStepTwo([
-      programme({ docId: 'prog-1', displayName: 'Science' }),
-      programme({ docId: 'prog-2', displayName: 'Maths' })
-    ]);
+    classroomService.classrooms = [
+      classroomFixture(),
+      classroomFixture({ docId: 'c2', classroomId: 'c2', classroomName: '5 B', grade: '5', section: 'B' })
+    ];
+    await component.load();
 
     await component.addTeachers([{
       ...row('9876543210'),
-      classes: [
-        { grade: '1', section: 'A', programmeId: 'prog-1' },
-        { grade: '2', section: 'B', programmeId: 'prog-2' }
-      ]
+      classrooms: [{ classroomId: 'c1' }, { classroomId: 'c2' }]
     }]);
 
-    expect(teacherService.calls[0][0].classes).toEqual([
-      { grade: '1', section: 'A', programmeId: 'prog-1', programmeName: 'Science' },
-      { grade: '2', section: 'B', programmeId: 'prog-2', programmeName: 'Maths' }
-    ]);
+    expect(Object.keys(teacherService.calls[0][0].classrooms).sort()).toEqual(['c1', 'c2']);
+    expect(teacherService.calls[0][0].classrooms['c2'].classroomName).toBe('5 B');
   });
 
   /**
-   * The form only ever holds the programme ID, so the name is resolved here.
-   * Denormalised as a SNAPSHOT: a programme later renamed does not rewrite it.
+   * A row whose classroom has since disappeared is DROPPED rather than written
+   * as an entry with empty fields, which would look like a real classroom with
+   * no name.
    */
-  it('resolves the programme name from the id the form supplied', async () => {
-    await reachStepTwo();
-
-    await component.addTeachers([row('9876543210')]);
-
-    expect(teacherService.calls[0][0].classes[0].programmeName)
-      .toBe('Oak 26-27 Grade 1 - Science');
-  });
-
-  it('stores an empty name rather than undefined for an unknown programme', async () => {
+  it('drops a row whose classroom no longer exists', async () => {
     await reachStepTwo();
 
     await component.addTeachers([{
       ...row('9876543210'),
-      classes: [{ grade: '1', section: 'A', programmeId: 'gone' }]
+      classrooms: [{ classroomId: 'gone' }]
     }]);
 
-    expect(teacherService.calls[0][0].classes[0].programmeName).toBe('');
+    expect(teacherService.calls[0][0].classrooms).toEqual({});
+  });
+
+  /** A club has no grade or section, and its name lives in a different field. */
+  it('uses the club name for a STEM club, and leaves grade and section empty', async () => {
+    await reachStepTwo();
+    classroomService.classrooms = [classroomFixture({
+      type: 'STEM-CLUB',
+      classroomName: '',
+      stemClubName: 'ThinkTac STEM Forge',
+      grade: '',
+      section: ''
+    })];
+    await component.load();
+
+    await component.addTeachers([row('9876543210')]);
+    const entry = teacherService.calls[0][0].classrooms['c1'];
+
+    expect(entry.classroomName).toBe('ThinkTac STEM Forge');
+    expect(entry.type).toBe('STEM-CLUB');
+    expect(entry.grade).toBe('');
+    expect(entry.section).toBe('');
+  });
+
+  /** Only the chosen school's, for the same reason the programmes are filtered. */
+  it('offers only the chosen school’s classrooms', async () => {
+    await reachStepTwo();
+    classroomService.classrooms = [
+      classroomFixture(),
+      classroomFixture({ docId: 'c9', classroomId: 'c9', institutionId: 'other-school' })
+    ];
+    await component.load();
+
+    expect(component.classroomOptions().map(option => option.id)).toEqual(['c1']);
+  });
+
+  /** Shown under the select, because the teacher inherits rather than chooses. */
+  it('labels each option with the programmes that classroom runs', async () => {
+    await reachStepTwo();
+
+    expect(component.classroomOptions()[0].programmes).toBe('Science');
   });
 
   /* ---- Which programmes are assignable ------------------------------------ */
@@ -1170,15 +1299,14 @@ describe('Set Up Wizard — registering teachers', () => {
     await reachStepTwo();
     const existing = {
       docId: 'existing-1',
-      phoneNumber: '9876543210',
-      classes: [{ grade: '1', section: 'A', programmeId: 'prog-1', programmeName: 'Science' }]
-    } as Teacher;
+      teacherMeta: { phoneNumber: '9876543210', countryCode: '+91', firstName: 'Anita', lastName: 'Rao', email: '' },
+      classrooms: {}
+    } as unknown as Teacher;
     component.registered.set([existing]);
 
     await component.addTeachers([{
       ...row('9876543210'),
-      existingId: 'existing-1',
-      classes: [{ grade: '2', section: 'B', programmeId: 'prog-1' }]
+      existingId: 'existing-1'
     }]);
 
     expect(teacherService.calls.length).toBe(0);
@@ -1215,19 +1343,24 @@ describe('Set Up Wizard — registering teachers', () => {
 
     await component.addTeachers([row('9876543210')]);
 
-    expect(component.registered().map(teacher => teacher.docId)).toContain('t1');
+    // The phone IS the id now, so this is what the lookup will match on.
+    expect(component.registered().map(teacher => teacher.docId)).toContain('9876543210');
   });
 
   /** Replaced, not appended, or the lookup could match a stale copy. */
   it('replaces rather than duplicates a teacher it appended to', async () => {
     await reachStepTwo();
-    const existing = { docId: 'existing-1', phoneNumber: '9876543210', classes: [] } as unknown as Teacher;
+    const existing = {
+      docId: 'existing-1',
+      teacherMeta: { phoneNumber: '9876543210' },
+      classrooms: {}
+    } as unknown as Teacher;
     component.registered.set([existing]);
 
     await component.addTeachers([{ ...row('9876543210'), existingId: 'existing-1' }]);
 
     expect(component.registered().filter(t => t.docId === 'existing-1').length).toBe(1);
-    expect(component.registered()[0].classes.length).toBe(1);
+    expect(Object.keys(component.registered()[0].classrooms).length).toBe(1);
   });
 
   /** A failing teacher list must not take the page down; the lookup just finds nobody. */
@@ -1243,7 +1376,8 @@ describe('Set Up Wizard — registering teachers', () => {
           useValue: new StubInstitutionService([institution({ docId: 'inst-1' })])
         },
         { provide: TeacherService, useValue: teacherService },
-        { provide: ProgrammeService, useValue: new StubProgrammeService() }
+        { provide: ProgrammeService, useValue: new StubProgrammeService() },
+        { provide: ClassroomService, useValue: new StubClassroomService() }
       ]
     }).compileComponents();
 
@@ -1273,7 +1407,8 @@ describe('Set Up Wizard — bulk upload mode', () => {
           useValue: new StubInstitutionService([institution({ docId: 'inst-1' })])
         },
         { provide: TeacherService, useValue: new StubTeacherService() },
-        { provide: ProgrammeService, useValue: new StubProgrammeService() }
+        { provide: ProgrammeService, useValue: new StubProgrammeService() },
+        { provide: ClassroomService, useValue: new StubClassroomService() }
       ]
     }).compileComponents();
 
@@ -1360,22 +1495,26 @@ describe('registeredMessage', () => {
    * on screen.
    */
   it('names a single teacher', () => {
-    expect(registeredMessage([{ teacherName: 'Santosh Kanta' }]))
+    expect(registeredMessage([{ teacherMeta: { firstName: 'Santosh', lastName: 'Kanta' } }]))
       .toBe('Santosh Kanta registered successfully');
   });
 
   it('falls back to the plain sentence when there is no name', () => {
-    expect(registeredMessage([{ teacherName: '' }])).toBe('Teacher registered successfully');
+    expect(registeredMessage([{ teacherMeta: { firstName: '', lastName: '' } }]))
+      .toBe('Teacher registered successfully');
     expect(registeredMessage([{}])).toBe('Teacher registered successfully');
   });
 
   it('trims a name padded with spaces', () => {
-    expect(registeredMessage([{ teacherName: '  Anita Rao  ' }]))
+    expect(registeredMessage([{ teacherMeta: { firstName: '  Anita', lastName: 'Rao  ' } }]))
       .toBe('Anita Rao registered successfully');
   });
 
   it('counts when more than one came back at once', () => {
-    expect(registeredMessage([{ teacherName: 'A' }, { teacherName: 'B' }]))
+    expect(registeredMessage([
+      { teacherMeta: { firstName: 'A', lastName: '' } },
+      { teacherMeta: { firstName: 'B', lastName: '' } }
+    ]))
       .toBe('2 teachers registered successfully');
   });
 });
@@ -1397,7 +1536,8 @@ describe('Set Up Wizard — the success toast', () => {
           useValue: new StubInstitutionService([institution({ docId: 'inst-1' })])
         },
         { provide: TeacherService, useValue: teacherService },
-        { provide: ProgrammeService, useValue: new StubProgrammeService() }
+        { provide: ProgrammeService, useValue: new StubProgrammeService() },
+        { provide: ClassroomService, useValue: new StubClassroomService() }
       ]
     }).compileComponents();
 
@@ -1424,7 +1564,7 @@ describe('Set Up Wizard — the success toast', () => {
     firstName: 'Santosh',
     lastName: 'Kanta',
     role: 'School Teacher',
-    classes: [{ grade: '1', section: 'A', programmeId: 'prog-1' }],
+    classrooms: [{ classroomId: 'c1' }],
     existingId: ''
   });
 

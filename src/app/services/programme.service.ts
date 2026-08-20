@@ -35,7 +35,7 @@ import {
   ProgrammeDraft,
   ProgrammeType,
   TRASH_METADATA_FIELDS,
-  TeacherClass,
+  TeacherClassroom,
   TrashedProgramme
 } from '../models/teaching.model';
 import { AuthService } from './auth.service';
@@ -46,28 +46,56 @@ import { AuthService } from './auth.service';
  * `key` is the programme's DOC ID, not its programmeId — a teacher's class rows
  * carry the docId under a field named programmeId. See propagateRename.
  */
-export function classesAreStale(
-  classes: readonly TeacherClass[],
-  key: string,
+export function classroomsAreStale(
+  classrooms: Record<string, TeacherClassroom>,
+  programmeId: string,
   name: string
 ): boolean {
-  return classes.some(row => row.programmeId === key && row.programmeName !== name);
+  return Object.values(classrooms).some(entry =>
+    entry.programmes.some(
+      programme =>
+        programme.programmeId === programmeId &&
+        (programme.programmeName !== name || programme.displayName !== name)
+    )
+  );
 }
 
 /**
- * The same rows with one programme's name refreshed, everything else verbatim.
+ * The same classrooms map with one programme's names refreshed everywhere it
+ * appears, and everything else verbatim.
  *
- * Returns a new array and never mutates: the caller writes the result back as a
- * whole, because `classes` is an array and Firestore cannot address a field
- * inside one.
+ * Returns a new object at every level it changes and never mutates: the caller
+ * writes back only the classroom entries that moved, and a shared reference
+ * would make "did this change?" unanswerable.
+ *
+ * ONE KEY, unlike the classroom cascade's. A teacher's programme entries are
+ * copied from the classroom's own programmes map, which is keyed by
+ * `programmeId`, so both sides of this cascade now agree on that field. The
+ * earlier shape stored the programme's docId here instead, and the mismatch was
+ * the trap this replaced.
  */
-export function classesWithRenamed(
-  classes: readonly TeacherClass[],
-  key: string,
-  name: string
-): TeacherClass[] {
-  return classes.map(row =>
-    row.programmeId === key ? { ...row, programmeName: name } : row
+export function classroomsWithRenamed(
+  classrooms: Record<string, TeacherClassroom>,
+  programmeId: string,
+  next: { programmeName: string; displayName: string; programmeCode: string }
+): Record<string, TeacherClassroom> {
+  return Object.fromEntries(
+    Object.entries(classrooms).map(([classroomId, entry]) => [
+      classroomId,
+      {
+        ...entry,
+        programmes: entry.programmes.map(programme =>
+          programme.programmeId === programmeId
+            ? {
+                ...programme,
+                programmeName: next.programmeName,
+                displayName: next.displayName,
+                programmeCode: next.programmeCode
+              }
+            : programme
+        )
+      }
+    ])
   );
 }
 
@@ -356,8 +384,13 @@ export class ProgrammeService {
      * The field is called programmeId in both places while holding different
      * values, which is a trap worth naming rather than quietly working around.
      */
+    /*
+     * ONE KEY NOW. Classrooms key their programmes map by programmeId, and a
+     * teacher's entries are copies of those, so both sides agree. The previous
+     * shape stored the programme's docId on the teacher, and using one key for
+     * both silently propagated nothing.
+     */
     const classroomKey = programme.programmeId;
-    const teacherKey = programme.docId;
     const snapshotName = programme.displayName || programme.programmeName;
 
     const affectedClassrooms = classrooms.filter(classroom =>
@@ -375,25 +408,42 @@ export class ProgrammeService {
       )
     );
 
-    // Read-modify-write, because `classes` is an array. Only teachers that
-    // actually carry this programme AND whose stored name has drifted are
-    // written, so a no-op rename costs no writes.
+    /*
+     * Read-modify-write per teacher, because the programmes live inside an array
+     * nested in a map — Firestore can address the classroom entry but not a
+     * programme inside its array, so each changed classroom entry is rewritten
+     * whole. Only teachers whose stored copy has actually drifted are written.
+     */
     const snapshot = await getDocs(activeTeachersCollection());
+
+    const next = {
+      programmeName: programme.programmeName,
+      displayName: programme.displayName,
+      programmeCode: programme.programmeCode
+    };
 
     const staleTeachers = snapshot.docs
       .map(document => ({
         docId: document.id,
-        classes: (document.data()['classes'] as TeacherClass[] | undefined) ?? []
+        classrooms:
+          (document.data()['classrooms'] as Record<string, TeacherClassroom> | undefined) ?? {}
       }))
-      .filter(teacher => classesAreStale(teacher.classes, teacherKey, snapshotName));
+      .filter(teacher => classroomsAreStale(teacher.classrooms, classroomKey, snapshotName));
 
     await Promise.all(
-      staleTeachers.map(teacher =>
-        updateDoc(activeTeacherDoc(teacher.docId), {
-          classes: classesWithRenamed(teacher.classes, teacherKey, snapshotName),
+      staleTeachers.map(teacher => {
+        const updated = classroomsWithRenamed(teacher.classrooms, classroomKey, next);
+
+        return updateDoc(activeTeacherDoc(teacher.docId), {
+          ...Object.fromEntries(
+            Object.entries(updated).map(([classroomId, entry]) => [
+              `classrooms.${classroomId}`,
+              entry
+            ])
+          ),
           updatedAt: serverTimestamp()
-        })
-      )
+        });
+      })
     );
 
     return { classrooms: affectedClassrooms.length, teachers: staleTeachers.length };

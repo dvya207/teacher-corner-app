@@ -144,99 +144,56 @@
          last is COMMITTED: read-only, with a bin to remove it, exactly as the
          reference draws them.
          ================================================================== -->
-    @for (row of classes(); track $index) {
+    @for (row of classrooms(); track $index) {
 
       <div class="class-row" [class.is-locked]="locked($index)">
 
-        <div class="field">
-          <label [attr.for]="'tc-grade-' + $index">
-            Grade
-            @if (!locked($index)) {
-              <span class="req" aria-hidden="true">*</span>
-            }
-          </label>
-          <select
-            [id]="'tc-grade-' + $index"
-            [disabled]="locked($index) || identityLocked()"
-            [class.is-error]="missingClass($index, 'grade')"
-            (blur)="markBlurred($index + '.grade')"
-            (change)="updateClass($index, 'grade', valueOf($event))"
-          >
-            <option value="" [selected]="!row.grade">Select</option>
-            @for (option of grades(); track option) {
-              <option [value]="option" [selected]="option === row.grade">
-                {{ gradeLabel(option) }}
-              </option>
-            }
-          </select>
-          @if (missingClass($index, 'grade')) {
-            <span class="field-error">Grade is required</span>
-          }
-        </div>
+        <!-- ONE CONTROL, not grade + section + programme.
 
-        <div class="field">
-          <label [attr.for]="'tc-section-' + $index">
-            Section
-            @if (!locked($index)) {
-              <span class="req" aria-hidden="true">*</span>
-            }
-          </label>
-          <select
-            [id]="'tc-section-' + $index"
-            [disabled]="locked($index) || identityLocked()"
-            [class.is-error]="missingClass($index, 'section')"
-            (blur)="markBlurred($index + '.section')"
-            (change)="updateClass($index, 'section', valueOf($event))"
-          >
-            <option value="" [selected]="!row.section">Select</option>
-            @for (option of sections(); track option) {
-              <option [value]="option" [selected]="option === row.section">{{ option }}</option>
-            }
-          </select>
-          @if (missingClass($index, 'section')) {
-            <span class="field-error">Section is required</span>
-          }
-        </div>
-
+             The classroom document already carries its grade, section, type and
+             the programmes it runs, so picking it is the whole choice and the
+             write copies the rest from it. Choosing a programme separately would
+             allow attaching a teacher to a programme the classroom does not run. -->
         <div class="field field-wide">
-          <label [attr.for]="'tc-programme-' + $index">
-            Programme
+          <label [attr.for]="'tc-classroom-' + $index">
+            Classroom
             @if (!locked($index)) {
               <span class="req" aria-hidden="true">*</span>
             }
           </label>
           <select
-            [id]="'tc-programme-' + $index"
-            [disabled]="locked($index) || identityLocked() || programmes().length === 0"
-            [class.is-error]="missingClass($index, 'programmeId')"
-            (blur)="markBlurred($index + '.programmeId')"
-            (change)="updateClass($index, 'programmeId', valueOf($event))"
+            [id]="'tc-classroom-' + $index"
+            [disabled]="locked($index) || identityLocked() || classroomOptions().length === 0"
+            [class.is-error]="missingClassroom($index, 'classroomId')"
+            (blur)="markBlurred($index + '.classroomId')"
+            (change)="updateClassroom($index, 'classroomId', valueOf($event))"
           >
-            <option value="" [selected]="!row.programmeId"></option>
-            @for (option of programmes(); track option.id) {
-              <option [value]="option.id" [selected]="option.id === row.programmeId">
-                {{ option.name }}
+            <option value="" [selected]="!row.classroomId"></option>
+            @for (option of classroomOptions(); track option.id) {
+              <option [value]="option.id" [selected]="option.id === row.classroomId">
+                {{ option.label }}
               </option>
             }
           </select>
-          @if (missingClass($index, 'programmeId')) {
-            <span class="field-error">Programme is required</span>
+          @if (missingClassroom($index, 'classroomId')) {
+            <span class="field-error">Classroom is required</span>
+          }
+          <!-- WHAT THE TEACHER WILL INHERIT, shown because it is not chosen here. -->
+          @if (programmesFor(row.classroomId)) {
+            <span class="field-hint">Programmes: {{ programmesFor(row.classroomId) }}</span>
           }
         </div>
 
         <!-- HIDDEN WHILE THERE IS ONLY ONE ROW. A teacher must take at least one
-             class, so on a lone row the bin has nothing to remove — it could only
-             clear the fields, which is not what a bin means. It appears as soon as
-             the ⊕ has produced a second row.
-
-             The grid keeps its fourth column either way, so the three controls do
-             not change width when the bin arrives. -->
+             classroom, so on a lone row the bin has nothing to remove — it could
+             only clear the field, which is not what a bin means. It appears as
+             soon as the ⊕ has produced a second row. -->
         @if (count() > 1) {
           <button
             type="button"
             class="class-remove"
-            (click)="removeClass($index)"
-            [attr.aria-label]="'Remove class ' + ($index + 1)"
+            (click)="removeClassroom($index)"
+            [attr.aria-label]="'Remove classroom ' + ($index + 1)"
           >
             <app-icon name="trash" [size]="18" />
           </button>
@@ -246,10 +203,13 @@
 
     }
 
-    @if (programmes().length === 0) {
+    <!-- A SCHOOL CREATED IN STEP 1 HAS NO CLASSROOMS AT ALL, so this is the
+         expected state on a first run rather than an error — which is why it says
+         how to fix it instead of only reporting the emptiness. -->
+    @if (classroomOptions().length === 0) {
       <span class="field-hint is-warn">
-        This institution has no live programmes yet. Create one under
-        <strong>Programme</strong> before assigning teachers to a class.
+        This school has no classrooms yet. Add one with
+        <strong>Add Classroom</strong> before assigning teachers.
       </span>
     }
 
@@ -265,16 +225,16 @@
   <!-- The requirement is invisible until the ⊕ is pressed, so it has to be said
        out loud once Submit has been tried. Without this the button just looks
        broken. -->
-  @if (classesMissing()) {
+  @if (classroomsMissing()) {
     <span class="field-error">Add at least one class using the + below</span>
   }
 
-  @if (canAddClass()) {
+  @if (canAddClassroom()) {
     <div class="add-row">
       <button
         type="button"
         class="add-entry"
-        (click)="addClass()"
+        (click)="addClassroom()"
         [attr.aria-label]="count() === 0 ? 'Add a class' : 'Add another class'"
       >
         <app-icon name="plus-circle" [size]="26" />

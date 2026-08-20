@@ -1,13 +1,13 @@
 import {
   academicYearLabel,
-  classesAreStale,
-  classesWithRenamed,
+  classroomsAreStale,
+  classroomsWithRenamed,
   normaliseProgramme,
   programmesFor,
   stripTrashMetadata,
   suggestedProgrammeName
 } from './programme.service';
-import { Programme, TeacherClass } from '../models/teaching.model';
+import { Programme, TeacherClassroom } from '../models/teaching.model';
 
 function programme(fields: Partial<Programme>): Programme {
   return {
@@ -226,58 +226,100 @@ describe('suggestedProgrammeName', () => {
 });
 
 /**
- * RENAME PROPAGATION — the array half.
+ * RENAME PROPAGATION — the nested half.
  *
- * The classroom half is a dotted-path write and cannot be exercised without a
- * Firestore double, which this project's vitest setup does not allow (see
- * configuration.service.spec.ts). The rows logic is the part with a real trap in
+ * The classroom map's dotted-path write cannot be exercised without a Firestore
+ * double, which this project's vitest setup does not allow (see
+ * configuration.service.spec.ts). The traversal is the part with the real trap in
  * it, so it is pulled out and tested directly.
  */
-describe('rename propagation across teacher class rows', () => {
-  function row(fields: Partial<TeacherClass>): TeacherClass {
-    return { grade: '1', section: 'A', programmeId: 'p-doc', programmeName: 'Science', ...fields };
+describe('rename propagation across a teacher\'s classrooms', () => {
+  function classroom(programmes: TeacherClassroom['programmes']): TeacherClassroom {
+    return {
+      activeStatus: true,
+      classroomId: 'c1',
+      classroomName: '4 A',
+      grade: '4',
+      section: 'A',
+      institutionId: 'inst-1',
+      institutionName: 'Airaa Academy',
+      type: 'CLASSROOM',
+      userRole: 'schoolTeacher',
+      programmes,
+      createdAt: null as never
+    };
   }
 
-  it('spots a row whose stored name has drifted', () => {
-    expect(classesAreStale([row({})], 'p-doc', 'Physics')).toBe(true);
+  function programmeEntry(fields: Partial<TeacherClassroom['programmes'][number]> = {}) {
+    return {
+      programmeId: 'p1',
+      programmeName: 'Science',
+      displayName: 'Science',
+      programmeCode: 'P10001',
+      sequentiallyLocked: false,
+      ...fields
+    };
+  }
+
+  const next = { programmeName: 'Physics', displayName: 'Physics', programmeCode: 'P10001' };
+
+  it('spots a programme whose stored name has drifted', () => {
+    expect(classroomsAreStale({ c1: classroom([programmeEntry()]) }, 'p1', 'Physics')).toBe(true);
   });
 
-  it('does not report a row already carrying the new name', () => {
-    expect(classesAreStale([row({})], 'p-doc', 'Science')).toBe(false);
+  it('does not report one already carrying the new name', () => {
+    const current = classroom([programmeEntry({ programmeName: 'Physics', displayName: 'Physics' })]);
+
+    expect(classroomsAreStale({ c1: current }, 'p1', 'Physics')).toBe(false);
   });
 
-  /**
-   * THE TRAP. A teacher's row keys on the programme's DOC ID, while a classroom's
-   * programmes map keys on its programmeId. The two differ in real data, and a
-   * cascade that used one for both would silently update nothing.
-   */
-  it('ignores rows keyed on a different id, so the wrong key updates nothing', () => {
-    expect(classesAreStale([row({ programmeId: 'p-doc' })], 'p-programmeId', 'Physics')).toBe(false);
-    expect(classesWithRenamed([row({ programmeId: 'p-doc' })], 'p-programmeId', 'Physics'))
-      .toEqual([row({ programmeId: 'p-doc', programmeName: 'Science' })]);
+  it('ignores a different programme, so an unrelated rename writes nothing', () => {
+    expect(classroomsAreStale({ c1: classroom([programmeEntry()]) }, 'p-other', 'Physics'))
+      .toBe(false);
   });
 
-  it('renames only the matching rows and leaves the rest verbatim', () => {
-    const classes = [
-      row({ programmeId: 'p-doc', section: 'A' }),
-      row({ programmeId: 'other', section: 'B', programmeName: 'Maths' })
-    ];
+  it('renames the programme in every classroom that carries it', () => {
+    const before = {
+      c1: classroom([programmeEntry()]),
+      c2: { ...classroom([programmeEntry()]), classroomId: 'c2', classroomName: '5 B' }
+    };
 
-    expect(classesWithRenamed(classes, 'p-doc', 'Physics')).toEqual([
-      row({ programmeId: 'p-doc', section: 'A', programmeName: 'Physics' }),
-      row({ programmeId: 'other', section: 'B', programmeName: 'Maths' })
-    ]);
+    const after = classroomsWithRenamed(before, 'p1', next);
+
+    expect(after['c1'].programmes[0].programmeName).toBe('Physics');
+    expect(after['c2'].programmes[0].displayName).toBe('Physics');
   });
 
-  it('does not mutate the array it is given', () => {
-    const classes = [row({})];
-    classesWithRenamed(classes, 'p-doc', 'Physics');
+  it('leaves the other programmes on the same classroom verbatim', () => {
+    const before = {
+      c1: classroom([programmeEntry(), programmeEntry({ programmeId: 'p2', programmeName: 'Maths', displayName: 'Maths' })])
+    };
 
-    expect(classes[0].programmeName).toBe('Science');
+    const after = classroomsWithRenamed(before, 'p1', next);
+
+    expect(after['c1'].programmes[1]).toEqual(
+      programmeEntry({ programmeId: 'p2', programmeName: 'Maths', displayName: 'Maths' })
+    );
   });
 
-  it('copes with a teacher who has no class rows', () => {
-    expect(classesAreStale([], 'p-doc', 'Physics')).toBe(false);
-    expect(classesWithRenamed([], 'p-doc', 'Physics')).toEqual([]);
+  it('keeps everything about the classroom except its programmes', () => {
+    const before = { c1: classroom([programmeEntry()]) };
+    const after = classroomsWithRenamed(before, 'p1', next);
+
+    expect(after['c1'].classroomName).toBe('4 A');
+    expect(after['c1'].grade).toBe('4');
+    expect(after['c1'].userRole).toBe('schoolTeacher');
+  });
+
+  it('does not mutate what it is given', () => {
+    const before = { c1: classroom([programmeEntry()]) };
+    classroomsWithRenamed(before, 'p1', next);
+
+    expect(before['c1'].programmes[0].programmeName).toBe('Science');
+  });
+
+  it('copes with a teacher who has no classrooms', () => {
+    expect(classroomsAreStale({}, 'p1', 'Physics')).toBe(false);
+    expect(classroomsWithRenamed({}, 'p1', next)).toEqual({});
   });
 });

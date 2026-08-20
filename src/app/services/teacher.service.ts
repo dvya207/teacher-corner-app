@@ -20,8 +20,10 @@ import {
 import {
   TRASH_METADATA_FIELDS,
   Teacher,
-  TeacherClass,
+  TeacherClassroom,
   TeacherDraft,
+  TeacherMeta,
+  TeacherProgramme,
   TrashedTeacher
 } from '../models/teaching.model';
 import { AuthService } from './auth.service';
@@ -42,7 +44,7 @@ import { AuthService } from './auth.service';
  * stub and never actually exercise.
  */
 export function stripImmutableTeacherFields(patch: Partial<Teacher>): Partial<Teacher> {
-  const { docId, ownerId, institutionId, createdAt, ...fields } = patch;
+  const { docId, ownerId, ...fields } = patch;
   return fields;
 }
 
@@ -65,16 +67,8 @@ export function normaliseTeacher<T extends { docId: string }>(
   return {
     ...data,
     docId,
-    institutionId: (data['institutionId'] as string | undefined) ?? '',
-    firstName: (data['firstName'] as string | undefined) ?? '',
-    lastName: (data['lastName'] as string | undefined) ?? '',
-    teacherName: (data['teacherName'] as string | undefined) ?? '',
-    email: (data['email'] as string | undefined) ?? '',
-    countryCode: (data['countryCode'] as string | undefined) ?? '',
-    phoneNumber: (data['phoneNumber'] as string | undefined) ?? '',
-    role: (data['role'] as string | undefined) ?? '',
-    classes: teacherClassesFrom(data),
-    active: data['active'] !== false
+    teacherMeta: teacherMetaFrom(data),
+    classrooms: teacherClassroomsFrom(data)
   } as unknown as T;
 }
 
@@ -92,31 +86,108 @@ export function normaliseTeacher<T extends { docId: string }>(
  * reads them any more, and rewriting rows to tidy them up would be a migration
  * with nothing to gain.
  */
-export function teacherClassesFrom(data: Record<string, unknown>): TeacherClass[] {
-  const stored = data['classes'];
+export function teacherClassroomsFrom(
+  data: Record<string, unknown>
+): Record<string, TeacherClassroom> {
+  const stored = data['classrooms'];
 
-  if (Array.isArray(stored)) {
-    return stored.map(entry => ({
-      grade: (entry as TeacherClass)?.grade ?? '',
-      section: (entry as TeacherClass)?.section ?? '',
-      programmeId: (entry as TeacherClass)?.programmeId ?? '',
-      programmeName: (entry as TeacherClass)?.programmeName ?? ''
-    }));
+  if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+    return Object.fromEntries(
+      Object.entries(stored as Record<string, Partial<TeacherClassroom>>).map(
+        ([classroomId, entry]) => [classroomId, normaliseTeacherClassroom(classroomId, entry)]
+      )
+    );
   }
 
-  const legacyGrade = data['grade'] as string | undefined;
-  const legacyProgramme = data['programmeId'] as string | undefined;
+  /*
+   * LEGACY: rows written before classrooms were referenced.
+   *
+   * The old shape was a flat `classes` array of grade/section/programme with no
+   * classroom behind it, because the wizard collected those before the school
+   * had any classrooms. There is no classroomId to recover, so each entry is
+   * keyed by its programme and carries an empty classroomId — visibly
+   * unreferenced rather than silently given a made-up id.
+   *
+   * Read-time only. The stored document is not rewritten: nothing reads the old
+   * key any more, and migrating rows to tidy it up would buy nothing.
+   */
+  const legacy = data['classes'];
 
-  if (!legacyGrade && !legacyProgramme) {
-    return [];
+  if (!Array.isArray(legacy)) {
+    return {};
   }
 
-  return [{
-    grade: legacyGrade ?? '',
-    section: (data['section'] as string | undefined) ?? '',
-    programmeId: legacyProgramme ?? '',
-    programmeName: (data['programmeName'] as string | undefined) ?? ''
-  }];
+  return Object.fromEntries(
+    legacy.map((entry: Record<string, unknown>) => {
+      const programmeId = (entry['programmeId'] as string | undefined) ?? '';
+
+      return [
+        programmeId || 'unknown',
+        normaliseTeacherClassroom('', {
+          grade: (entry['grade'] as string | undefined) ?? '',
+          section: (entry['section'] as string | undefined) ?? '',
+          programmes: programmeId
+            ? [{
+                programmeId,
+                programmeName: (entry['programmeName'] as string | undefined) ?? '',
+                displayName: (entry['programmeName'] as string | undefined) ?? '',
+                programmeCode: '',
+                sequentiallyLocked: false
+              }]
+            : []
+        })
+      ];
+    })
+  );
+}
+
+/** One classroom entry, with every key present. */
+export function normaliseTeacherClassroom(
+  classroomId: string,
+  entry: Partial<TeacherClassroom>
+): TeacherClassroom {
+  return {
+    activeStatus: entry.activeStatus !== false,
+    classroomId: entry.classroomId ?? classroomId,
+    classroomName: entry.classroomName ?? '',
+    grade: entry.grade ?? '',
+    section: entry.section ?? '',
+    institutionId: entry.institutionId ?? '',
+    institutionName: entry.institutionName ?? '',
+    type: entry.type ?? 'CLASSROOM',
+    userRole: entry.userRole ?? '',
+    programmes: (entry.programmes ?? []).map(programme => ({
+      programmeId: programme?.programmeId ?? '',
+      programmeName: programme?.programmeName ?? '',
+      displayName: programme?.displayName ?? '',
+      programmeCode: programme?.programmeCode ?? '',
+      sequentiallyLocked: programme?.sequentiallyLocked === true
+    })),
+    createdAt: entry.createdAt ?? (null as unknown as Timestamp)
+  };
+}
+
+/** The person, with every key present. Built from the flat shape when absent. */
+export function teacherMetaFrom(data: Record<string, unknown>): TeacherMeta {
+  const stored = (data['teacherMeta'] ?? {}) as Partial<TeacherMeta>;
+
+  // Falls back to the FLAT legacy fields, which is where identity used to live.
+  const firstName = stored.firstName ?? (data['firstName'] as string | undefined) ?? '';
+  const lastName = stored.lastName ?? (data['lastName'] as string | undefined) ?? '';
+  const digits = stored.phoneNumber ?? stored.phone ??
+    (data['phoneNumber'] as string | undefined) ?? '';
+
+  return {
+    countryCode: stored.countryCode ?? (data['countryCode'] as string | undefined) ?? '',
+    email: stored.email ?? (data['email'] as string | undefined) ?? '',
+    firstName,
+    lastName,
+    fullNameLowerCase: stored.fullNameLowerCase ?? teacherSearchKey(firstName, lastName),
+    phone: digits,
+    phoneNumber: digits,
+    uid: stored.uid ?? '',
+    updatedAt: stored.updatedAt ?? (null as unknown as Timestamp)
+  };
 }
 
 /**
@@ -140,8 +211,8 @@ export function withoutUndefinedTeacherFields(fields: Partial<Teacher>): Partial
  * snapshot, so two entries for the same class written either side of a rename
  * would otherwise read as different classes.
  */
-export function classKey(row: TeacherClass): string {
-  return `${row.grade}|${row.section}|${row.programmeId}`;
+export function classroomProgrammeKey(programme: TeacherProgramme): string {
+  return programme.programmeId;
 }
 
 /**
@@ -152,20 +223,41 @@ export function classKey(row: TeacherClass): string {
  * class is therefore a no-op instead of a growing list of copies — which matters
  * because the lookup makes that easy to do by accident.
  */
-export function mergeClasses(
-  existing: readonly TeacherClass[],
-  additions: readonly TeacherClass[]
-): TeacherClass[] {
-  const seen = new Set(existing.map(classKey));
-  const merged = [...existing];
+export function mergeClassrooms(
+  existing: Record<string, TeacherClassroom>,
+  additions: Record<string, TeacherClassroom>
+): Record<string, TeacherClassroom> {
+  const merged: Record<string, TeacherClassroom> = { ...existing };
 
-  for (const row of additions) {
-    if (seen.has(classKey(row))) {
+  for (const [classroomId, addition] of Object.entries(additions)) {
+    const current = merged[classroomId];
+
+    if (!current) {
+      merged[classroomId] = addition;
       continue;
     }
 
-    seen.add(classKey(row));
-    merged.push(row);
+    /*
+     * THE CLASSROOM IS KEPT, ITS PROGRAMMES ARE UNIONED.
+     *
+     * Re-registering a teacher against a classroom they already have must not
+     * discard the programmes already on that entry, nor duplicate them. The
+     * FIRST occurrence of a programme wins, so a stored entry keeps its own
+     * snapshot rather than being overwritten by an identical one.
+     */
+    const seen = new Set(current.programmes.map(classroomProgrammeKey));
+    const programmes = [...current.programmes];
+
+    for (const programme of addition.programmes) {
+      if (seen.has(classroomProgrammeKey(programme))) {
+        continue;
+      }
+
+      seen.add(classroomProgrammeKey(programme));
+      programmes.push(programme);
+    }
+
+    merged[classroomId] = { ...current, programmes };
   }
 
   return merged;
@@ -174,6 +266,15 @@ export function mergeClasses(
 /** first + last, collapsed. Stored denormalised, as institutions store their representative's. */
 export function teacherFullName(first: string, last: string): string {
   return `${(first ?? '').trim()} ${(last ?? '').trim()}`.trim();
+}
+
+/**
+ * Production's `fullNameLowerCase`: the name lowercased with all whitespace
+ * removed, so "Santosh Kanta" becomes "santoshkanta". It is a search key, not a
+ * display value — nothing renders it.
+ */
+export function teacherSearchKey(first: string, last: string): string {
+  return teacherFullName(first, last).toLowerCase().replace(/\s+/g, '');
 }
 
 /**
@@ -231,14 +332,19 @@ export class TeacherService {
 
     return snapshot.docs
       .map(document => normaliseTeacher<Teacher>(document.id, document.data()))
-      .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+      // updatedAt, because there is no top-level createdAt in production's shape.
+      .sort((a, b) => (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0));
   }
 
   /** The teachers of ONE institution, filtered client-side on the owner-scoped list. */
   async listForInstitution(institutionId: string): Promise<Teacher[]> {
     const all = await this.list();
 
-    return all.filter(teacher => teacher.institutionId === institutionId);
+    // The institution now lives on each classroom entry rather than on the
+    // teacher, so a teacher belongs to a school if ANY of their classrooms does.
+    return all.filter(teacher =>
+      Object.values(teacher.classrooms).some(entry => entry.institutionId === institutionId)
+    );
   }
 
   /** Everything in the admin's trash, most recently deleted first. */
@@ -258,14 +364,41 @@ export class TeacherService {
    */
   async create(draft: TeacherDraft): Promise<Teacher> {
     const uid = this.auth.requireUid();
-    const reference = newActiveTeacherDoc();
+
+    /*
+     * KEYED BY THE SUBSCRIBER DIGITS, not by a generated id.
+     *
+     * The phone number is what the OTP flow resolves a person by, so keying on
+     * it makes an admin-registered teacher findable the moment that person signs
+     * in. It also makes re-registering the same number an overwrite of one
+     * document rather than a second copy.
+     *
+     * A number is REQUIRED for that reason: without one there is no id to write
+     * to, and falling back to a random id would quietly reintroduce duplicates.
+     */
+    const digits = draft.teacherMeta.phoneNumber.trim();
+
+    if (!digits) {
+      throw new Error('A teacher cannot be registered without a phone number.');
+    }
+
+    const reference = activeTeacherDoc(digits);
 
     const payload = {
       ...draft,
-      docId: reference.id,
+      docId: digits,
       ownerId: uid,
-      teacherName: teacherFullName(draft.firstName, draft.lastName),
-      createdAt: serverTimestamp(),
+      teacherMeta: {
+        ...draft.teacherMeta,
+        phone: digits,
+        phoneNumber: digits,
+        fullNameLowerCase: teacherSearchKey(
+          draft.teacherMeta.firstName,
+          draft.teacherMeta.lastName
+        ),
+        updatedAt: serverTimestamp()
+      },
+      lastActivityAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
 
@@ -280,7 +413,12 @@ export class TeacherService {
      */
     const now = Timestamp.now();
 
-    return { ...payload, createdAt: now, updatedAt: now } as Teacher;
+    return {
+      ...payload,
+      teacherMeta: { ...payload.teacherMeta, updatedAt: now },
+      lastActivityAt: now,
+      updatedAt: now
+    } as Teacher;
   }
 
   /**
@@ -326,27 +464,43 @@ export class TeacherService {
    * write a second document with the same phone number — which is what made this
    * method necessary rather than another create().
    *
-   * IDENTITY IS NOT TOUCHED. Only `classes` is written: name, email and role are
+   * IDENTITY IS NOT TOUCHED. Only `classrooms` is written: teacherMeta is
    * whatever the teacher already had. The form locks those fields when it
    * recognises a number, so there is nothing here to save.
    *
+   * WRITES ONLY THE CLASSROOMS THAT CHANGED, by dotted path, rather than the
+   * whole map. Two admins extending the same teacher with different classrooms
+   * therefore do not overwrite each other, which a whole-map write would allow.
+   *
    * Returns the teacher as it now stands, so the caller can patch its list
-   * without a re-read. Returns it UNCHANGED, and writes nothing, when every class
-   * offered is already on the document.
+   * without a re-read. Returns it UNCHANGED, and writes nothing, when every
+   * classroom and programme offered is already on the document.
    */
-  async appendClasses(existing: Teacher, additions: readonly TeacherClass[]): Promise<Teacher> {
-    const classes = mergeClasses(existing.classes, additions);
+  async appendClassrooms(
+    existing: Teacher,
+    additions: Record<string, TeacherClassroom>
+  ): Promise<Teacher> {
+    const classrooms = mergeClassrooms(existing.classrooms, additions);
 
-    if (classes.length === existing.classes.length) {
+    const changed = Object.entries(classrooms).filter(([classroomId, entry]) => {
+      const before = existing.classrooms[classroomId];
+
+      return !before || before.programmes.length !== entry.programmes.length;
+    });
+
+    if (changed.length === 0) {
       return existing;
     }
 
     await updateDoc(activeTeacherDoc(existing.docId), {
-      classes,
+      ...Object.fromEntries(
+        changed.map(([classroomId, entry]) => [`classrooms.${classroomId}`, entry])
+      ),
+      lastActivityAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
 
-    return { ...existing, classes };
+    return { ...existing, classrooms };
   }
 
   /** Saves an edit. Ownership and school membership are not editable here. */
@@ -357,8 +511,19 @@ export class TeacherService {
       return;
     }
 
-    if ('firstName' in fields || 'lastName' in fields) {
-      fields.teacherName = teacherFullName(fields.firstName ?? '', fields.lastName ?? '');
+    /*
+     * The search key is DERIVED, never taken from a caller. An edit that changes
+     * either name has to refresh it or the teacher stops being findable under
+     * their new one.
+     */
+    if (fields.teacherMeta) {
+      fields.teacherMeta = {
+        ...fields.teacherMeta,
+        fullNameLowerCase: teacherSearchKey(
+          fields.teacherMeta.firstName,
+          fields.teacherMeta.lastName
+        )
+      };
     }
 
     await updateDoc(activeTeacherDoc(docId), { ...fields, updatedAt: serverTimestamp() });
