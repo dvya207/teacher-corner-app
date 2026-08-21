@@ -50,16 +50,20 @@ import {
  * this app uses, and it is what will let a Firestore write be added in one place
  * rather than in each step.
  *
- * IT RECOGNISES A NUMBER IT HAS SEEN, AND THEN GOES READ-ONLY. Ten digits that
- * match an already-registered teacher fill in their name, email and role — and
- * lock the WHOLE form, class rows included. The ⊕ is withdrawn and Submit is
- * dead: an existing teacher is shown, not edited, from here.
+ * IT RECOGNISES A NUMBER IT HAS SEEN, AND LOCKS ONLY WHO THEY ARE. Ten digits
+ * that match an already-registered teacher fill in their name, email and role
+ * and hold those read-only — an existing person is shown here, not edited.
  *
- * That is narrower than it once was. This step used to let a matched teacher be
- * given additional classes, which is what TeacherService.appendClasses exists
- * for; that path was closed on instruction. The service method is left in place
- * because it is correct and tested, and reopening this is a matter of unlocking
- * the rows again.
+ * THE CLASS ROWS STAY OPEN. Grade, Section and Programme remain editable and the
+ * ⊕ still adds a row, because assigning a registered teacher to another class at
+ * the chosen institution is the point of typing their number in. Submit then
+ * APPENDS: the entry carries `existingId`, and the wizard sends it to
+ * TeacherService.appendClassrooms rather than writing a second teacher with the
+ * same phone number.
+ *
+ * That reverses an earlier instruction to lock the whole form. The service
+ * method it needs was left in place through that period precisely because it is
+ * correct and tested, so reopening this was a matter of unlocking the rows.
  *
  * ZONELESS. Every field the template reads is a signal.
  */
@@ -153,15 +157,13 @@ export class AddTeachers {
   readonly matched = computed(() => findKnownTeacher(this.known(), this.entry().phone));
 
   /**
-   * A recognised number makes the ENTIRE form read-only.
+   * A recognised number makes WHO THEY ARE read-only — and nothing else.
    *
-   * Not just the name and email: the class rows too, and the ⊕ that would add
-   * one. An existing teacher is displayed here, not edited.
+   * Name, email and role come from the stored document and cannot be retyped
+   * here. The class rows are deliberately NOT covered: the reason to type a
+   * registered number into this form is to give that teacher another class.
    */
   readonly identityLocked = computed(() => !!this.matched());
-
-  /** No ⊕ for a teacher who already exists — there is nothing to add. */
-  readonly canAddClassroom = computed(() => !this.identityLocked());
 
   /** Only the last class row is editable; the ones above it are committed. */
   locked(index: number): boolean {
@@ -178,15 +180,12 @@ export class AddTeachers {
   readonly canSubmit = computed(() => {
     const entry = this.entry();
 
-    /**
-     * A RECOGNISED NUMBER CANNOT BE SUBMITTED. Nothing on the form is editable
-     * once one is matched, so there is nothing to save — and a live Submit over a
-     * read-only form would only ever write back what is already stored.
+    /*
+     * A RECOGNISED NUMBER IS SUBMITTABLE, on the same terms as any other. The
+     * identity half is read-only but already complete — it was filled from the
+     * stored document — so what the user still has to answer is the class rows,
+     * and isCompleteEntry requires at least one of them either way.
      */
-    if (this.identityLocked()) {
-      return false;
-    }
-
     return !isBlankEntry(entry) && isCompleteEntry(entry);
   });
 
@@ -265,12 +264,12 @@ export class AddTeachers {
    * pressed over a half-filled row would lock that row unfinished, and the only
    * way back would be deleting it. With no rows yet there is nothing to refuse
    * over, so the first press always works.
+   *
+   * IT IS OFFERED FOR A RECOGNISED TEACHER TOO. It was once withdrawn for one;
+   * adding a class to somebody who already exists is now the whole reason their
+   * number gets typed in.
    */
   addClassroom(): void {
-    if (!this.canAddClassroom()) {
-      return;
-    }
-
     const rows = this.classrooms();
     const last = rows[rows.length - 1];
 
@@ -356,9 +355,9 @@ export class AddTeachers {
   missingClassroom(index: number, field: keyof TeacherClassroomEntry): boolean {
     const row = this.classrooms()[index];
 
-    // A read-only row cannot be wrong, whether it is read-only because it was
-    // committed or because the teacher already exists.
-    if (!row || this.locked(index) || this.identityLocked()) {
+    // A committed row cannot be wrong — it was complete when it was locked.
+    // A matched teacher's rows are NOT read-only, so they are checked as usual.
+    if (!row || this.locked(index)) {
       return false;
     }
 

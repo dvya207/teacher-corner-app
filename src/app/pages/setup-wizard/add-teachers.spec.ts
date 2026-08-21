@@ -12,7 +12,9 @@ import { AddTeachers } from './add-teachers';
  * taking its neighbour's values.
  *
  * The other half is the two states the form can be in — a NEW teacher, where
- * everything is editable, and a RECOGNISED one, where nothing is.
+ * everything is editable, and a RECOGNISED one, where WHO THEY ARE is fixed but
+ * the class rows are not, because assigning an existing teacher another class is
+ * the reason their number gets typed in.
  *
  * Nothing here touches Firestore — the component collects and emits, and the
  * wizard decides what happens next.
@@ -636,11 +638,11 @@ describe('Add Teachers', () => {
     expect(notice).not.toContain('will be added to them');
   });
 
-  /* ---- A recognised number makes the whole form read-only ----------------- */
+  /* ---- A recognised number locks WHO THEY ARE, and nothing else ----------- */
 
   /**
-   * AN EXISTING TEACHER IS SHOWN, NOT EDITED. Everything locks — not just the
-   * name and email, but the class rows and the ⊕ that would add one.
+   * AN EXISTING TEACHER IS SHOWN, NOT EDITED — but only as to their identity.
+   * The name, email and role come off the stored document and cannot be retyped.
    */
   it('locks the person’s fields while the number is recognised', async () => {
     await render('+91', CATALOGUE, [ANITA]);
@@ -654,31 +656,34 @@ describe('Add Teachers', () => {
     expect(el().querySelector<HTMLSelectElement>('#tc-role')?.disabled).toBe(true);
   });
 
-  it('withdraws the ⊕ for a teacher who already exists', async () => {
+  it('still offers the ⊕ for a teacher who already exists', async () => {
     await render('+91', CATALOGUE, [ANITA]);
 
     component.update('phone', '9876543210');
     fixture.detectChanges();
 
-    expect(component.canAddClassroom()).toBe(false);
-    expect(el().querySelector('.add-entry')).toBeNull();
+    expect(el().querySelector('.add-entry')).not.toBeNull();
   });
 
-  it('refuses to add a class row for a recognised number', async () => {
+  /** THE POINT OF THE FEATURE: another class, for somebody already on file. */
+  it('adds an editable class row for a recognised number', async () => {
     await render('+91', CATALOGUE, [ANITA]);
     component.update('phone', '9876543210');
 
     component.addClassroom();
     fixture.detectChanges();
 
-    expect(classRows()).toBe(0);
+    expect(classRows()).toBe(1);
+    expect(el().querySelector<HTMLSelectElement>('#tc-grade-0')?.disabled).toBe(false);
+    expect(el().querySelector<HTMLSelectElement>('#tc-section-0')?.disabled).toBe(false);
+    expect(el().querySelector<HTMLSelectElement>('#tc-programme-0')?.disabled).toBe(false);
   });
 
   /**
-   * THE INSTRUCTION THIS PINS: a row added before the number was recognised must
-   * not stay editable once it is.
+   * THE REGRESSION THIS PINS: recognising the number must not reach into the
+   * class rows. It used to close all three, which is the behaviour being undone.
    */
-  it('locks class rows added before the number was recognised', async () => {
+  it('leaves class rows added before the number was recognised editable', async () => {
     await render('+91', CATALOGUE, [ANITA]);
     addClassroom();
     fixture.detectChanges();
@@ -687,19 +692,43 @@ describe('Add Teachers', () => {
     component.update('phone', '9876543210');
     fixture.detectChanges();
 
-    expect(el().querySelector<HTMLSelectElement>('#tc-grade-0')?.disabled).toBe(true);
-    expect(el().querySelector<HTMLSelectElement>('#tc-section-0')?.disabled).toBe(true);
-    expect(el().querySelector<HTMLSelectElement>('#tc-programme-0')?.disabled).toBe(true);
+    expect(el().querySelector<HTMLSelectElement>('#tc-grade-0')?.disabled).toBe(false);
+    expect(el().querySelector<HTMLSelectElement>('#tc-section-0')?.disabled).toBe(false);
+    expect(el().querySelector<HTMLSelectElement>('#tc-programme-0')?.disabled).toBe(false);
   });
 
-  it('will not submit a recognised teacher', async () => {
+  /**
+   * SUBMITTED WITH `existingId` SET, which is what tells the wizard to append
+   * these classes to the teacher rather than write a second document against the
+   * same phone number.
+   */
+  it('submits a recognised teacher, carrying their existingId', async () => {
+    await render('+91', CATALOGUE, [ANITA]);
+
+    component.update('phone', '9876543210');
+    addClassroom('B', 'prog-2', '2');
+    fixture.detectChanges();
+
+    expect(component.canSubmit()).toBe(true);
+    expect(el().querySelector<HTMLButtonElement>('.entry-foot button')?.disabled).toBe(false);
+
+    component.submit();
+
+    expect(emitted.length).toBe(1);
+    expect(emitted[0][0].existingId).toBe('existing-1');
+    expect(emitted[0][0].firstName).toBe('Anita');
+    expect(emitted[0][0].classrooms)
+      .toEqual([{ grade: '2', section: 'B', programmeId: 'prog-2' }]);
+  });
+
+  /** A recognised teacher with no class named is still nothing to save. */
+  it('will not submit a recognised teacher with no class', async () => {
     await render('+91', CATALOGUE, [ANITA]);
 
     component.update('phone', '9876543210');
     fixture.detectChanges();
 
     expect(component.canSubmit()).toBe(false);
-    expect(el().querySelector<HTMLButtonElement>('.entry-foot button')?.disabled).toBe(true);
 
     component.submit();
 
@@ -713,7 +742,6 @@ describe('Add Teachers', () => {
     fixture.detectChanges();
 
     expect(component.identityLocked()).toBe(false);
-    expect(component.canAddClassroom()).toBe(true);
     expect(el().querySelector<HTMLInputElement>('#tc-first')?.disabled).toBe(false);
   });
 
