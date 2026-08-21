@@ -83,7 +83,8 @@
         <app-icon name="check-circle" [size]="15" />
         <span>
           <strong>{{ existing.firstName }} {{ existing.lastName }}</strong> is already
-          registered on this number.
+          registered on this number. Use the <strong>+</strong> below to assign them
+          another class.
         </span>
       </p>
     }
@@ -155,7 +156,7 @@
           </label>
           <select
             [id]="'tc-grade-' + $index"
-            [disabled]="locked($index) || identityLocked()"
+            [disabled]="locked($index)"
             [class.is-error]="missingClassroom($index, 'grade')"
             (blur)="markBlurred($index + '.grade')"
             (change)="updateClassroom($index, 'grade', valueOf($event))"
@@ -181,7 +182,7 @@
           </label>
           <select
             [id]="'tc-section-' + $index"
-            [disabled]="locked($index) || identityLocked()"
+            [disabled]="locked($index)"
             [class.is-error]="missingClassroom($index, 'section')"
             (blur)="markBlurred($index + '.section')"
             (change)="updateClassroom($index, 'section', valueOf($event))"
@@ -207,7 +208,7 @@
                to that school's live REGULAR ones. -->
           <select
             [id]="'tc-programme-' + $index"
-            [disabled]="locked($index) || identityLocked()"
+            [disabled]="locked($index)"
             [class.is-error]="missingClassroom($index, 'programmeId')"
             (blur)="markBlurred($index + '.programmeId')"
             (change)="updateClassroom($index, 'programmeId', valueOf($event))"
@@ -256,8 +257,9 @@
 
        IT IS ALSO WHAT REVEALS THE FIRST ROW: no class controls are shown until it
        is pressed, so the label has to read for that case too. -->
-  <!-- WITHDRAWN for a teacher who already exists: there is nothing to add to a
-       form that cannot be edited. -->
+  <!-- SHOWN FOR A RECOGNISED TEACHER TOO. It was once withdrawn for one; giving
+       an existing teacher another class at this institution is now the whole
+       reason their number gets typed in. -->
   <!-- The requirement is invisible until the ⊕ is pressed, so it has to be said
        out loud once Submit has been tried. Without this the button just looks
        broken. -->
@@ -265,18 +267,16 @@
     <span class="field-error">Add at least one class using the + below</span>
   }
 
-  @if (canAddClassroom()) {
-    <div class="add-row">
-      <button
-        type="button"
-        class="add-entry"
-        (click)="addClassroom()"
-        [attr.aria-label]="count() === 0 ? 'Add a class' : 'Add another class'"
-      >
-        <app-icon name="plus-circle" [size]="26" />
-      </button>
-    </div>
-  }
+  <div class="add-row">
+    <button
+      type="button"
+      class="add-entry"
+      (click)="addClassroom()"
+      [attr.aria-label]="count() === 0 ? 'Add a class' : 'Add another class'"
+    >
+      <app-icon name="plus-circle" [size]="26" />
+    </button>
+  </div>
 
   <div class="entry-foot">
     <!-- Dead until the teacher and their classes are complete, matching the
