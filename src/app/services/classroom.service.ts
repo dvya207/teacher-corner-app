@@ -121,7 +121,13 @@ export class ClassroomService {
   private auth = inject(AuthService);
 
   /**
-   * Every LIVE classroom the signed-in teacher owns, newest first.
+   * Every LIVE classroom IN THE DATABASE, newest first. NOT the caller's own.
+   *
+   * THIS IS NOT OWNER-SCOPED, despite what this comment used to say. Reads
+   * authorise on authentication alone, so this returns every classroom any
+   * teacher has created. ownerId is still stamped on create; nothing reads it
+   * back. ownedClassrooms() in core/firestore-paths.ts is the filtered version
+   * and has no callers.
    *
    * No "not deleted" filter, because deleted rows are not in this collection at
    * all — that is the point of moving them rather than flagging them.

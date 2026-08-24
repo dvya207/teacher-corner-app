@@ -372,10 +372,14 @@ export function stripTeacherTrashMetadata(
  *
  * DELIBERATELY THE SAME SERVICE AS InstitutionService, method for method. Two
  * collections that behave differently for no reason are worse than two that
- * behave identically, and every non-obvious decision here — the ownerId filter,
- * the client-allocated id, serverTimestamp over new Date, delete-as-a-move,
- * the transaction — is explained at length in institution.service.ts. What
- * follows notes only what differs.
+ * behave identically, and every non-obvious decision here — the client-allocated
+ * id, serverTimestamp over new Date, delete-as-a-move, the transaction — is
+ * explained at length in institution.service.ts. What follows notes only what
+ * differs.
+ *
+ * The ownerId filter is no longer among them: reads authorise on authentication
+ * alone in both services. ownerId is still written on create, and the two are
+ * easy to confuse. See [list].
  *
  * NO FIREBASE AUTH USER IS CREATED. A Teacher document is a record ABOUT a
  * person, not an identity they can sign in with. Auth is per-PROJECT, so minting
@@ -486,12 +490,20 @@ export class TeacherService {
   private auth = inject(AuthService);
 
   /**
-   * Every LIVE teacher the signed-in admin owns, newest first.
+   * Every LIVE teacher IN THE DATABASE, newest first. NOT the caller's own.
+   *
+   * THIS IS NOT OWNER-SCOPED, and said plainly because the comment here used to
+   * claim it was. The rules authorise on authentication alone — see the
+   * commented-out ownsExisting() in firestore.rules — so an unfiltered list is
+   * permitted and this returns every teacher any administrator has registered.
+   * ownerId is still stamped on create; nothing reads it back.
+   *
+   * ownedTeachers() in core/firestore-paths.ts is the owner-filtered version and
+   * has no callers. It is the restore path, not a description of this.
    *
    * No "not deleted" filter, because deleted rows are not in this collection at
-   * all. Not filtered by institution either — see ownedTeachers(): a second
-   * where() would need a composite index, and callers narrow client-side on a
-   * result that is already owner-scoped.
+   * all. Not filtered by institution either: a second where() would need a
+   * composite index, and callers narrow client-side.
    */
   async list(): Promise<Teacher[]> {
     const snapshot = await getDocs(activeTeachersCollection());
@@ -502,7 +514,11 @@ export class TeacherService {
       .sort((a, b) => (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0));
   }
 
-  /** The teachers of ONE institution, filtered client-side on the owner-scoped list. */
+  /**
+   * The teachers of ONE institution, filtered client-side on [list].
+   *
+   * Which is every teacher in the database, not the caller's own — see [list].
+   */
   async listForInstitution(institutionId: string): Promise<Teacher[]> {
     const all = await this.list();
 

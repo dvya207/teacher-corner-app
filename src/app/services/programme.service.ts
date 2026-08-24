@@ -182,7 +182,13 @@ export class ProgrammeService {
 
   private auth = inject(AuthService);
 
-  /** Every programme the signed-in teacher owns, newest first. */
+  /**
+   * Every programme IN THE DATABASE, newest first. NOT the caller's own.
+   *
+   * NOT OWNER-SCOPED, despite what this comment used to say. See
+   * classroom.service.ts list() — the same is true of every collection here, and
+   * ownedProgrammes() is the unused filtered version.
+   */
   async list(): Promise<Programme[]> {
     const snapshot = await getDocs(programmesCollection());
 

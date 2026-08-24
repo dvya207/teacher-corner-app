@@ -160,7 +160,13 @@ export class LearningUnitService {
 
   private auth = inject(AuthService);
 
-  /** Every LIVE learning unit the teacher owns, newest first. */
+  /**
+   * Every LIVE learning unit IN THE DATABASE, newest first. NOT the caller's own.
+   *
+   * NOT OWNER-SCOPED, despite what this comment used to say. See
+   * classroom.service.ts list() — the same is true of every collection here, and
+   * ownedLearningUnits() is the unused filtered version.
+   */
   async list(): Promise<LearningUnit[]> {
     const snapshot = await getDocs(learningUnitsCollection());
 

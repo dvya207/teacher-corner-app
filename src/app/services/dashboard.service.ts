@@ -17,16 +17,20 @@ export class DashboardService {
   /**
    * The two headline counts.
    *
-   * Paths come from ownedByUser(), never from a hand-built reference. This
-   * database is shared with BugPulse, and core/firestore-paths.ts is the single
-   * choke point that keeps every reference inside Teacher Corner's collections.
+   * COUNTS THE WHOLE DATABASE, NOT THE CALLER'S OWN ROWS. Two claims that used
+   * to sit here were both false and contradicted the body six lines below: that
+   * the paths come from ownedByUser(), and that both helpers apply the ownerId
+   * filter so an unfiltered count would be denied. Neither holds. The rules
+   * authorise on authentication alone, so an unfiltered count is permitted, and
+   * these are the plain collection references.
+   *
+   * A third claim went with them: that this database is shared with BugPulse. It
+   * is not, and has not been since the app moved to a database it owns outright —
+   * see the header of core/firestore-paths.ts. Paths still come from that module,
+   * but for the reason it now gives, which is drift rather than isolation.
    *
    * Counts ACTIVE institutions only — deleted ones live in a different
    * subcollection entirely, so nothing here has to exclude them.
-   *
-   * Both helpers apply the ownerId filter. That is required, not merely tidy:
-   * the rules read resource.data, and Firestore rejects any query it cannot
-   * prove will only return permitted documents. An unfiltered count is denied.
    *
    * getCountFromServer, not getDocs().size. The aggregation runs server-side
    * and bills a fraction of a read per batch instead of one read per document,
