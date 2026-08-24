@@ -3,6 +3,7 @@ import { Timestamp } from 'firebase/firestore';
 import { Teacher, TeacherClassroom, TeacherMeta } from '../models/teaching.model';
 import {
   isUnlinkedMatch,
+  pickRegisteredName,
   mergeClassrooms,
   stampedClassrooms,
   supersededClassroomKeys,
@@ -534,5 +535,88 @@ describe('isUnlinkedMatch', () => {
 
   it('refuses a record with no number at all', () => {
     expect(isUnlinkedMatch({}, '9481635184')).toBe(false);
+  });
+});
+
+/**
+ * The name an administrator recorded, which is what a wizard-registered teacher
+ * is greeted by. They never fill in the profile form, so `teachers` is the only
+ * place their name exists.
+ */
+describe('pickRegisteredName', () => {
+
+  const meta = (over: Record<string, unknown> = {}) => ({
+    teacherMeta: { firstName: 'Anita', lastName: 'Rao', ...over }
+  });
+
+  it('returns the name an administrator typed into teacherMeta', () => {
+    expect(pickRegisteredName([meta()])).toEqual({ firstName: 'Anita', lastName: 'Rao' });
+  });
+
+  it('returns null for no documents, so absent is distinct from blank', () => {
+    expect(pickRegisteredName([])).toBeNull();
+  });
+
+  /**
+   * Being in `teachers` IS the approval, and setActive(false) is how it is
+   * withdrawn. A withdrawn record is not waved past the gate and must not supply
+   * an identity either.
+   */
+  it('skips a deactivated record', () => {
+    expect(pickRegisteredName([{ ...meta(), active: false }])).toBeNull();
+  });
+
+  it('treats an absent active flag as active, since create does not write it', () => {
+    expect(pickRegisteredName([meta()])?.firstName).toBe('Anita');
+  });
+
+  /** A half-filled record must not shadow a complete one later in the list. */
+  it('passes over a blank name and takes the next usable record', () => {
+    const found = pickRegisteredName([
+      meta({ firstName: '', lastName: '' }),
+      meta({ firstName: 'Bhavna', lastName: 'Iyer' })
+    ]);
+
+    expect(found).toEqual({ firstName: 'Bhavna', lastName: 'Iyer' });
+  });
+
+  it('passes over a deactivated record to reach a live one', () => {
+    const found = pickRegisteredName([
+      { ...meta({ firstName: 'Withdrawn' }), active: false },
+      meta({ firstName: 'Bhavna', lastName: 'Iyer' })
+    ]);
+
+    expect(found?.firstName).toBe('Bhavna');
+  });
+
+  /**
+   * One person holds one record per class they teach, which is what assigning a
+   * registered teacher to another class creates. Those carry the same name, so
+   * first-wins is a choice between equals rather than an arbitrary pick.
+   */
+  it('takes the first usable record when a teacher holds several', () => {
+    const found = pickRegisteredName([meta(), meta({ firstName: 'Anita', lastName: 'Rao' })]);
+
+    expect(found).toEqual({ firstName: 'Anita', lastName: 'Rao' });
+  });
+
+  /** Identity used to live in flat fields; teacherMetaFrom still reads them. */
+  it('reads the flat legacy fields when teacherMeta is absent', () => {
+    expect(pickRegisteredName([{ firstName: 'Chitra', lastName: 'Nair' }]))
+      .toEqual({ firstName: 'Chitra', lastName: 'Nair' });
+  });
+
+  it('trims the stored name rather than greeting someone with padding', () => {
+    expect(pickRegisteredName([meta({ firstName: '  Anita  ', lastName: '  Rao  ' })]))
+      .toEqual({ firstName: 'Anita', lastName: 'Rao' });
+  });
+
+  it('does not treat a whitespace-only name as usable', () => {
+    expect(pickRegisteredName([meta({ firstName: '   ', lastName: '' })])).toBeNull();
+  });
+
+  it('returns a blank last name rather than dropping a one-word name', () => {
+    expect(pickRegisteredName([meta({ firstName: 'Anita', lastName: '' })]))
+      .toEqual({ firstName: 'Anita', lastName: '' });
   });
 });

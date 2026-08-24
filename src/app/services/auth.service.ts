@@ -19,6 +19,19 @@ import { auth } from '../core/firebase';
  */
 export type UserRole = 'Teacher' | 'Admin';
 
+/**
+ * What the topbar shows when no name is known yet.
+ *
+ * EXPORTED BECAUSE IT IS NOT ONLY RENDERED. `recordSignIn` has to be able to
+ * tell this placeholder apart from a real name, and before this constant existed
+ * it could not: the seed wrote whatever `displayName()` returned into
+ * `users/{uid}.firstName`, so a phone-only account with nothing else known was
+ * persisted with the literal first name 'Teacher'. That then looked like a real
+ * name to every later check. One literal, referenced from both places, so the
+ * two cannot drift apart again.
+ */
+export const FALLBACK_DISPLAY_NAME = 'Teacher';
+
 @Injectable({
   providedIn: 'root'
 })
@@ -157,7 +170,21 @@ export class AuthService {
   displayName(): string {
     this.nameVersion();
     const user = auth.currentUser;
-    return user?.displayName || user?.email?.split('@')[0] || 'Teacher';
+    return user?.displayName || user?.email?.split('@')[0] || FALLBACK_DISPLAY_NAME;
+  }
+
+  /**
+   * The name actually ON the auth record, with NO placeholder substituted.
+   *
+   * For DISPLAY use [displayName], which always returns something renderable.
+   * This is for the callers that need to know whether a name is genuinely known,
+   * and the distinction is load-bearing: seeding a profile from `displayName()`
+   * is what wrote 'Teacher' into `users/{uid}.firstName` as though a person had
+   * typed it.
+   */
+  storedDisplayName(): string {
+    this.nameVersion();
+    return auth.currentUser?.displayName ?? '';
   }
 
   /**

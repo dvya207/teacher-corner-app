@@ -404,6 +404,44 @@ export function stripTeacherTrashMetadata(
  * [digits] is expected to be already normalised by the caller, which is why it
  * is not normalised again here: the caller checks its length before querying.
  */
+/**
+ * The first usable name among a set of teacher documents.
+ *
+ * Split out of [TeacherService.registeredName] so the rule can be tested without
+ * a Firestore double, the way isUnlinkedMatch above already is. What reaches the
+ * database is then a query and a loop, and the part that makes a decision is
+ * visible on its own.
+ *
+ * DEACTIVATED RECORDS ARE SKIPPED, matching the sign-in gate: `setActive(false)`
+ * is how an administrator withdraws a teacher, and a withdrawn record should not
+ * supply an identity. Absent is active, because `create` does not write the field
+ * and every record predating it would otherwise read as withdrawn.
+ *
+ * A BLANK NAME IS SKIPPED RATHER THAN RETURNED, so a half-filled record does not
+ * shadow a complete one later in the list.
+ *
+ * Goes through teacherMetaFrom rather than reading `teacherMeta` directly, so the
+ * flat legacy fields identity used to live in are picked up too.
+ */
+export function pickRegisteredName(
+  documents: Record<string, unknown>[]
+): { firstName: string; lastName: string } | null {
+  for (const data of documents) {
+    if ((data as { active?: boolean }).active === false) {
+      continue;
+    }
+
+    const meta = teacherMetaFrom(data);
+    const firstName = (meta.firstName ?? '').trim();
+
+    if (firstName) {
+      return { firstName, lastName: (meta.lastName ?? '').trim() };
+    }
+  }
+
+  return null;
+}
+
 export function isUnlinkedMatch(
   meta: Partial<TeacherMeta>,
   digits: string
@@ -740,6 +778,58 @@ export class TeacherService {
     }
 
     return false;
+  }
+
+  /**
+   * The name an administrator recorded for this person in `teachers`.
+   *
+   * WHY THIS EXISTS. Someone the Set Up Wizard registered has never filled in the
+   * self-registration form, so `users/{uid}` carries no name for them and the
+   * topbar fell back to 'Teacher' forever. The name they should be greeted by was
+   * in `teachers/{docId}` under `teacherMeta` the whole time, typed by the
+   * administrator who registered them, and nothing ever read it for display.
+   *
+   * BY UID **OR** BY NUMBER, for the same reason isRegisteredTeacher is: on a
+   * first sign-in `linkSignedInUid` may not have stamped the uid yet, and the
+   * number is what the administrator actually entered.
+   *
+   * DEACTIVATED RECORDS DO NOT COUNT, matching the gate. A withdrawn teacher
+   * should not be waved past it, and should not supply an identity either.
+   *
+   * FIRST USABLE MATCH WINS. One person can hold several teacher records, one per
+   * class they teach, which is exactly what assigning a registered teacher to
+   * another class creates. Those records carry the same person's name; if they
+   * ever disagree, the records are what need correcting rather than this method
+   * arbitrating between them.
+   *
+   * Returns null rather than a blank pair, so a caller cannot mistake "no record"
+   * for "a record whose name is empty".
+   */
+  async registeredName(
+    uid: string,
+    phoneDigits: string
+  ): Promise<{ firstName: string; lastName: string } | null> {
+    const lookups = [
+      ...(uid ? [where('teacherMeta.uid', '==', uid)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phoneNumber', '==', phoneDigits)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phone', '==', phoneDigits)] : [])
+    ];
+
+    for (const clause of lookups) {
+      const snapshot = await getDocs(
+        query(activeTeachersCollection(), clause, limit(5))
+      );
+
+      const found = pickRegisteredName(
+        snapshot.docs.map(document => document.data() as Record<string, unknown>)
+      );
+
+      if (found) {
+        return found;
+      }
+    }
+
+    return null;
   }
 
   /** Saves an edit. Ownership and school membership are not editable here. */

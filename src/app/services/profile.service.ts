@@ -10,8 +10,9 @@ import {
 } from 'firebase/firestore';
 
 import { userProfileDoc } from '../core/firestore-paths';
+import { toSubscriberDigits } from '../data/institution-options';
 import { TeacherProfile } from '../models/teaching.model';
-import { AuthService } from './auth.service';
+import { AuthService, FALLBACK_DISPLAY_NAME } from './auth.service';
 import { TeacherService } from './teacher.service';
 
 /**
@@ -35,6 +36,26 @@ export function supersededRequestKeys(
       )
     )
     .map(([key]) => key);
+}
+
+/**
+ * Whether the name stored on a profile is a real one.
+ *
+ * Exported and tested directly, for the reason supersededRequestKeys above is:
+ * this decides whether the administrator's record gets to supply an identity,
+ * and a rule that picks between two sources of a person's name should be visible
+ * rather than inlined in a sign-in path.
+ *
+ * THE PLACEHOLDER IS NOT A NAME. Accounts that signed in while the seed still
+ * wrote `displayName()` are carrying the literal 'Teacher' in firstName, which
+ * is indistinguishable from a real name by a truthiness check and is why those
+ * accounts stayed greeted as 'Teacher' with a users/{uid} document that looked
+ * correctly filled in.
+ */
+export function isUsableProfileName(firstName: string | undefined): boolean {
+  const trimmed = (firstName ?? '').trim();
+
+  return trimmed !== '' && trimmed !== FALLBACK_DISPLAY_NAME;
 }
 
 @Injectable({
@@ -402,7 +423,14 @@ export class ProfileService {
     const seed = existing.exists()
       ? {}
       : (() => {
-          const [first = '', ...rest] = this.auth.displayName().split(/\s+/);
+          // storedDisplayName, NOT displayName: the latter substitutes the
+          // 'Teacher' placeholder when nothing is known, and this line persists
+          // its result as a first name. A phone-only account has no display name
+          // on the auth record at this point, so seeding from displayName() wrote
+          // the placeholder into users/{uid}.firstName where it then read as a
+          // real name to everything downstream. Blank is the honest value, and
+          // the backfill below is what fills it.
+          const [first = '', ...rest] = this.auth.storedDisplayName().split(/\s+/);
           return {
             firstName: first,
             lastName: rest.join(' '),
@@ -456,9 +484,49 @@ export class ProfileService {
     // on a first sign-in.
     if (!user.displayName) {
       const saved = (await getDoc(reference)).data() as TeacherProfile | undefined;
+      if (isUsableProfileName(saved?.firstName)) {
+        await this.auth.setDisplayName(
+          (saved?.firstName ?? '').trim(),
+          saved?.lastName ?? ''
+        );
+        return;
+      }
 
-      if (saved?.firstName) {
-        await this.auth.setDisplayName(saved.firstName, saved.lastName ?? '');
+      /*
+       * SECOND SOURCE: the record an administrator registered them from.
+       *
+       * A teacher added through the Set Up Wizard never fills in the profile
+       * form, so the first backfill has nothing to work with and they were
+       * greeted as 'Teacher' indefinitely. The administrator typed their name
+       * into `teachers` when they registered them, which is a perfectly good
+       * name and the one they are known by at their school.
+       *
+       * ONLY WHEN NOTHING IS KNOWN YET, deliberately. This does not run when the
+       * profile carries a real name, so a teacher who edits their own name keeps
+       * it rather than having it reverted to the administrator's spelling on
+       * every sign-in. The two sources are known to disagree in live data, and
+       * the person's own edit is the one that should survive.
+       *
+       * Written through to users/{uid} as well as the auth record, so the name
+       * persists as theirs: the profile form opens populated, and this lookup
+       * does not repeat on every subsequent sign-in.
+       */
+      const registered = await this.teachers.registeredName(
+        user.uid,
+        toSubscriberDigits(user.phoneNumber ?? '')
+      );
+
+      if (registered) {
+        await this.auth.setDisplayName(registered.firstName, registered.lastName);
+        await setDoc(
+          reference,
+          {
+            firstName: registered.firstName,
+            lastName: registered.lastName,
+            updatedAt: serverTimestamp()
+          },
+          { merge: true }
+        );
       }
     }
   }
