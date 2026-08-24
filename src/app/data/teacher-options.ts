@@ -10,6 +10,8 @@
  * this becomes the input to that draft rather than being replaced by it.
  */
 
+import { toSubscriberDigits } from './institution-options';
+
 /**
  * One class a teacher takes.
  *
@@ -177,7 +179,23 @@ export function findKnownTeacher(
  * `toSubscriberDigits` enforces, applied as you type rather than on save.
  */
 export function toPhoneDigits(raw: string): string {
-  return (raw ?? '').replace(/\D/g, '').slice(0, 10);
+  /*
+   * DELEGATES to toSubscriberDigits, which is what the comment above always
+   * claimed and what the code did not do.
+   *
+   * It used to be `replace(/\D/g, '').slice(0, 10)` — the FIRST ten digits. So a
+   * number pasted with its dial code stored the dial code and lost the end of
+   * the real number: +919481635184 became 9194816351. That value matches nothing,
+   * which is why a teacher registered that way could never be linked to their
+   * Firebase account on sign-in: linkSignedInUid compares against exactly this
+   * field.
+   *
+   * toSubscriberDigits drops a leading 91 only on a 12-digit value and a leading
+   * 0 only on an 11-digit one, so a genuine number beginning 91 — 91xxxxxxxx is a
+   * real series — survives untouched. The slice then caps overflow from the END,
+   * which is what typing one digit too many should cost.
+   */
+  return toSubscriberDigits(raw).slice(0, 10);
 }
 
 /** Exactly ten digits, which is what the reference's placeholder asks for. */

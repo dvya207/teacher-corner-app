@@ -1,7 +1,8 @@
 import { Timestamp } from 'firebase/firestore';
 
-import { Teacher, TeacherClassroom } from '../models/teaching.model';
+import { Teacher, TeacherClassroom, TeacherMeta } from '../models/teaching.model';
 import {
+  isUnlinkedMatch,
   mergeClassrooms,
   stampedClassrooms,
   supersededClassroomKeys,
@@ -456,5 +457,82 @@ describe('supersededClassroomKeys', () => {
   it('finds nothing in a map with no unresolved entries', () => {
     expect(supersededClassroomKeys({ c1: entry({}) })).toEqual([]);
     expect(supersededClassroomKeys({})).toEqual([]);
+  });
+});
+
+/**
+ * Which stored record a signed-in Firebase account becomes.
+ *
+ * THE FLOW THIS PROTECTS. An administrator registers a teacher in the Set Up
+ * Wizard, which writes teachers/{docId} with a number and no uid — no Auth user
+ * exists yet. That person later signs in with OTP, and this rule is what decides
+ * that the new Firebase account IS that record, so teacherMeta.uid gets stamped
+ * and both apps can resolve them by uid from then on.
+ *
+ * It failed for most teachers before, in two independent ways: the login field
+ * mangled numbers beginning 91, and this comparison was a raw `===` against a
+ * field the wizard could store with a dial code on it.
+ */
+describe('isUnlinkedMatch', () => {
+
+  const meta = (over: Partial<TeacherMeta> = {}): Partial<TeacherMeta> => ({
+    phoneNumber: '9481635184',
+    phone: '9481635184',
+    ...over
+  });
+
+  it('matches an unlinked record on the same number', () => {
+    expect(isUnlinkedMatch(meta(), '9481635184')).toBe(true);
+  });
+
+  it('refuses a record that already carries a uid', () => {
+    // Numbers are recycled. Claiming a linked record would hand one teacher
+    // another's classrooms.
+    expect(isUnlinkedMatch(meta({ uid: 'someone-else' }), '9481635184')).toBe(false);
+  });
+
+  it('refuses a different number', () => {
+    expect(isUnlinkedMatch(meta(), '9000000000')).toBe(false);
+  });
+
+  it('matches through a stored dial code', () => {
+    // The wizard could store this before toPhoneDigits was fixed, and a raw ===
+    // comparison never matched it.
+    expect(isUnlinkedMatch(meta({ phoneNumber: '+919481635184' }), '9481635184'))
+      .toBe(true);
+  });
+
+  it('matches through stored separators', () => {
+    expect(isUnlinkedMatch(meta({ phoneNumber: '94816 35184' }), '9481635184'))
+      .toBe(true);
+  });
+
+  it('matches through a stored trunk prefix', () => {
+    expect(isUnlinkedMatch(meta({ phoneNumber: '09481635184' }), '9481635184'))
+      .toBe(true);
+  });
+
+  it('falls back to `phone` when `phoneNumber` is absent', () => {
+    // Production writes one or the other; the web app writes both.
+    const withoutPhoneNumber: Partial<TeacherMeta> = { phone: '9481635184' };
+
+    expect(isUnlinkedMatch(withoutPhoneNumber, '9481635184')).toBe(true);
+  });
+
+  it('matches a number that legitimately begins 91', () => {
+    // 91xxxxxxxx is a real series. Nothing in the chain may treat the leading 91
+    // of a ten-digit number as a dial code.
+    expect(isUnlinkedMatch(meta({ phoneNumber: '9180000000' }), '9180000000'))
+      .toBe(true);
+  });
+
+  it('refuses an incomplete number rather than matching loosely', () => {
+    // A partial value must never claim a record.
+    expect(isUnlinkedMatch(meta(), '94816')).toBe(false);
+    expect(isUnlinkedMatch(meta(), '')).toBe(false);
+  });
+
+  it('refuses a record with no number at all', () => {
+    expect(isUnlinkedMatch({}, '9481635184')).toBe(false);
   });
 });

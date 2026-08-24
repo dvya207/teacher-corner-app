@@ -12,6 +12,7 @@ import {
 import { userProfileDoc } from '../core/firestore-paths';
 import { TeacherProfile } from '../models/teaching.model';
 import { AuthService } from './auth.service';
+import { TeacherService } from './teacher.service';
 
 /**
  * Old request keys that an incoming resolved request supersedes.
@@ -42,6 +43,7 @@ export function supersededRequestKeys(
 export class ProfileService {
 
   private auth = inject(AuthService);
+  private teachers = inject(TeacherService);
 
   /**
    * The teacher's profile document, or a draft seeded from their auth record.
@@ -208,7 +210,9 @@ export class ProfileService {
       const snapshot = await getDoc(userProfileDoc(uid));
 
       if (!snapshot.exists()) {
-        return 'register';
+        // No profile at all. An administrator may still have registered them, so
+        // that is checked before sending them to a form.
+        return (await this.registeredByAdmin()) ? null : 'register';
       }
 
       const profile = snapshot.data() as TeacherProfile;
@@ -226,14 +230,18 @@ export class ProfileService {
         // LEGACY, and it has to stay: documents written before the two-phase
         // split carry profileComplete and ApprovedStatus and no request at all.
         if (profile.profileComplete === true) {
-          return profile.ApprovedStatus === true ? null : 'approval';
+          if (profile.ApprovedStatus === true) {
+            return null;
+          }
+
+          return (await this.registeredByAdmin()) ? null : 'approval';
         }
 
-        return 'register';
+        return (await this.registeredByAdmin()) ? null : 'register';
       }
 
       if (!requests.some(request => request.approvalStatus === true)) {
-        return 'approval';
+        return (await this.registeredByAdmin()) ? null : 'approval';
       }
 
       /*
@@ -250,6 +258,52 @@ export class ProfileService {
     } catch (error) {
       console.error('Could not read the profile to decide where to route.', error);
       return null;
+    }
+  }
+
+  /**
+   * Whether an administrator already registered this person in `teachers`.
+   *
+   * BEING IN THAT COLLECTION IS THE APPROVAL. Someone put the record there
+   * deliberately, with a school and a class on it, so asking that person to fill
+   * in a self-registration form and then wait in an approval queue is asking
+   * them to apply for what they have already been granted. A teacher added in the
+   * Setup Wizard should sign in and land on the dashboard.
+   *
+   * CALLED ONLY WHEN THE PROFILE WOULD OTHERWISE TURN THEM AWAY, which is why
+   * the calls are scattered through [gate] rather than hoisted to the top of it.
+   * gate() runs on every navigation into the shell and its one-read promise is
+   * worth keeping: a teacher who is already through pays nothing for this.
+   *
+   * MATCHES ON UID **OR** NUMBER. `linkSignedInUid` stamps the uid, but it runs
+   * after the session exists and this can run before it, so on a first sign-in
+   * there is nothing stamped yet. The number is what the administrator typed.
+   *
+   * FAILS CLOSED, unlike the rest of gate(). A refused or failed read returns
+   * false, so the teacher goes to the form rather than being waved through on a
+   * lookup that did not answer. gate() as a whole still fails OPEN on a thrown
+   * error, which is the right default for a profile read; this one narrow check
+   * is the exception, because it is the thing granting access rather than
+   * describing it.
+   */
+  private async registeredByAdmin(): Promise<boolean> {
+    try {
+      const uid = this.auth.currentUid() ?? '';
+      const digits = (this.auth.currentUser?.phoneNumber ?? '')
+        .replace(/\D/g, '')
+        .slice(-10);
+
+      if (!uid && digits.length < 10) {
+        return false;
+      }
+
+      return await this.teachers.isRegisteredTeacher(
+        uid,
+        digits.length === 10 ? digits : ''
+      );
+    } catch (error) {
+      console.error('Could not check whether a teacher record exists.', error);
+      return false;
     }
   }
 

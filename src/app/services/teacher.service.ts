@@ -4,13 +4,17 @@ import {
   deleteDoc,
   deleteField,
   getDocs,
+  limit,
+  query,
   runTransaction,
   serverTimestamp,
   setDoc,
-  updateDoc
+  updateDoc,
+  where
 } from 'firebase/firestore';
 
 import { db } from '../core/firebase';
+import { toSubscriberDigits } from '../data/institution-options';
 import {
   activeTeacherDoc,
   newActiveTeacherDoc,
@@ -379,6 +383,40 @@ export function stripTeacherTrashMetadata(
  * well. The email is stored regardless, so an invite flow can be added
  * later without reshaping a single document.
  */
+/**
+ * Whether this teacher record is the signed-in person's, and still unclaimed.
+ *
+ * EXPORTED AND TESTED DIRECTLY, for the reason `supersededRequestKeys` is: this
+ * rule GRANTS AN IDENTITY. It decides which stored record a Firebase account
+ * becomes, so it has to be visible and pinned rather than buried in a filter
+ * inside a write.
+ *
+ * TWO CONDITIONS, both necessary:
+ *
+ *   - THE NUMBERS MATCH once both sides are normalised. Comparing the raw
+ *     strings meant any formatting difference silently prevented linking, and a
+ *     teacher stayed unlinked forever with nothing in the UI to explain it.
+ *   - THE RECORD CARRIES NO UID. Numbers are recycled, so claiming a record that
+ *     already belongs to an account would hand one teacher another's classrooms.
+ *     Only a blank is filled; a record already holding THIS uid needs no write
+ *     and is not a match either.
+ *
+ * [digits] is expected to be already normalised by the caller, which is why it
+ * is not normalised again here: the caller checks its length before querying.
+ */
+export function isUnlinkedMatch(
+  meta: Partial<TeacherMeta>,
+  digits: string
+): boolean {
+  if (digits.length < 10) {
+    return false;
+  }
+
+  const stored = toSubscriberDigits(meta.phoneNumber ?? meta.phone ?? '');
+
+  return stored === digits && !meta.uid;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -614,19 +652,32 @@ export class TeacherService {
    * must not cost anybody their sign-in — see the call site in the login page.
    */
   async linkSignedInUid(phoneNumber: string, uid: string): Promise<number> {
-    const digits = (phoneNumber ?? '').trim();
+    /*
+     * BOTH SIDES ARE NORMALISED, and that is a fix rather than tidying.
+     *
+     * This used to compare the caller's string against the stored field with
+     * `===`. Any difference in formatting therefore meant no link at all, and
+     * silently: a stored `+919481635184` or `094816 35184` never matched a
+     * ten-digit login value, so that teacher signed in and stayed unlinked
+     * forever, with nothing in the UI to say why.
+     *
+     * toSubscriberDigits is the same helper the wizard and every institution form
+     * use, so all three ends of this now agree on what a number is.
+     */
+    const digits = toSubscriberDigits(phoneNumber ?? '');
 
-    if (!digits || !uid) {
+    if (digits.length < 10 || !uid) {
       return 0;
     }
 
     const snapshot = await getDocs(activeTeachersCollection());
 
-    const unlinked = snapshot.docs.filter(document => {
-      const meta = (document.data()['teacherMeta'] ?? {}) as Partial<TeacherMeta>;
-
-      return (meta.phoneNumber ?? meta.phone ?? '') === digits && !meta.uid;
-    });
+    const unlinked = snapshot.docs.filter(document =>
+      isUnlinkedMatch(
+        (document.data()['teacherMeta'] ?? {}) as Partial<TeacherMeta>,
+        digits
+      )
+    );
 
     await Promise.all(
       unlinked.map(document =>
@@ -641,6 +692,54 @@ export class TeacherService {
     );
 
     return unlinked.length;
+  }
+
+  /**
+   * Whether an administrator has already registered this person as a teacher.
+   *
+   * WHAT IT IS FOR. Being in `teachers` IS the approval. An administrator put
+   * that record there deliberately, with a school and a class on it, so sending
+   * that person through the self-registration form and then an approval queue
+   * asks them to apply for something they have already been granted. `gate()`
+   * uses this to let them straight through to the dashboard.
+   *
+   * BY UID **OR** BY NUMBER, and both are needed. `linkSignedInUid` stamps the
+   * uid, but it runs AFTER the session exists, and the route guard that calls
+   * this can run before it — on a first sign-in there is nothing stamped yet.
+   * The number is what the administrator actually entered, so it is the key that
+   * is always present.
+   *
+   * DEACTIVATED RECORDS DO NOT COUNT. `setActive(false)` is how an administrator
+   * withdraws a teacher, and a withdrawn teacher should not be waved past the
+   * gate. Absent is treated as active, because `create` does not write the field
+   * and every existing record predates it.
+   *
+   * Two narrow queries rather than reading the collection: this is on the path
+   * into the shell, and `linkSignedInUid` already pays for a full read elsewhere.
+   */
+  async isRegisteredTeacher(uid: string, phoneDigits: string): Promise<boolean> {
+    const lookups = [
+      ...(uid ? [where('teacherMeta.uid', '==', uid)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phoneNumber', '==', phoneDigits)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phone', '==', phoneDigits)] : [])
+    ];
+
+    for (const clause of lookups) {
+      const snapshot = await getDocs(
+        query(activeTeachersCollection(), clause, limit(5))
+      );
+
+      const usable = snapshot.docs.some(document => {
+        const data = document.data() as { active?: boolean };
+        return data.active !== false;
+      });
+
+      if (usable) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /** Saves an edit. Ownership and school membership are not editable here. */
