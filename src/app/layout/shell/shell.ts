@@ -140,7 +140,10 @@ export class Shell {
   readonly displayName = computed(() => this.auth.displayName());
   readonly displayInitials = computed(() => this.auth.initials());
   readonly userRole = this.auth.role();
-  readonly userIdentity = this.auth.identity();
+  // Computed for the same reason displayName above is: a plain field snapshots
+  // the value at construction, so the "Signed in as" line kept naming the
+  // previous account after a session change.
+  readonly userIdentity = computed(() => this.auth.identity());
 
   constructor() {
     // ONCE PER SESSION, from the shell: this is the first thing that renders after

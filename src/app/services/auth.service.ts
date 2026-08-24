@@ -61,6 +61,36 @@ export class AuthService {
    */
   private readonly nameVersion = signal(0);
 
+  /**
+   * Bumps [nameVersion] whenever the SESSION changes, not only the name.
+   *
+   * THE BUG THIS FIXES, which is a different one from the comment above.
+   * displayName() reads nameVersion() and then auth.currentUser, but
+   * auth.currentUser is a plain SDK property rather than a signal, so a computed
+   * over it only re-runs when nameVersion moves. Until now the only thing that
+   * moved it was setDisplayName. Signing out therefore invalidated nothing, and
+   * the topbar and the dashboard greeting went on rendering the previous user's
+   * name over a session that no longer existed — while requireUid(), reading the
+   * same auth object directly, correctly reported no user.
+   *
+   * That combination is worse than either symptom alone: the screen says who you
+   * are and the writes say you are nobody, so the natural conclusion is that the
+   * writes are broken rather than that you are signed out.
+   *
+   * A PERSISTENT LISTENER, unlike the one-shot in ready(), which unsubscribes as
+   * soon as it has answered. This one lives for the life of the app because the
+   * event it cares about can happen at any time, including in ANOTHER TAB:
+   * Firebase shares auth state across tabs of one origin, so a sign-out
+   * elsewhere has to reach this one too.
+   *
+   * Never unsubscribed, deliberately. The service is providedIn: 'root' and so
+   * outlives every component; there is no teardown point that is not also the
+   * end of the page.
+   */
+  private readonly stopWatchingSession = onAuthStateChanged(auth, () => {
+    this.nameVersion.update(version => version + 1);
+  });
+
   get currentUser(): User | null {
     return auth.currentUser;
   }
@@ -195,6 +225,10 @@ export class AuthService {
    * than one, and two accounts can easily share a display name.
    */
   identity(): string {
+    // Read for the dependency, as displayName does: without it a computed over
+    // this method never re-runs, because auth.currentUser is not a signal.
+    this.nameVersion();
+
     const user = auth.currentUser;
     return user?.email || user?.phoneNumber || 'Unknown account';
   }
