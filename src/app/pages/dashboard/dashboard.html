@@ -1,7 +1,7 @@
 <section class="welcome-banner animate-fade-up">
 
   <div class="welcome-copy">
-    <h1>Welcome back, {{ username }}! <span class="wave" aria-hidden="true">👋</span></h1>
+    <h1>Welcome back, {{ username() }}! <span class="wave" aria-hidden="true">👋</span></h1>
     <p class="welcome-sub">
       {{ today | date: 'EEEE, d MMMM y' }} · Here's what's happening today
     </p>

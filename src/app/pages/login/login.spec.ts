@@ -178,6 +178,48 @@ describe('Login', () => {
     expect(component.phoneNumber()).toBe('9999900004');
   });
 
+  /*
+   * A NUMBER THAT LEGITIMATELY BEGINS 91.
+   *
+   * Indian mobiles start 6-9, so 91xxxxxxxx is a real series. The dial-code
+   * strip used to fire on the PREFIX, so with +91 selected these numbers lost
+   * their first two digits as they were typed: 9180000000 became 80000000, eight
+   * digits, silently. Stripping is now decided by LENGTH — only a number that is
+   * exactly dial + a full local number has a dial code on it.
+   */
+  it('keeps a ten-digit number that starts with 91', () => {
+    component.onPhoneInput('9180000000');
+    expect(component.phoneNumber()).toBe('9180000000');
+    expect(component.phoneValid()).toBe(true);
+  });
+
+  it('keeps every digit of 9199887766', () => {
+    component.onPhoneInput('9199887766');
+    expect(component.phoneNumber()).toBe('9199887766');
+  });
+
+  it('still strips the dial code from a pasted 91-prefixed 91 number', () => {
+    // Twelve digits: 91 + 9180000000. The only shape that really has a dial code.
+    component.onPhoneInput('919180000000');
+    expect(component.phoneNumber()).toBe('9180000000');
+  });
+
+  it('does not eat the leading 91 of a half-typed number', () => {
+    // Eleven digits, mid-typing. Trimmed from the END by maxDigits; the first two
+    // digits must survive.
+    component.onPhoneInput('91800000001');
+    expect(component.phoneNumber()).toBe('9180000000');
+  });
+
+  it('builds up 91… digit by digit without losing any', () => {
+    // The real failure was per-keystroke, so type it the way a teacher does.
+    const typed = '9180000000';
+    for (let i = 1; i <= typed.length; i++) {
+      component.onPhoneInput(typed.slice(0, i));
+      expect(component.phoneNumber()).toBe(typed.slice(0, i));
+    }
+  });
+
   it('reveals the code step only after the send resolves', async () => {
     fillValidNumber();
 

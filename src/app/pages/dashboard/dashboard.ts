@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
@@ -32,10 +32,15 @@ export class Dashboard implements OnInit {
   private dashboard = inject(DashboardService);
 
   /**
-   * Resolved once at construction. Safe as a plain field because authGuard has
-   * already awaited session rehydration by the time this component exists.
+   * A computed, NOT a value resolved at construction.
+   *
+   * It was the latter, which is why editing your name left this greeting reading
+   * the old one until a reload: the field held whatever displayName() returned
+   * the moment this component was built. authGuard still guarantees the session
+   * is rehydrated before that happens, so the first read is correct — the bug was
+   * only that it never read again.
    */
-  readonly username = this.auth.displayName();
+  readonly username = computed(() => this.auth.displayName());
 
   /** Captured once rather than per render, so the DatePipe is not handed a new
       Date on every change detection pass. */

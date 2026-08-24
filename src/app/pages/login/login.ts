@@ -181,10 +181,36 @@ export class Login implements OnDestroy {
     // Digits only. Paste is the common case: a number copied from a contact card
     // arrives with spaces, dashes or a +91 already on the front.
     const digits = value.replace(/\D/g, '');
-        // Strip a pasted dial code only when it matches the SELECTED one, so choosing
-    // +1 and pasting a number starting 91 does not silently lose two digits.
+
+    /*
+     * STRIPPING A PASTED DIAL CODE IS ONLY SAFE WHEN THE NUMBER IS TOO LONG
+     * WITHOUT IT, and getting that wrong ate two digits from real numbers.
+     *
+     * The previous rule was "starts with the selected dial code". With +91
+     * selected, an Indian mobile that legitimately BEGINS 91 — 91xxxxxxxx is a
+     * real series, Indian mobiles start 6-9 — matched it, so typing 9180000000
+     * left 80000000 in the field: eight digits, silently, as it was typed.
+     *
+     * A leading 91 is only a dial code if what follows it is still a whole
+     * number. So the length decides, not the prefix: strip only when the digits
+     * are EXACTLY dial + a full local number, which is what a pasted +91 number
+     * looks like and what a typed one never does.
+     *
+     *   9180000000    (10) -> kept whole, a real number starting 91
+     *   919180000000  (12) -> 91 stripped, leaving 9180000000
+     *   91800000001   (11) -> kept, then trimmed by maxDigits; a half-typed
+     *                         number must not lose its first two digits
+     *
+     * Deliberately conservative for other countries: their local lengths vary,
+     * so an exact match rarely fires and a pasted dial code is simply kept and
+     * trimmed. Keeping a digit too many is visible and fixable; eating two is
+     * neither.
+     */
     const dial = this.countryCode().replace('+', '');
-    const withoutDial = digits.startsWith(dial) ? digits.slice(dial.length) : digits;
+    const withoutDial =
+      digits.length === dial.length + this.maxDigits() && digits.startsWith(dial)
+        ? digits.slice(dial.length)
+        : digits;
 
     this.phoneNumber.set(withoutDial.slice(0, this.maxDigits()));
     this.errorMessage.set('');

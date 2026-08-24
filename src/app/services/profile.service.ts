@@ -139,6 +139,21 @@ export class ProfileService {
       },
       { merge: true }
     );
+
+    /*
+     * KEEP THE AUTH RECORD IN STEP WITH THE EDIT.
+     *
+     * users/{uid} is the source of truth, but the greeting, the topbar and the
+     * avatar initials all read `auth.currentUser.displayName` — a cache of this
+     * one field, so they can stay synchronous instead of each fetching the
+     * profile. Saving a new name here without updating that cache left every one
+     * of them showing the old name until a full reload.
+     *
+     * AFTER the Firestore write, so the cache never leads the record. Best
+     * effort inside setDisplayName, which logs and swallows: a refused update
+     * costs a stale greeting, and must not fail a save that already succeeded.
+     */
+    await this.auth.setDisplayName(profile.firstName, profile.lastName ?? '');
   }
 
 

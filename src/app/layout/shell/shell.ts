@@ -134,8 +134,11 @@ export class Shell {
   private router = inject(Router);
   private configuration = inject(ConfigurationService);
 
-  readonly displayName = signal(this.auth.displayName());
-  readonly displayInitials = signal(this.auth.initials());
+  // Computed, not signal(...): a signal seeded with a call captures that call's
+  // value once and never re-runs it, so the topbar and the avatar kept the name
+  // they were built with after a profile edit.
+  readonly displayName = computed(() => this.auth.displayName());
+  readonly displayInitials = computed(() => this.auth.initials());
   readonly userRole = this.auth.role();
   readonly userIdentity = this.auth.identity();
 
@@ -276,24 +279,6 @@ export class Shell {
 
   closeProfile(): void {
     this.profileOpen.set(false);
-  }
-
-  /**
-   * Refreshes the topbar after a save.
-   *
-   * username/userInitials are read once from the auth record at construction,
-   * so a profile saved to Firestore would otherwise leave the topbar showing
-   * the old name until a full reload.
-   */
-  onProfileSaved(profile: { firstName: string; lastName: string }): void {
-    const name = `${profile.firstName} ${profile.lastName}`.trim();
-
-    if (name) {
-      this.displayName.set(name);
-      this.displayInitials.set(
-        (profile.firstName[0] ?? '') + (profile.lastName[0] ?? '')
-      );
-    }
   }
 
   /**

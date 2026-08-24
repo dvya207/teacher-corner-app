@@ -1,4 +1,4 @@
-import { Injectable, inject, Injector } from '@angular/core';
+import { Injectable, inject, Injector, signal } from '@angular/core';
 import {
   GoogleAuthProvider,
   User,
@@ -30,6 +30,23 @@ export class AuthService {
    * both exist.
    */
   private injector = inject(Injector);
+
+  /**
+   * Bumped whenever the display name on the auth record changes.
+   *
+   * WHY A COUNTER AND NOT THE NAME ITSELF. The name lives on
+   * `auth.currentUser`, which the Firebase SDK owns and mutates in place; there
+   * is no signal to observe. [displayName] reads this counter before reading the
+   * SDK, so anything that calls it inside a `computed` re-runs when the name
+   * changes. Holding a copy of the name here instead would be a second source of
+   * truth to keep in step.
+   *
+   * THE BUG THIS FIXES. Editing your profile from "abc def" to "xyz pqr" left the
+   * dashboard greeting and the topbar reading the old name until a full reload.
+   * Two causes: nothing told the auth record about the edit, and every consumer
+   * had snapshotted this value once at construction.
+   */
+  private readonly nameVersion = signal(0);
 
   get currentUser(): User | null {
     return auth.currentUser;
@@ -122,12 +139,23 @@ export class AuthService {
 
     try {
       await updateProfile(user, { displayName: name });
+      // AFTER the write, so nothing re-renders against a name that failed to
+      // save. Consumers reading displayName() in a computed update from here.
+      this.nameVersion.update(version => version + 1);
     } catch (error) {
       console.error('Could not write the display name to the auth record.', error);
     }
   }
 
+  /**
+   * The name to show, from the auth record.
+   *
+   * REACTIVE WHEN READ INSIDE A `computed`, via [nameVersion]. Called as a plain
+   * method it still returns the current value, so existing non-reactive callers
+   * are unaffected.
+   */
   displayName(): string {
+    this.nameVersion();
     const user = auth.currentUser;
     return user?.displayName || user?.email?.split('@')[0] || 'Teacher';
   }
