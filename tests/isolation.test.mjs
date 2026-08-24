@@ -203,7 +203,8 @@ test('the path builder declares exactly the approved collections', () => {
     classrooms: 'classrooms',
     programmes: 'programmes',
     learningUnits: 'learningUnits',
-    teachers: 'teachers'
+    teachers: 'teachers',
+    configuration: 'Configuration'
   })) {
     assert.match(
       builder.text,

@@ -28,8 +28,12 @@
  * dressed as a refactor. Widening a list is now a Firestore edit, which is the point.
  */
 
-/** Collection name. Capitalised, as production has it. */
-export const CONFIGURATION_COLLECTION = 'Configuration';
+/*
+ * The collection name lives in core/firestore-paths.ts with every other one, as
+ * COLLECTIONS.configuration, and is reached through configurationCollection().
+ * It was here, and that made this the only place outside the path builder that
+ * named a collection — which is what let the read be built inline from `db`.
+ */
 
 /**
  * Document ids, and the key each one's payload sits under.

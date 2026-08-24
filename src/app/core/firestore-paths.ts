@@ -73,11 +73,34 @@ export const COLLECTIONS = Object.freeze({
   /** The learning units a programme is built from. */
   learningUnits: 'learningUnits',
   /** Teachers registered against an institution. NOT the signed-in user — see the model. */
-  teachers: 'teachers'
+  teachers: 'teachers',
+  /** Option vocabularies every dropdown reads. Capitalised, as production has it. */
+  configuration: 'Configuration'
 });
 
 /** The field carrying ownership on institution documents. */
 export const OWNER_FIELD = 'ownerId';
+
+/**
+ * The option vocabularies: Configuration
+ *
+ * THE ONE COLLECTION HERE THAT IS NOT ANYONE'S DATA. Countries, boards, grades,
+ * sections and the rest — what every dropdown renders. The rules grant read to
+ * any signed-in user and refuse client writes outright, because one write to a
+ * list changes what every OTHER teacher can select. Editing goes through the
+ * console or scripts/seed-configuration.mjs, both on the Admin SDK.
+ *
+ * NO OWNER FILTER, and that is not an oversight. Every other top-level query
+ * here carries one because the rule reads resource.data and Firestore rejects a
+ * list it cannot prove is fully permitted. This collection's rule is a flat
+ * `read: if signedIn()`, so an unfiltered list IS provably permitted.
+ *
+ * It reached this file late: it was the last path in the app still built inline
+ * from `db`, which the isolation test exists to catch.
+ */
+export function configurationCollection(): CollectionReference {
+  return collection(db, COLLECTIONS.configuration);
+}
 
 
 function assertSafeSegment(segment: string, label: string): void {

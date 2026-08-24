@@ -1,8 +1,7 @@
 import { InjectionToken, Injectable, computed, inject, signal } from '@angular/core';
-import { collection, getDocs } from 'firebase/firestore';
+import { getDocs } from 'firebase/firestore';
 
 import {
-  CONFIGURATION_COLLECTION,
   CONFIGURATION_DOCS,
   CodedOption,
   ConfiguredCountry,
@@ -10,7 +9,7 @@ import {
   PincodeRule,
   ValuedOption
 } from '../core/configuration';
-import { db } from '../core/firebase';
+import { configurationCollection } from '../core/firestore-paths';
 import { CLASSROOM_TYPES, GRADES, SECTIONS } from '../data/classroom-options';
 import { COUNTRIES, DEFAULT_COUNTRY } from '../data/countries';
 import { BOARDS, GENDER_TYPES, MEDIUMS, SCHOOL_TYPES } from '../data/institution-options';
@@ -59,7 +58,7 @@ export const CONFIGURATION_READER = new InjectionToken<() => Promise<Configurati
   'CONFIGURATION_READER',
   {
     factory: () => async () => {
-      const snapshot = await getDocs(collection(db, CONFIGURATION_COLLECTION));
+      const snapshot = await getDocs(configurationCollection());
       return new Map(snapshot.docs.map(document => [document.id, document.data()]));
     }
   }
