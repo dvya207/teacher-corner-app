@@ -442,7 +442,20 @@ export function pickRegisteredName(
   return null;
 }
 
-export function isUnlinkedMatch(
+/**
+ * Whether a record's stored number IS this number, however it was written down.
+ *
+ * BOTH SIDES NORMALISED. The stored value is not trustworthy as a literal: the
+ * wizard, an import and production have each written `+919481635184`,
+ * `094816 35184` and `9481635184` for the same person. A Firestore equality
+ * query compares the raw stored string, so it silently misses every form but the
+ * one it was given — which is exactly the bug linkSignedInUid was fixed for, and
+ * why anything matching on a number has to come through here.
+ *
+ * A NUMBER SHORTER THAN TEN DIGITS NEVER MATCHES. A partial value must not claim
+ * a record.
+ */
+export function matchesStoredNumber(
   meta: Partial<TeacherMeta>,
   digits: string
 ): boolean {
@@ -450,9 +463,19 @@ export function isUnlinkedMatch(
     return false;
   }
 
-  const stored = toSubscriberDigits(meta.phoneNumber ?? meta.phone ?? '');
+  return toSubscriberDigits(meta.phoneNumber ?? meta.phone ?? '') === digits;
+}
 
-  return stored === digits && !meta.uid;
+export function isUnlinkedMatch(
+  meta: Partial<TeacherMeta>,
+  digits: string
+): boolean {
+  /*
+   * ALREADY LINKED IS NOT A MATCH, and that is the safety property. Numbers get
+   * reassigned, so claiming a record that already belongs to an account would
+   * hand one teacher another's classrooms.
+   */
+  return matchesStoredNumber(meta, digits) && !meta.uid;
 }
 
 @Injectable({
@@ -827,6 +850,36 @@ export class TeacherService {
       if (found) {
         return found;
       }
+    }
+
+    /*
+     * FALLBACK: a normalised scan, because the queries above cannot do one.
+     *
+     * A Firestore equality clause compares the RAW stored string, so
+     * `teacherMeta.phoneNumber == '9481635184'` misses a record that stored
+     * `+919481635184` — which is the same defect linkSignedInUid was fixed for,
+     * and those records demonstrably exist.
+     *
+     * IT MATTERS HERE PARTICULARLY BECAUSE OF ORDERING. recordSignIn runs inside
+     * loginWithToken, BEFORE the login page calls linkSignedInUid, so on a first
+     * sign-in there is no teacherMeta.uid stamped yet and the uid clause above
+     * cannot help. Without this the teacher would be greeted as 'Teacher' on the
+     * one sign-in where the greeting is a first impression, and only get their
+     * name on the second.
+     *
+     * ONE FULL READ, and only when the narrow queries found nothing AND the
+     * caller has no name yet, which is once per account. linkSignedInUid already
+     * reads this whole collection on every single sign-in, so this is not a new
+     * order of cost.
+     */
+    if (phoneDigits.length >= 10) {
+      const snapshot = await getDocs(activeTeachersCollection());
+
+      return pickRegisteredName(
+        snapshot.docs
+          .map(document => document.data() as Record<string, unknown>)
+          .filter(data => matchesStoredNumber(teacherMetaFrom(data), phoneDigits))
+      );
     }
 
     return null;

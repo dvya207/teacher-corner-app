@@ -3,6 +3,7 @@ import { Timestamp } from 'firebase/firestore';
 import { Teacher, TeacherClassroom, TeacherMeta } from '../models/teaching.model';
 import {
   isUnlinkedMatch,
+  matchesStoredNumber,
   pickRegisteredName,
   mergeClassrooms,
   stampedClassrooms,
@@ -618,5 +619,71 @@ describe('pickRegisteredName', () => {
   it('returns a blank last name rather than dropping a one-word name', () => {
     expect(pickRegisteredName([meta({ firstName: 'Anita', lastName: '' })]))
       .toEqual({ firstName: 'Anita', lastName: '' });
+  });
+});
+
+/**
+ * NUMBER MATCHING, INDEPENDENT OF WHETHER THE RECORD IS LINKED.
+ *
+ * isUnlinkedMatch answers "may this sign-in CLAIM this record", which requires
+ * the record to be unclaimed. Reading a name off a record the caller already owns
+ * is a different question, so the number comparison is shared and the uid
+ * condition is not.
+ *
+ * The forms below are the ones live records actually contain: the wizard, an
+ * import and production have each written the same person's number differently.
+ */
+describe('matchesStoredNumber', () => {
+
+  const meta = (stored: string) => ({ phoneNumber: stored });
+
+  it('matches a plainly stored ten-digit number', () => {
+    expect(matchesStoredNumber(meta('9481635184'), '9481635184')).toBe(true);
+  });
+
+  it('matches through a stored dial code, which an equality query would miss', () => {
+    expect(matchesStoredNumber(meta('+919481635184'), '9481635184')).toBe(true);
+  });
+
+  it('matches through a stored trunk prefix', () => {
+    expect(matchesStoredNumber(meta('09481635184'), '9481635184')).toBe(true);
+  });
+
+  it('matches through stored separators', () => {
+    expect(matchesStoredNumber(meta('94816 35184'), '9481635184')).toBe(true);
+  });
+
+  it('falls back to `phone` when `phoneNumber` is absent', () => {
+    expect(matchesStoredNumber({ phone: '9481635184' }, '9481635184')).toBe(true);
+  });
+
+  it('refuses a different number', () => {
+    expect(matchesStoredNumber(meta('9000000000'), '9481635184')).toBe(false);
+  });
+
+  it('refuses an incomplete number rather than matching loosely', () => {
+    expect(matchesStoredNumber(meta('9481635184'), '94816')).toBe(false);
+    expect(matchesStoredNumber(meta('9481635184'), '')).toBe(false);
+  });
+
+  it('refuses a record carrying no number', () => {
+    expect(matchesStoredNumber({}, '9481635184')).toBe(false);
+  });
+
+  it('keeps a number that legitimately begins 91 whole', () => {
+    expect(matchesStoredNumber(meta('9180000000'), '9180000000')).toBe(true);
+  });
+
+  /**
+   * THE DIFFERENCE FROM isUnlinkedMatch. This says the number is the same
+   * person's; it does not say the sign-in may claim the record. Linking still
+   * refuses an already-linked record, which is what stops a reassigned number
+   * inheriting somebody else's classrooms.
+   */
+  it('matches a record that already carries a uid, unlike isUnlinkedMatch', () => {
+    const linked = { phoneNumber: '9481635184', uid: 'someone-else' };
+
+    expect(matchesStoredNumber(linked, '9481635184')).toBe(true);
+    expect(isUnlinkedMatch(linked, '9481635184')).toBe(false);
   });
 });
