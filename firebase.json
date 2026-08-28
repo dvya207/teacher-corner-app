@@ -1,11 +1,14 @@
 {
   "//": "SCOPING IS THE POINT OF THIS FILE. The project hosts more than one application. Both blocks below name their target explicitly so a deploy from this repo cannot reach anything that is not ours. Never run a bare 'firebase deploy'.",
-
   "hosting": {
     "//": "site, not target: this pins the deploy to teachercorner-dev.web.app. Without it a hosting deploy would go to the project default site, which is someone else's.",
     "site": "teachercorner-dev",
     "public": "dist/teacher-corner/browser",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "rewrites": [
       {
         "//": "SPA fallback, so a hard refresh on /dashboard resolves instead of 404ing.",
@@ -18,31 +21,50 @@
         "//": "ORDER IS LOAD-BEARING. Everything revalidates by default, and the hashed assets below opt back out. Where two rules match one file, the LATER one wins.",
         "//why": "The previous rule named '/index.html', which never matched: the SPA rewrite serves index.html for '/' and for every deep route, so the request path is '/dashboard' or '/', never '/index.html'. Every visitor therefore got Firebase's default hour on the one file that must not be cached, and kept booting an old bundle for an hour after each deploy.",
         "source": "**",
-        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       },
       {
         "//": "Angular hashes these filenames, so a changed file gets a new name and can never be served stale. Listed AFTER the catch-all so it overrides it.",
         "source": "**/*.@(js|css|woff|woff2|ttf|eot|png|jpg|jpeg|gif|svg|webp|avif|ico)",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
       }
     ]
   },
-
   "functions": [
     {
       "//": "ONLY this directory is declared. ../functions holds an unwired email-code flow with no package.json; declaring it would sweep requestLoginCode/verifyLoginCode into the deploy and demand SMTP secrets. Add a second entry here when that flow is wanted.",
       "source": "functions-otp",
       "//codebase": "A NAMED codebase, and it is load-bearing. helix-staging-india already runs sendWelcomeEmail and expenseLogTotals, neither of which carries a codebase label, so both sit in the DEFAULT codebase. Deploying into 'default' from here would make the CLI see those two as present-in-my-codebase-but-absent-from-my-source and offer to DELETE them. The CLI only ever considers same-codebase functions for deletion, so a name of our own puts other teams' functions structurally out of reach.",
       "codebase": "tcdev-otp",
-      "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"],
-      "ignore": ["node_modules", ".git", "*.local", ".env.example"]
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ],
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.local",
+        ".env.example"
+      ]
     }
   ],
-
   "firestore": {
     "//": "SAFE NOW, and it was not before. This app owns 'teacher-corner-dev' outright, so a rules deploy from this repo cannot reach any other database. The database id is load-bearing: omitting it targets the default database, where other apps live.",
     "database": "teacher-corner-dev",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "//": "ONE BUCKET, ONE RULESET, FOR THE WHOLE PROJECT. Cloud Storage has no per-database equivalent of the firestore.database key above: helix-staging-india has a single bucket and a deploy REPLACES its ruleset wholesale. storage.rules therefore carries EVERY app's blocks — bugpulse, expense-log, assignments, contests — copied verbatim from the live ruleset, with only the learningUnits block added. Never trim it to just this app's rules: that would delete theirs and break their uploads.",
+    "rules": "storage.rules"
   }
 }

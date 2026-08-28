@@ -203,6 +203,8 @@ test('the path builder declares exactly the approved collections', () => {
     classrooms: 'classrooms',
     programmes: 'programmes',
     learningUnits: 'learningUnits',
+    learningUnitResources: 'learningUnitResources',
+    boardGradeResources: 'boardGradeResources',
     teachers: 'teachers',
     configuration: 'Configuration'
   })) {
@@ -262,6 +264,28 @@ test('the path builder declares exactly the approved collections', () => {
   assert.match(builder.text, /LEARNING_UNIT_TRASH_SUBCOLLECTION\s*=\s*'DeletedLearningUnits'/, 'deleted learning units must live in `DeletedLearningUnits`, matching production');
   assert.match(builder.text, /doc\(db,\s*COLLECTIONS\.learningUnits,\s*TRASH_DOC\)/, 'the learning-unit trash container must sit in the learningUnits collection');
   assert.match(builder.text, /collection\(learningUnitTrashContainer\(\),\s*LEARNING_UNIT_TRASH_SUBCOLLECTION\)/, 'deleted learning units must be a subcollection of the trash document');
+
+  // Learning unit resources are FLAT, and repeat the trash shape a FIFTH time:
+  //
+  //   learningUnitResources/{id}
+  //   learningUnitResources/trash/DeletedLearningUnitResources/{id}
+  //
+  // This is the one trash production does not have. It was added deliberately —
+  // deleting a unit used to leave its resource documents in the live collection
+  // with nothing pointing at them — and the assertion below was inverted at that
+  // point, from "there is no trash" to "the trash has exactly this shape". The
+  // container must be the shared `trash` sentinel and the subcollection must be
+  // pinned, or the rules block written for it stops matching.
+  assert.match(builder.text, /collection\(db,\s*COLLECTIONS\.learningUnitResources\)/, 'resource documents must be a top-level collection');
+  assert.match(builder.text, /LEARNING_UNIT_RESOURCE_TRASH_SUBCOLLECTION\s*=\s*'DeletedLearningUnitResources'/, 'deleted resource documents must live in `DeletedLearningUnitResources`');
+  assert.match(builder.text, /doc\(db,\s*COLLECTIONS\.learningUnitResources,\s*TRASH_DOC\)/, 'the resource trash container must sit in the learningUnitResources collection and use the shared `trash` sentinel');
+  assert.match(builder.text, /collection\(\s*learningUnitResourceTrashContainer\(\),\s*LEARNING_UNIT_RESOURCE_TRASH_SUBCOLLECTION\s*\)/, 'deleted resource documents must be a subcollection of the trash document');
+  assert.match(builder.text, /where\('learningUnitDocId',\s*'==',\s*learningUnitDocId\)/, "a unit's resources must be found by its document id, not its readable id");
+
+  // Board and grade resources are flat and joined on the unit's document id,
+  // for the same reason learningUnitResources is.
+  assert.match(builder.text, /collection\(db,\s*COLLECTIONS\.boardGradeResources\)/, 'board and grade resources must be a top-level collection');
+  assert.match(builder.text, /where\('learningUnitDocId',\s*'==',\s*learningUnitDocId\)/, "they must be found by the unit's document id");
 
   // Teachers repeat the shape a fifth time:
   //

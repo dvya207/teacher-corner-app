@@ -1,4 +1,9 @@
-import { LearningUnit, LearningUnitDraft, LearningUnitStatus } from '../models/teaching.model';
+import {
+  LearningUnit,
+  LearningUnitDraft,
+  LearningUnitStatus,
+  emptyLearningUnitResources
+} from '../models/teaching.model';
 import { PROGRAMME_STATUSES } from './programme-options';
 
 /**
@@ -34,13 +39,25 @@ export const LEARNING_UNIT_LANGUAGES: readonly { code: string; label: string }[]
 ] as const;
 
 /**
- * Difficulty, as strings.
+ * Difficulty: SIX levels, 0 to 5.
  *
- * Production types `difficultyLevel` as `number | string` and stores both, so one
- * type here removes a branch at every comparison — the same choice
- * Classroom.grade makes.
+ * 0 IS A REAL LEVEL, not a missing value, which is why the list starts there.
+ * Production's own units carry difficultyLevel 0 — both documents sampled do —
+ * and a list starting at 1 could not show what they hold, so the select fell
+ * back to its first option and offered to save 1 over a stored 0.
+ *
+ * Strings, because production types `difficultyLevel` as `number | string` and
+ * stores both; one type here removes a branch at every comparison, the same
+ * choice Classroom.grade makes.
  */
-export const DIFFICULTY_LEVELS: readonly string[] = ['1', '2', '3', '4', '5'] as const;
+export const DIFFICULTY_LEVELS: readonly string[] = [
+  '0',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5'
+] as const;
 
 /**
  * Domains, matching the categorisation production's units carry.
@@ -215,7 +232,58 @@ export function emptyLearningUnitDraft(): LearningUnitDraft {
     // unit's own editor, and it writes 0 / 45 / '' in the meantime rather than
     // leaving them absent — an absent field cannot be read back and rewritten.
     shortDescription: '',
+    longDescription: '',
+    alternateShortDescription: '',
+    alternateLongDescription: '',
+    tinyDescription: '',
+    learningUnitImage: '',
+    learningUnitPreviewImage: '',
+    resources: emptyLearningUnitResources(),
+
+    /*
+     * THE REST OF PRODUCTION'S SIXTY FIELDS, at its own create-time values.
+     *
+     * Written rather than left absent so a unit this app creates is the same
+     * SHAPE as one production created: an absent field cannot be read back and
+     * rewritten, and a reader elsewhere that expects the key gets undefined
+     * instead of the empty value it would get from production's own documents.
+     *
+     * masterDocId is 'learningunit_master_02' on every unit sampled — it is what
+     * the document was stamped from, not a per-unit value.
+     */
+    makingTime: 0,
+    observationTime: 0,
+    firstLiveDate: '',
+    masterDocId: 'learningunit_master_02',
+    containsResources: false,
+    domain: '',
+    numberOfTemplates: '',
+    samples: '',
+    tools: '',
+    topicCodes: '',
+    totalViews: 0,
+    userFeedback: '',
+    versionNotes: '',
+    tacOwnerCountryCode: '',
+    tacOwnerPhoneNumber: '',
+    tacArchitectName: '',
+    tacArchitectCountryCode: '',
+    tacArchitectPhoneNumber: '',
+    tacMentorName: '',
+    tacMentorCountryCode: '',
+    tacMentorPhoneNumber: '',
+    associatedLearningUnits: [],
+    prerequisiteLearningUnits: [],
+    replacementLearningUnits: [],
+    similarLearningUnits: [],
+    tags: [],
+    additionalResources: [],
+    linkedClassroomIds: [],
+    linkedProgrammeIds: [],
+    linkedWorkflowIds: [],
     difficultyLevel: '0',
+    exploreTime: 0,
+    learnTime: 0,
     totalTime: 45
   };
 }

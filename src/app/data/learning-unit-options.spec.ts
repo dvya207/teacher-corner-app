@@ -9,7 +9,11 @@ import {
   unitMetaLabel,
   versionNumberOf
 } from './learning-unit-options';
-import { LearningUnit } from '../models/teaching.model';
+import {
+  LearningUnit,
+  emptyLearningUnitResources,
+  ladderKeysFor
+} from '../models/teaching.model';
 
 function unit(fields: Partial<LearningUnit>): LearningUnit {
   return { learningUnitDisplayName: '', learningUnitName: '', ...fields } as LearningUnit;
@@ -221,5 +225,51 @@ describe('learningUnitIdOf', () => {
 
   it('joins type code, code and the full version label', () => {
     expect(learningUnitIdOf('TA', 'AE04', 'EN-V10')).toBe('TA-AE04-EN-V10');
+  });
+});
+
+/**
+ * The maturity ladder inside a unit's own `resources` map.
+ *
+ * CUMULATIVE, and that is measured rather than assumed: across 1200 production
+ * units a Silver unit carries `silver` alone and a Gold one carries `silver` and
+ * `gold`. Writing all four claimed rungs the unit had never reached, which is
+ * the bug this pins shut.
+ */
+describe('ladderKeysFor', () => {
+
+  it('gives a Silver unit its own rung and no more', () => {
+    expect(Object.keys(ladderKeysFor('Silver'))).toEqual(['silver']);
+  });
+
+  it('accumulates: Gold carries Silver too', () => {
+    expect(Object.keys(ladderKeysFor('Gold'))).toEqual(['silver', 'gold']);
+  });
+
+  it('accumulates all the way to Diamond', () => {
+    expect(Object.keys(ladderKeysFor('Platinum'))).toEqual(['silver', 'gold', 'platinum']);
+    expect(Object.keys(ladderKeysFor('Diamond'))).toEqual([
+      'silver',
+      'gold',
+      'platinum',
+      'diamond'
+    ]);
+  });
+
+  it('keys them lowercase, where the unit spells its Maturity capitalised', () => {
+    expect(ladderKeysFor('Gold')).toEqual({ silver: '', gold: '' });
+  });
+
+  it('yields none for a maturity off the ladder, rather than guessing', () => {
+    expect(ladderKeysFor('')).toEqual({});
+    expect(ladderKeysFor('Bronze')).toEqual({});
+  });
+
+  it('leaves the ladder out of the shared empty map', () => {
+    const empty = Object.keys(emptyLearningUnitResources());
+
+    expect(empty).not.toContain('silver');
+    expect(empty).not.toContain('diamond');
+    expect(empty).toContain('guidePath');
   });
 });

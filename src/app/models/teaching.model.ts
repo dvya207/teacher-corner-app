@@ -564,7 +564,7 @@ export interface LearningUnit {
   status: LearningUnitStatus;
 
   /**
-   * Type of unit — 'TACtivity', 'Tool TAC'. Production's `Configuration`
+   * Type of unit — 'TACtivity', 'MuT', 'Toys and Tales'. Production's `Configuration`
    * vocabulary; see LEARNING_UNIT_TYPES.
    */
   type: string;
@@ -613,19 +613,164 @@ export interface LearningUnit {
    */
   tacOwnerName: string;
 
-  shortDescription: string;
   /**
+   * The five descriptions the editor's Descriptions tab carries.
+   *
+   * `shortDescription` and `longDescription` are the unit's own copy;
+   * `alternate*` are production's second pair, used where a different audience
+   * needs different wording for the same unit. All four are production's field
+   * names verbatim.
+   *
+   * `tinyDescription` is the exception: the editor shows it, production's
+   * documents do not carry it yet, and this is the name it is being written
+   * under. A document saved before today reads it back as '' like the rest.
+   */
+  shortDescription: string;
+  longDescription: string;
+  alternateShortDescription: string;
+  alternateLongDescription: string;
+  tinyDescription: string;
+
+  /**
+   * The headline image's stored path, and the thumbnail generated from it.
+   *
+   * PATHS, not URLs. Production stores
+   * `learningUnits/{docId}/learningUnitImage.jpg` — a location inside the
+   * Storage bucket, which a download URL is then minted from. Storing the URL
+   * instead would bake in a token that can be revoked.
+   *
+   * The preview is written by production's own resize step, not by this app; it
+   * is carried here so an edit cannot drop it.
+   */
+  learningUnitImage: string;
+  learningUnitPreviewImage: string;
+
+  /**
+   * Production's `resources` map, of which this app currently names two keys.
+   *
+   * The real map is far wider — guidePath, materialPath, observationPath, the
+   * maturity ids, the video URLs — and its full shape is decided by
+   * learning-unit-resource-schema.ts rather than by this interface. Only the two
+   * the Images tab edits are typed; the index signature carries the rest through
+   * an edit untouched instead of dropping the keys this app does not know.
+   */
+  resources: LearningUnitResources;
+  /**
+   * ONE field, 0 to 5. Production also carries a typo'd `difficultiesLevel`
+   * beside it; this app writes only this one, so there is a single place a
+   * difficulty can be read from and no pair that can silently disagree.
+   *
    * A STRING, not a number. Production types it `number | string` and stores
    * both, so one type here removes a branch at every comparison — the same
    * choice Classroom.grade makes.
    */
   difficultyLevel: string;
+
+  /**
+   * The three timings, in minutes, exactly as production names them.
+   *
+   * `learnTime` is the stored name and "Learning Time" is the label the editor
+   * shows — the mismatch is production's and is kept, because renaming the field
+   * would orphan the value in every document already written.
+   *
+   * Numbers rather than strings, like totalTime: the list right-aligns and sums
+   * them. Production's own documents carry all three as int64 and default them to
+   * 0 rather than leaving them absent.
+   */
+  exploreTime: number;
+  learnTime: number;
   /** Total minutes. A number, because the list right-aligns and sums it. */
   totalTime: number;
+
+  /* ----------------------------------------------------------------------
+     THE REST OF PRODUCTION'S DOCUMENT
+     ----------------------------------------------------------------------
+     Read off LearningUnits/0MvRXYORh342Es0Gkd42 in thinktac-india-production —
+     sixty top-level fields, of which the ones above are the twenty-odd this app
+     shows. These are the remainder.
+
+     They are here so an edit CARRIES them rather than editing around them, and
+     so a unit this app creates is the same shape as one production created. No
+     screen edits them yet; several never will, because they are written by
+     pipelines rather than by people.
+     ---------------------------------------------------------------------- */
+
+  /** The other two timings. Production writes all five, defaulting to 0. */
+  makingTime: number;
+  observationTime: number;
+
+  /** A STRING in production, not a timestamp, and usually ''. */
+  firstLiveDate: string;
+
+  /** What this unit was stamped from. A constant in production's own data. */
+  masterDocId: string;
+
+  /** True once a resource document exists for the unit. Written by the pipeline. */
+  containsResources: boolean;
+
+  domain: string;
+  numberOfTemplates: string;
+  samples: string;
+  tools: string;
+  topicCodes: string;
+  totalViews: number;
+  userFeedback: string;
+  versionNotes: string;
+
+  /**
+   * The three people on a unit, each with a name and a split phone number.
+   * `tacOwnerName` is above, with the fields the Trash table reads.
+   */
+  tacOwnerCountryCode: string;
+  tacOwnerPhoneNumber: string;
+  tacArchitectName: string;
+  tacArchitectCountryCode: string;
+  tacArchitectPhoneNumber: string;
+  tacMentorName: string;
+  tacMentorCountryCode: string;
+  tacMentorPhoneNumber: string;
+
+  /**
+   * The five learning-unit relationships and the tag list, all arrays of ids.
+   * Empty on every unit sampled; carried so an edit cannot drop a populated one.
+   */
+  associatedLearningUnits: string[];
+  prerequisiteLearningUnits: string[];
+  replacementLearningUnits: string[];
+  similarLearningUnits: string[];
+  tags: string[];
+  /**
+   * Extra material hung off a unit by hand — a PDF, a YouTube link, a deck.
+   *
+   * Typed now that the editor has a tab for them. Production stores an array of
+   * objects here; every unit sampled has it empty, so these field names come
+   * from its own Additional Resources form rather than from stored data.
+   */
+  additionalResources: LearningUnitAdditionalResource[];
+
+  /**
+   * What a unit has been attached to, written by whatever does the attaching.
+   *
+   * Absent from some production documents and present on others, which is why
+   * they were missed on the first pass: the unit read to build this interface
+   * did not carry them. Read defensively for the same reason.
+   */
+  linkedClassroomIds: string[];
+  linkedProgrammeIds: string[];
+  linkedWorkflowIds: string[];
 
   /** OURS. Ownership for a top-level collection's rules. */
   ownerId: string;
 
+  /**
+   * ONE creation stamp, not two.
+   *
+   * Production carries `creationDate` beside this and holds the same value in
+   * both. Only this one is kept: it is what list() sorts on and what the trash
+   * round trip preserves, and a pair that can drift is worth less than either
+   * half. Institutions and classrooms keep their own `creationDate` — that is
+   * their services' field, and untouched by this.
+   */
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -636,8 +781,224 @@ export type LearningUnitDraft = Omit<
   'docId' | 'learningUnitId' | 'ownerId' | 'createdAt' | 'updatedAt'
 >;
 
+/**
+ * The `resources` map on a learning unit.
+ *
+ * Two named keys and an open tail. A learning unit's resource slots are decided
+ * by its type and maturity — see learning-unit-resource-schema.ts — so
+ * enumerating them here would be a second, weaker copy of that table which
+ * would fall behind it. The index signature is `unknown` rather than `string`
+ * because the schema's leaves are of two shapes: a plain path, or an object
+ * carrying a per-grade path.
+ */
+export interface LearningUnitResources {
+  /**
+   * The maturity ladder: the id of the resource document at each rung.
+   *
+   * OPTIONAL, because a unit carries ONLY the rungs it has reached. Across 1200
+   * production units: a Silver unit has `silver` alone, a Gold one has `silver`
+   * and `gold`, and a Platinum one adds `platinum`. Writing all four would
+   * claim rungs the unit has not got to.
+   */
+  silver?: string;
+  gold?: string;
+  platinum?: string;
+  diamond?: string;
+
+  guidePath: string;
+  materialPath: string;
+  observationPath: string;
+  templatePath: string;
+  topicGuidePath: string;
+  varGuidePath: string;
+
+  otherImagePath: string;
+  qrCodeImagePath: string;
+
+  videoUrl: string;
+  topicVideoUrl: string;
+  varVideoUrl: string;
+
+  [key: string]: unknown;
+}
+
+/**
+ * The eleven keys EVERY unit carries, whatever its maturity.
+ *
+ * The ladder keys are not here: they depend on how far the unit has got, and
+ * `ladderKeysFor` adds the right ones at creation.
+ */
+export function emptyLearningUnitResources(): LearningUnitResources {
+  return {
+    guidePath: '',
+    materialPath: '',
+    observationPath: '',
+    templatePath: '',
+    topicGuidePath: '',
+    varGuidePath: '',
+    otherImagePath: '',
+    qrCodeImagePath: '',
+    videoUrl: '',
+    topicVideoUrl: '',
+    varVideoUrl: ''
+  };
+}
+
+/**
+ * The ladder keys a unit at this maturity carries, all empty.
+ *
+ * Cumulative and lowercase — the map keys them 'gold' where the unit's own
+ * Maturity field says 'Gold'. An unrecognised maturity yields none rather than
+ * guessing, which is what production's own handful of odd units look like.
+ */
+export function ladderKeysFor(maturity: string): Record<string, string> {
+  const rungs = ['Silver', 'Gold', 'Platinum', 'Diamond'];
+  const reached = rungs.indexOf(
+    String(maturity ?? '').trim().toLowerCase().replace(/^./, c => c.toUpperCase())
+  );
+
+  if (reached < 0) {
+    return {};
+  }
+
+  return Object.fromEntries(rungs.slice(0, reached + 1).map(rung => [rung.toLowerCase(), '']));
+}
+
+/**
+ * One entry in a unit's `additionalResources`, in production's own field names.
+ *
+ * Read off 538 real entries across 1834 production units, which is why these
+ * names look the way they do:
+ *
+ *   `shortdescription`  ALL LOWERCASE. Not shortDescription, which is what the
+ *                       rest of this model uses. Reproduced, not corrected.
+ *   `type`              Only ever 'UPLOAD' or 'VIDEO'. It says how the resource
+ *                       ARRIVES, not what it is.
+ *   `fileExtension`     What it actually is: 'pptx' (320), 'video' (144),
+ *                       'ppt' (65), 'pdf' (8).
+ *   `publish`           A BOOLEAN on 537 of the 538. One document has the string
+ *                       'false'; that one is the outlier and this app writes the
+ *                       boolean.
+ */
+export interface LearningUnitAdditionalResource {
+  title: string;
+  shortdescription: string;
+  /** How it arrives. '' until a file type is chosen. */
+  type: 'UPLOAD' | 'VIDEO' | '';
+  /** 'pdf', 'ppt', 'pptx' or 'video'. */
+  fileExtension: string;
+  /** A Storage path for an upload, or the link itself for a video. */
+  resourcePath: string;
+  publish: boolean;
+}
+
+/**
+ * One board's files for one grade-dependent slot of one learning unit.
+ *
+ * Read off BoardGradeResources/07CnoSDs8tUFw1ZSy8Pp in
+ * thinktac-india-production. The grades live INSIDE it, keyed `grade_03`, so a
+ * file covering grades 3 to 5 is three keys on one document rather than three
+ * documents.
+ */
+export interface BoardGradeResource {
+  docId: string;
+  learningUnitDocId: string;
+  learningUnitId: string;
+  /** 'Gold' — capitalised, as the unit spells it. */
+  maturity: string;
+  /** The unit's type, spaces and all. */
+  type: string;
+  /** '3S', 'tacDev', 'graphics'. */
+  category: string;
+  /** The slot key within that category, e.g. 'tttPpts'. */
+  subCategory: string;
+  /** 'CBSE', 'ICSE', 'IGCSE' … one document per board. */
+  board: string;
+  /** Keyed `grade_01` … `grade_10`, each holding a Storage path. */
+  resources: Record<string, string>;
+  createdAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+}
+
+/**
+ * ONE RUNG OF ONE LEARNING UNIT'S RESOURCES.
+ *
+ * Read off LearningUnitResources/0QzDnKKFYPGkqpg6EWH4 in
+ * thinktac-india-production. A unit at Gold has two of these — Silver and Gold —
+ * because the maturity ladder is cumulative.
+ *
+ * EIGHT FIELDS, which is what production writes today. Sampling sixty of its
+ * documents, `id` and `archives` appear ONLY on those created between 2024-12
+ * and 2025-03; the other thirty-five, including every one from 2026, carry
+ * neither. Both are therefore optional here: read when present, never written.
+ */
+export interface LearningUnitResource {
+  docId: string;
+  /** LEGACY. Held the same value as docId on documents from that window. */
+  id?: string;
+
+  /** The owning unit's DOCUMENT id — the half of its identity that cannot change. */
+  learningUnitDocId: string;
+  /** The owning unit's readable id, e.g. 'TA-BP11-EN-V18'. Denormalised. */
+  learningUnitId: string;
+
+  /** Capitalised on this document — 'Gold' — where the schema keys it 'gold'. */
+  maturity: string;
+  /** The unit's type, spaces and all: 'TACtivity', 'Toys and Tales'. */
+  type: string;
+
+  /**
+   * LEGACY, like `id`. Slots that had been superseded, as dotted paths into
+   * `resources` — 'graphics.tacGuideOnline'. Read where a document has it;
+   * nothing this app writes creates one.
+   */
+  archives?: string[];
+
+  resources: LearningUnitResourceCategories;
+
+  createdAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+}
+
+/**
+ * The five categories, each a bag of slots.
+ *
+ * NOT narrowed to the five names, and not to a fixed slot list: which
+ * categories a document has depends on its type AND its maturity — TACtivity's
+ * platinum has no socialMedia, its diamond no 3S — and the slot list comes from
+ * LEARNING_UNIT_RESOURCE_SCHEMA, which is generated from a Google Sheet. Typing
+ * it here would be a second, weaker copy of that table.
+ */
+export type LearningUnitResourceCategories = Record<
+  string,
+  Record<string, LearningUnitResourceSlot>
+>;
+
+/**
+ * A slot: either one path, or a bag of per-grade and per-board paths.
+ *
+ * The object form is what production's sheet marks isGradeDependent. It always
+ * carries `universalGradeBoardResourcePath` as the fallback, and may also carry
+ * a board id — 'CBSE', 'ICSE' — pointing at a board-specific document.
+ */
+export type LearningUnitResourceSlot =
+  | string
+  | { universalGradeBoardResourcePath?: string; [board: string]: string | undefined };
+
 /** A learning unit sitting in learningUnits/trash/DeletedLearningUnits. */
 export interface TrashedLearningUnit extends LearningUnit {
+  trashAt: Timestamp;
+}
+
+/**
+ * A resource document sitting in
+ * learningUnitResources/trash/DeletedLearningUnitResources.
+ *
+ * `trashAt` alone, like the other four trashes — every field that says WHICH
+ * unit this belonged to is already on the resource document itself, so there is
+ * nothing extra to record to put it back.
+ */
+export interface TrashedLearningUnitResource extends LearningUnitResource {
   trashAt: Timestamp;
 }
 

@@ -14,14 +14,31 @@
   place-items: center;
   padding: 24px 16px;
   background: var(--overlay);
-  backdrop-filter: blur(2px);
+  /* NO BLUR. The page behind a modal is context — which unit you were looking
+     at, how many rows there were — and a blur destroys exactly the detail that
+     makes it context while leaving the shapes to distract. Production's dialogs
+     dim and do not blur; matched here. */
 }
 
 .modal-card {
+  /* The positioning context for .sheet-overlay, which covers the editor rather
+     than the page. Without it the sheet would anchor to the viewport and sit
+     over the list behind the modal too. */
+  position: relative;
   display: flex;
   flex-direction: column;
-  width: min(640px, 100%);
-  max-height: min(860px, calc(100dvh - 48px));
+  /*
+   * WIDER THAN ITS SIBLINGS, at 760px against the 640px add-classroom and
+   * add-programme use. That is a deliberate break from "the modals must not
+   * drift", for a reason the other two do not have: this form is FOURTEEN fields,
+   * eleven of them paired into two columns. At 640px each column is ~290px, and
+   * 'Micro Improvement Programme' and 'Variables and Expressions' — both real
+   * option values — are clipped mid-word in the closed select. At 760px they fit.
+   *
+   * Matched to the reference, which is also the width its own dialog uses.
+   */
+  width: min(760px, 100%);
+  max-height: min(880px, calc(100dvh - 48px));
   border-radius: var(--radius-dialog);
   background: var(--surface);
   box-shadow: var(--shadow-dialog);
@@ -33,11 +50,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 22px 26px 16px;
+  padding: 26px 30px 18px;
 }
 
 .modal-head h2 {
-  font-size: 21px;
+  font-size: 23px;
   color: var(--ink-900);
 }
 
@@ -59,7 +76,7 @@
 
 .modal-body {
   flex: 1;
-  padding: 4px 26px 22px;
+  padding: 4px 30px 26px;
   overflow-y: auto;
 }
 
@@ -78,18 +95,98 @@
 .field-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 18px;
 }
 
+/* ==========================================================================
+   The controls — LARGER, AND ALL ONE COLOUR
+   ==========================================================================
+   TWO PROBLEMS, one rule block.
+
+   SIZE. The shared primitives size a field for a modal asking three questions.
+   This one asks fourteen, and at 12px/14px padding with inherited body text the
+   grid reads as a dense spreadsheet rather than a form. Everything here is one
+   step up: 15px text in a ~48px control, which is the reference's own sizing.
+
+   COLOUR. A VALUE IN A FIELD WAS NOT ONE COLOUR, it was three, and none of them
+   was this. `input` takes `color: inherit` from styles.css and resolves to
+   --ink-900, a near-black; `select` is given --ink-900 explicitly; and an
+   unchosen `select` drops to --ink-700. So a filled row read as black text in
+   the text inputs and a slightly different black in the dropdowns, against
+   labels that are --label, a dark violet. The reference paints every value the
+   same slate-blue, one step lighter than its labels, which is what makes a
+   filled form there look typeset rather than assembled.
+
+   --brand-700 IS THAT COLOUR, and it is already in the palette — no new token.
+   It sits deliberately between --label (#23275c, the labels above these fields)
+   and --ink-500 (the muted text these components use for hints), so the three
+   tiers read as heading, value, aside.
+
+   SCOPED TO THIS FORM, not pushed into styles.css. Doing it globally would
+   restyle the classroom, programme and institution modals and the whole Set Up
+   Wizard in the same commit, which is not what was asked for. The four modals
+   now differ on this one property; that is a known debt, noted here so the next
+   person changing it does it everywhere at once.
+
+   :disabled STILL WINS, because it is declared after this and sets its own
+   colour — the progressive-unlock dimming is unaffected. */
+
+.modal-body input,
 .modal-body select,
 .modal-body textarea {
   width: 100%;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border: 1px solid var(--ink-300);
   border-radius: var(--radius-md);
   background: var(--white);
+  color: var(--brand-700);
+  /*
+   * `font: inherit` FIRST, then the size. The shorthand is what stops a native
+   * select falling back to the browser's own UI font — it does not inherit
+   * font-family on its own — so dropping it in favour of a bare `font-size`
+   * silently reverts every dropdown here to the system font while leaving the
+   * text inputs on Inter. The order matters: the shorthand resets size, so it
+   * has to come before the override.
+   */
   font: inherit;
+  font-size: 15px;
   transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+/*
+ * The unchosen select matches the text inputs' placeholder, rather than the
+ * global rule's --ink-700.
+ *
+ * styles.css drops an empty select to --ink-700 so it reads as a placeholder
+ * against an --ink-900 value. Both ends of that comparison have moved here, so
+ * the rule has to move with them or an empty dropdown ends up DARKER than a
+ * filled one — which is precisely the "live control looks disabled" bug that
+ * comment was written to fix, inverted.
+ */
+.modal-body select:has(option[value='']:checked) {
+  /*
+   * --ink-500, NOT --ink-400. The pale grey read as a disabled control next to
+   * the dark text inputs beside it.
+   *
+   * It must stay LIGHTER than the filled value (--brand-700, #54567b) or the
+   * bug the comment above describes comes back inverted — an empty dropdown
+   * darker than a chosen one. --ink-500 (#6b7280) is darker than #9ca3af and
+   * still lighter than #54567b, so both hold.
+   */
+  color: var(--ink-500);
+}
+
+.modal-body input::placeholder {
+  color: var(--ink-400);
+}
+
+/* The label sits one step up in size with the fields, and stays --label. */
+.modal-body .field > label {
+  font-size: 13.5px;
+}
+
+.modal-body .field {
+  margin-bottom: 20px;
 }
 
 .modal-body select {
@@ -97,9 +194,45 @@
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5l5-5' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 14px center;
-  padding-right: 38px;
+  background-position: right 16px center;
+  padding-right: 42px;
   cursor: pointer;
+}
+
+/* ==========================================================================
+   THE NAMES IN THE LIST ARE DARK, and so is the name in the closed field.
+
+   A native dropdown's list is painted from the `option` elements, not from the
+   `select`, and Chromium's default option colour is NOT inherited from the
+   control — so without a rule here the list drew its names in the browser's own
+   mid-grey while the closed field showed --brand-700. Two greys for one value.
+
+   --ink-900 IS THE DARKEST TEXT IN THE PALETTE, the same near-black the labels
+   and the filled text inputs use. The names in the list are what the user is
+   reading and comparing, so they get the most contrast available rather than
+   the value colour used for a field at rest.
+
+   THE PANEL STAYS LIGHT. Explicitly white rather than left to the UA, so the
+   dark names always have the ground they were chosen against — a browser or
+   platform defaulting the list to a dark canvas would otherwise put --ink-900
+   text on it.
+
+   NATIVE, so the reach is the platform's. Chromium and Firefox honour option
+   colours; Safari on macOS ignores them and keeps its own list. That is the
+   trade for a native select, and the alternative — a custom listbox — is a
+   keyboard, focus and screen-reader surface this form does not need.
+   ========================================================================== */
+
+.modal-body select option {
+  background-color: var(--white);
+  color: var(--ink-900);
+}
+
+/* The placeholder row. Still one step down from the real choices, so the list
+   reads as "nothing chosen yet" — but --ink-500, not the --ink-400 the closed
+   field used to use, which was pale enough to look disabled. */
+.modal-body select option[value=''] {
+  color: var(--ink-500);
 }
 
 .modal-body textarea {
@@ -152,6 +285,55 @@
   opacity: 0.72;
 }
 
+/* ==========================================================================
+   DERIVED FIELDS ARE INDISTINGUISHABLE FROM EDITABLE ONES
+   ==========================================================================
+   The rules above dim a disabled control, and for the sequentially-unlocked
+   fields that is right: dimmed means "not yet, fill in the one above".
+
+   THE SEVEN CATEGORISATION FIELDS ARE NOT THAT. Subject Code and Name, Domain
+   Code and Name, Sub-Domain Code and Name, Composite Code — each is DERIVED from
+   the two letters of the learning unit code, so none will ever unlock. Dimming
+   them said the wrong thing twice: it read as "blocked" when the truth is
+   "computed", and it made the seven values the form had just worked out the
+   hardest text on it to read — when seeing that PS07 resolved to Physics / Sound
+   is the ONLY confirmation that a well-formed code was also a real one.
+
+   NO DIFFERENCE AT ALL is the requirement, so this sets every property the
+   :disabled rules touch back to the live value — border, ground, text colour,
+   opacity. A derived field and a typeable one are now pixel-identical, which is
+   how the reference draws them.
+
+   STILL GENUINELY DISABLED. The styling changed; the behaviour did not. A derived
+   field must not be typeable, or the form's taxonomy and the code that produced
+   it can disagree and whichever won would be a surprise. `cursor: default` is the
+   one remaining signal, and it is honest rather than decorative: nothing here
+   responds to a click.
+
+   A CLASS, NOT A :disabled DESCENDANT SELECTOR. These controls used to sit in a
+   <fieldset [disabled]="true"> which the flattened layout removed, so the hook is
+   now `is-derived` on each control. It also means a future editable field cannot
+   pick this styling up by accident just by being inside something. */
+
+.modal-body select.is-derived:disabled,
+.modal-body input.is-derived:disabled {
+  border-color: var(--ink-300);
+  background: var(--white);
+  color: var(--brand-700);
+  opacity: 1;
+  cursor: default;
+}
+
+/* Composite Code's pencil is DECORATION, not a control — the reference draws one
+   there and nothing happens when it is clicked, so it is a <span> rather than a
+   <button>. It keeps the resting pencil colour and takes no hover or active
+   state, which is what stops it reading as a button that does not work. */
+.modal-body .input-action.is-static {
+  color: var(--ink-400);
+  cursor: default;
+  pointer-events: none;
+}
+
 /* ---- Warnings on a field ------------------------------------------------- */
 
 .field-hint.is-warn {
@@ -197,7 +379,7 @@
 }
 
 .input-with-action input {
-  padding-right: 44px;
+  padding-right: 48px;
 }
 
 .input-action {
@@ -313,10 +495,19 @@
 
 .modal-foot {
   display: flex;
+  align-items: center;
+  /* The dialog's own buttons stay right; anything in front of them — the Add
+     New Resource pill — is pushed left by the margin below rather than by
+     changing this to space-between, which would spread Cancel and Save apart
+     on every other tab. */
   justify-content: flex-end;
   gap: 10px;
-  padding: 16px 26px 22px;
+  padding: 18px 30px 24px;
   border-top: 1px solid var(--border);
+}
+
+.modal-foot .add-resource {
+  margin-right: auto;
 }
 
 .save-btn {
@@ -353,4 +544,1158 @@
     grid-template-columns: 1fr;
     gap: 0;
   }
+}
+
+/* ==========================================================================
+   THE EDITOR — tab strip, Basic Info grid
+   ==========================================================================
+   Everything below applies to EDITING only. Adding a unit renders the form
+   above unchanged, so none of these class names appear on that path. */
+
+/* ---- Title --------------------------------------------------------------
+   The unit's name with its status beside it, as the reference has it. */
+
+.edit-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-size: 23px;
+  color: var(--ink-900);
+}
+
+/* Amber by default because a unit in the editor is usually mid-development;
+   green once it is LIVE. The same two tints the cards and the stat row use, so a
+   status means one colour everywhere in the feature. */
+.title-status {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--tint-amber);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--on-amber);
+}
+
+.title-status.is-live {
+  background: var(--tint-green);
+  color: var(--on-green);
+}
+
+/* ---- Tab strip ----------------------------------------------------------
+   Thirteen tabs do not fit a 760px modal and never will, so the strip scrolls
+   horizontally rather than wrapping to a second row that would push the form
+   below the fold. */
+
+/* WIDER THAN THE ADD FORM, at 1000px against its 760px — measured off the
+   reference, where the modal spans x=493 to x=1492 on a 1920px window. The
+   editor earns the extra 240px and the Add form does not: this one pairs
+   sixteen fields into two columns AND carries a thirteen-tab strip, where 760px
+   leaves the strip showing barely half its tabs. Scoped to .is-editor rather
+   than raised for both, because the Add form's column widths were tuned at
+   760px against real type names. */
+.modal-card.is-editor {
+  /* `width`, not `max-width`: the base rule above sets width: min(760px, 100%),
+     so a max-width here is inert — the used width is still 760px. */
+  width: min(1000px, 100%);
+}
+
+.lu-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 22px;
+}
+
+.tab-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  /* The scrollbar would sit under the tabs and read as a second border. The
+     strip has arrows and responds to wheel and touch, so nothing is unreachable
+     without it. */
+  scrollbar-width: none;
+}
+
+.tab-strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* EVERY TAB IS BLUE, not grey with a blue one among them. That is the
+   reference's treatment and it reads as a row of links rather than a row of
+   disabled labels — which matters when eleven of the thirteen are places you
+   have not been yet.
+
+   The border is transparent rather than absent so selecting a tab cannot change
+   the height of the row. */
+.tab {
+  flex-shrink: 0;
+  padding: 8px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  background: none;
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--accent-500);
+  cursor: pointer;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease),
+              background 0.15s var(--ease);
+}
+
+.tab:hover {
+  background: var(--ink-050);
+}
+
+/* A pill, not an underline: with every label already blue, colour alone cannot
+   say which tab is open. */
+.tab.is-active {
+  border-color: var(--accent-500);
+  background: var(--ink-100);
+  font-weight: 600;
+}
+
+.tab-arrow {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 28px;
+  height: 34px;
+  border: 0;
+  background: none;
+  color: var(--ink-400);
+  cursor: pointer;
+}
+
+.tab-arrow:hover {
+  color: var(--ink-900);
+}
+
+/* The left chevron turned around, rather than a second icon to keep optically
+   identical to this one by hand. */
+.tab-arrow.is-right {
+  transform: rotate(180deg);
+}
+
+/* ---- Basic Info ---------------------------------------------------------
+   Two columns filled ROW BY ROW, which is what puts Explore Time beside the
+   name and Maturity beside Difficulty. A column-first flow would pair them
+   differently and stop matching the reference. */
+
+.basic-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 22px;
+}
+
+/* One column on a narrow window: at 1fr 1fr below ~620px each field is too
+   narrow for its own label. */
+@media (max-width: 620px) {
+  .basic-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* A read-only box is not disabled — it stays selectable and copyable, which is
+   the point of showing the taxonomy at all — so it needs its own flat treatment
+   rather than inheriting the editable white. */
+.modal-body input[readonly] {
+  border-color: var(--ink-200);
+  background: var(--ink-050);
+  color: var(--ink-500);
+  cursor: default;
+}
+
+.copy-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.copy-wrap input {
+  padding-right: 46px;
+}
+
+.copy-btn {
+  position: absolute;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-400);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.copy-btn:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+/* ---- Descriptions -------------------------------------------------------
+   All five boxes the same height, as the reference has them: the long ones only
+   look taller there because they are the ones with text in. A `rows` attribute
+   would be overridden by this anyway, so the height is set once here rather than
+   guessed per box in the template. */
+
+/* `.modal-body textarea.desc-box`, not `.desc-box`. The shared rule above is
+   `.modal-body textarea` at specificity (0,1,1) and a bare class is (0,1,0), so
+   a plain `.desc-box` loses and every box stayed at the shared 84px. */
+.modal-body textarea.desc-box {
+  min-height: 165px;
+}
+
+/* ---- Images -------------------------------------------------------------
+   Upload takes the row on its own; with a file stored it shares the row with
+   View, which is sized to its label rather than splitting the row in half. */
+
+/* Matches .modal-body .field > label exactly — it is the same thing to the eye,
+   and only not a <label> because it has no control to point at. */
+/* The same three declarations as `.modal-body .field > label`. No margin: the
+   .field above is a flex column with a 7px gap, which already spaces it. */
+.slot-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.image-slot {
+  display: flex;
+  gap: 10px;
+}
+
+/* DASHED, which is the whole visual idea of the control: a dashed outline reads
+   as a drop target waiting to be filled, where a solid one reads as an ordinary
+   button. --ink-400 rather than the --ink-300 the form's inputs use, because a
+   dashed line of the same weight reads lighter than a solid one and disappears
+   at --ink-300. */
+.img-btn {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 13px 16px;
+  border: 1px dashed var(--ink-400);
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--accent-500);
+  cursor: pointer;
+}
+
+/* Solid, and NOT dashed: View acts on a file that exists, where the control
+   beside it is a slot waiting for one. */
+.img-btn.is-view {
+  flex: 0 0 auto;
+  min-width: 92px;
+  border-style: solid;
+  border-color: var(--accent-500);
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+/* NOT dimmed, deliberately. These are inert until Cloud Storage is wired, but
+   the reference is what this tab is being built to match and a 55% wash made it
+   look like a different design rather than the same one not yet plumbed. The
+   cursor and the title say what the colour no longer does. */
+.img-btn:disabled {
+  cursor: not-allowed;
+}
+
+/* The hover tint the reference shows, sampled at #e8f3fe — which is
+   --tint-blue, the same fill the active filter pill and the selected row use.
+
+   :not(:disabled), and that matters right now: every one of these is disabled
+   until Cloud Storage is wired, and a button that lights up under the pointer
+   and then refuses the click is worse than one that never reacts. It comes to
+   life on its own the day they are enabled. */
+.img-btn:hover:not(:disabled),
+.res-btn:hover:not(:disabled) {
+  background: var(--tint-blue);
+}
+
+/* View is already filled, so it darkens instead of tinting. */
+.img-btn.is-view:hover:not(:disabled),
+.res-btn.is-view:hover:not(:disabled) {
+  background: var(--accent-600);
+}
+
+.res-copy:hover:not(:disabled) {
+  background: var(--ink-100);
+}
+
+/* ---- The resource tabs --------------------------------------------------
+   TACDev today; Graphics, Video, 3S and Social Media take the same shape. */
+
+/* THE NOTCHED OUTLINE, which is the reference's own treatment for this one
+   control and not the app's usual label-above field. The label sits ON the
+   border with the background punched out behind it, so the box reads as a
+   single object rather than a caption plus a box — worth the one-off because
+   the selector governs everything below it and needs to look like a heading
+   with a value, not another field in a form. */
+
+.notched {
+  position: relative;
+  margin-bottom: 26px;
+}
+
+.notched-label {
+  position: absolute;
+  top: 0;
+  left: 12px;
+  z-index: 1;
+  padding: 0 6px;
+  /* The punch-out. A transparent label would show the border running behind the
+     text; --surface is the modal's own background, so this matches whatever the
+     card is painted with. */
+  background: var(--surface);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-400);
+  transform: translateY(-50%);
+}
+
+.modal-body .notched-select {
+  padding: 18px 16px 16px;
+  border-color: var(--ink-300);
+  border-radius: var(--radius-md);
+  background-color: var(--white);
+  color: var(--ink-900);
+}
+
+/* ---- Slot rows ----------------------------------------------------------
+   Left-aligned and sized to their controls rather than stretched across the
+   modal: a full-width Upload button beside a full-width View would read as two
+   equal choices, where one is the action and the other only becomes possible
+   after it. */
+
+/* THREE ROWS, THEN A NEW COLUMN, scrolling sideways — the reference's layout.
+   A Gold TACtivity has thirteen TACDev slots; stacked they would be a page of
+   scrolling inside a modal that already scrolls vertically. */
+
+/* COLUMNS SIZED TO THEIR CONTENT, never stretched.
+   Measured off the reference: a column's controls are 402px wide on Video and
+   Social Media and about half that on TACDev, and they stay that width whether
+   the tab has one column or five. `1fr` was wrong — with two columns it looked
+   right by accident, and with ONE it stretched a pair of buttons across the
+   whole 1000px modal. */
+.slot-scroll {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  /* Half the gap; the other half is the column's own padding, with the divider
+     between the two. */
+  gap: 30px;
+  /* Left-aligned rather than filling: a short tab keeps its columns at the left
+     edge, which is where the reference has them. */
+  justify-content: start;
+  overflow-x: auto;
+  /* Room for the scrollbar, so it does not sit on the last row of buttons. */
+  padding-bottom: 10px;
+}
+
+.slot-col {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding-right: 30px;
+  border-right: 1px solid var(--border);
+}
+
+/* No trailing rule after the final column: it would read as the start of a
+   column that is not there. */
+.slot-col:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+.slot-row {
+  display: grid;
+  gap: 6px;
+}
+
+/* FIXED TRACKS, which is what gives the column its width now that columns size
+   to content. TACDev and 3S carry three controls and the reference keeps them
+   tight; Video and Social Media carry two and give them far more room. */
+.slot-actions {
+  display: grid;
+  grid-template-columns: 140px 96px 28px;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Video's rows are two controls, not three: no copy button, and the first
+   track is a paste box on half of them. */
+/* 234 + 28 + 140 = 402, the reference's own column width. */
+.slot-actions.is-video {
+  grid-template-columns: 234px 140px;
+  gap: 28px;
+}
+
+/* A pasted link, sized and coloured like the Upload button it replaces so the
+   two read as alternatives in the same slot rather than different kinds of row. */
+.modal-body .slot-url {
+  padding: 11px 12px;
+  border: 1px solid var(--accent-400);
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+  font-size: 13px;
+  color: var(--accent-500);
+  text-overflow: ellipsis;
+}
+
+.modal-body .slot-url::placeholder {
+  color: var(--ink-400);
+}
+
+.res-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  /* Vertical padding only, so a wrapped "Re-Upload" grows the button downward
+     rather than being clipped. */
+  padding: 11px 10px;
+  border: 1px solid var(--accent-400);
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--accent-500);
+  cursor: pointer;
+}
+
+/* No border on View: the reference's is a filled block, and a border the same
+   colour as the fill only rounds the corners differently. */
+.res-btn.is-view {
+  border-color: transparent;
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+/* Kept, not hidden, where the slot holds nothing. The row has to show that
+   viewing is a thing this slot does, and that it cannot be done yet. */
+.res-btn.is-view.is-empty {
+  border-color: var(--ink-400);
+  background: var(--ink-400);
+}
+
+.res-copy {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--accent-500);
+  cursor: pointer;
+}
+
+.res-btn:disabled,
+.res-copy:disabled {
+  cursor: not-allowed;
+}
+
+/* ---- The board-and-grade sheet ------------------------------------------
+   A layer over the editor, not a second modal card: it is small, it belongs to
+   the row that opened it, and giving it the full dialog chrome would make it
+   look like a step away from the unit rather than a question about one slot. */
+
+.sheet-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  /* Lighter than the page's own overlay: what is behind this is the editor, and
+     it should stay legible as context. */
+  background: rgb(17 24 39 / 28%);
+}
+
+.sheet {
+  width: min(520px, 100%);
+  padding: 26px 28px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+}
+
+.sheet .field:last-of-type {
+  margin-bottom: 22px;
+}
+
+/* ---- The board and grade pickers ----------------------------------------
+   A field with a checkbox list under it. The list is IN FLOW, not absolutely
+   positioned: the sheet is short, the list is the only thing below the field,
+   and a floating panel would need collision handling for nothing. */
+
+.multi {
+  position: relative;
+}
+
+.multi-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.multi-panel {
+  /* Five rows, then scroll — the height production's list settles at. */
+  max-height: 210px;
+  margin-top: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-sm);
+}
+
+.multi-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  font-size: 14px;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.multi-row:hover {
+  background: var(--ink-050);
+}
+
+/* Checked rows go blue, checkbox and label together, as the reference has it. */
+.multi-row.is-on {
+  color: var(--accent-500);
+}
+
+/* The native box, sized up and recoloured rather than replaced: a custom tick
+   would have to reimplement focus, the indeterminate state and the tab order. */
+.multi-row input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent-500);
+  cursor: pointer;
+}
+
+/* Once a file is chosen the button shows its name, so the sheet says what is
+   about to be filed rather than only that something was picked. */
+.sheet-upload.has-file {
+  border-color: var(--accent-500);
+  background: var(--tint-blue);
+  color: var(--accent-600);
+}
+
+.sheet-done {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--on-green);
+}
+
+.sheet-upload {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-500);
+  cursor: pointer;
+}
+
+/* Centred and narrow, as the reference has it — a Submit that spanned the sheet
+   would outweigh the Upload above it, which is the step that actually matters. */
+.sheet-submit {
+  display: block;
+  min-width: 260px;
+  margin: 22px auto 0;
+  padding: 13px 20px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--accent-500);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--white);
+  cursor: pointer;
+}
+
+.sheet-submit:disabled {
+  background: var(--ink-200);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+/* The sentence a resource tab shows when its rung has no slots. Centred and
+   quiet: it is an answer, not a warning — a TACtivity genuinely has no 3S at
+   Silver and no socialMedia at Platinum. */
+/* 12px above and 26px below, measured off the reference rather than guessed:
+   the selector's own 26px margin sits above this, so the sentence lands 38px
+   under the field and 52px above the card's edge, and the card comes out at the
+   315px production's does. */
+.slot-empty {
+  padding: 12px 0 26px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--ink-500);
+}
+
+/* External Resources has ONE control per row, and every control in a column is
+   the same width whether it is an upload button or a paste box — 152px, measured
+   off the reference.
+
+   `.modal-body` on the front of both: without it `.slot-url.is-wide` sits at the
+   same weight as the shared `.modal-body input` rule that stretches every field
+   to its cell, and the paste boxes came out 220px against the buttons' 152.
+
+   justify-items on the row stops the grid stretching them back: a cell is as
+   wide as the label above it, which on "Learning Unit Observation Sheet" is far
+   wider than the control belongs to be. */
+.modal-body .res-btn.is-wide,
+.modal-body .slot-url.is-wide {
+  width: 152px;
+}
+
+/* Control and View on one line. `stretch` is what makes View the same height as
+   the Upload button or paste box beside it, rather than a height being set here
+   that then has to be kept in step with theirs. */
+.slot-inline {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+/* View is a second action on the row, not a peer of the 152px control beside it,
+   so the is-wide rule above deliberately does not reach it.
+
+   `.slot-inline` keeps this off the other tabs, whose View buttons the grid
+   sizes — widening those would be a change nobody asked for. */
+.modal-body .slot-inline .res-btn.is-view {
+  width: auto;
+  min-width: 91px;
+}
+
+.slot-row.is-single {
+  justify-items: start;
+}
+
+/* ---- Associated LU ------------------------------------------------------
+   Two columns with a divider, as the reference has it: Associated and
+   Prerequisite on the left, Similar on the right. A plain two-column grid puts
+   the third item in the right column on its own, which is exactly that. */
+
+.lu-lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px 60px;
+}
+
+.lu-list {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+/* An UNDERLINE, not a box. The chips are the content and the rule under them is
+   the field, which is what makes an empty list read as somewhere to add rather
+   than an empty input. */
+.lu-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--accent-400);
+}
+
+.lu-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px 6px 12px;
+  border-radius: var(--radius-full);
+  background: var(--tint-blue);
+  font-size: 13px;
+  color: var(--accent-600);
+}
+
+.lu-chip-x {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent-500);
+  color: var(--white);
+  cursor: pointer;
+}
+
+.lu-chip-x:hover {
+  background: var(--accent-800);
+}
+
+.lu-add {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent-500);
+  color: var(--white);
+  cursor: pointer;
+}
+
+.lu-add:hover {
+  background: var(--accent-600);
+}
+
+/* ---- The learning unit picker ------------------------------------------- */
+
+.sheet.is-picker {
+  width: min(560px, 100%);
+  padding: 20px 0 8px;
+}
+
+.picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 22px 14px;
+}
+
+.picker-head h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.picker-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 22px 8px;
+  padding: 0 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  color: var(--ink-400);
+}
+
+/* The box is the wrapper above; this strips the shared field styling so the
+   magnifier and the text sit on one line. */
+.modal-body .picker-search input,
+.picker-search input {
+  width: 100%;
+  padding: 13px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink-900);
+}
+
+.picker-search input:focus {
+  outline: none;
+}
+
+.picker-list {
+  /* Eight rows, then scroll — the height the reference settles at. */
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+/* Off screen, not display:none: the input is still the thing the button clicks
+   and the thing a screen reader announces, and display:none would take it out of
+   the accessibility tree entirely. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Said once, above the footer, rather than per row: only one View can have just
+   been clicked, and a message under each of thirteen slots would be noise. */
+.view-failed {
+  margin: 0 30px 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--tint-amber);
+  font-size: 13px;
+  color: var(--on-amber);
+}
+
+/* ---- Additional Resources ----------------------------------------------- */
+
+.res-card {
+  position: relative;
+  margin-bottom: 18px;
+  padding: 22px 24px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.res-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 22px;
+}
+
+.res-card-remove {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--on-red);
+  cursor: pointer;
+}
+
+.res-card-remove:hover {
+  background: var(--tint-red);
+}
+
+/* Select, then the control that fills the slot, then View — the three the
+   reference shows. The select is narrow: it holds one of three short labels and
+   the room belongs to the control beside it. */
+.res-type-row {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Two tracks until a file type is chosen, when there is no middle control. */
+.res-type-row:not(:has(.slot-url)):not(:has(.res-btn)) {
+  grid-template-columns: 130px auto;
+}
+
+/* A pill, as the reference has it, and left-aligned under the cards rather than
+   centred: it is an action on the list, not a decision about the dialog. */
+.add-resource {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 22px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent-500);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--white);
+  cursor: pointer;
+}
+
+.add-resource:hover {
+  background: var(--accent-600);
+}
+
+/* ---- The other eleven tabs ---------------------------------------------- */
+
+.tab-panel {
+  display: grid;
+  gap: 18px;
+}
+
+/* Deliberately plain. This is a placeholder, and dressing it up would suggest
+   the tab does something. */
+.tab-empty {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 220px;
+  text-align: center;
+}
+
+.tab-empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-700);
+}
+
+.tab-empty-note {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   THE BOARD x GRADE GRID
+
+   Production's own surface for a grade-dependent slot — grades across, boards
+   down, a control per cell. Its markup is view-resources.component.html, a
+   2200px-wide CSS grid inside a 75vw dialog; this is the same shape in a table,
+   which gets sticky headers and a real row relationship for free.
+
+   WIDER THAN THE EDITOR IT SITS IN. Ten grade columns at a usable button width
+   do not fit 1000px, so the panel takes the viewport and scrolls sideways,
+   exactly as production's does.
+   ========================================================================== */
+
+/*
+ * A VIEWPORT-LEVEL OVERLAY, unlike .sheet-overlay.
+ *
+ * .sheet-overlay is `position: absolute` inside .modal-card, deliberately — the
+ * upload sheet covers the editor and leaves it legible as context. This page
+ * cannot live in that box: the editor is 1000px wide and the grid is eleven
+ * columns, so it would be a small window scrolling a wide table.
+ *
+ * Production's is a MatDialog at w-[75vw] h-[80vh], which is viewport-level by
+ * construction. Fixed, and above --overlay's z-index 60 so it sits over the
+ * editor rather than under it.
+ */
+.bg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(17 24 39 / 38%);
+}
+
+.bg-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /*
+   * 75vw x 80vh, production's own dialog size verbatim — and HEIGHT, not
+   * max-height. A max-height let the panel shrink to its rows, so a slot with
+   * two boards drew a short strip; production's is the same tall page whatever
+   * is in it, which is also what stops the layout jumping as rows are added.
+   */
+  width: min(75vw, 1400px);
+  height: 80vh;
+  border-radius: var(--radius-dialog);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+  overflow: hidden;
+}
+
+.bg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.bg-head h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+
+/* LARGER THAN THE EDITOR'S OWN CLOSE, at 40px against its 32. This page covers
+   the viewport, so this button, the backdrop and Escape are the only ways out —
+   and it is the only one of the three that is visible. */
+.bg-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--slate-100);
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.bg-close:hover {
+  border-color: var(--danger);
+  background: var(--tint-red);
+  color: var(--danger);
+}
+
+/* Both axes scroll: sideways for the grade columns, down for the boards. */
+.bg-scroll {
+  flex: 1;
+  overflow: auto;
+}
+
+.bg-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+  font-size: 12.5px;
+}
+
+.bg-grid th,
+.bg-grid td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.bg-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--ink-050);
+  color: var(--label);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/*
+ * THE BOARD COLUMN STAYS PUT.
+ *
+ * Ten columns means most of the grid is off-screen, and a row scrolled to Grade
+ * 9 with its board name gone is a cell you cannot safely upload into. z-index 3
+ * on the header's own corner so it wins over both sticky axes where they cross.
+ */
+.bg-sticky {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  color: var(--ink-900);
+  font-weight: 600;
+}
+
+.bg-grid thead .bg-sticky {
+  z-index: 3;
+  background: var(--ink-050);
+}
+
+.bg-universal .bg-sticky,
+.bg-universal td {
+  background: var(--tint-blue);
+}
+
+.bg-universal .bg-sticky {
+  color: var(--accent-800);
+}
+
+/* The three controls production pairs in every cell: a split Upload/View button
+   and the copy icon beside it. Joined edges, so they read as one control. */
+.bg-cell {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.bg-up,
+.bg-view {
+  padding: 6px 10px;
+  border: 1px solid var(--accent-600);
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 62px;
+}
+
+.bg-up {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: var(--slate-100);
+  color: var(--accent-600);
+}
+
+.bg-up:hover:not(:disabled) {
+  background: var(--tint-blue);
+}
+
+.bg-view {
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--accent-600);
+  color: var(--white);
+}
+
+.bg-view:hover:not(:disabled) {
+  background: var(--accent-500);
+}
+
+.bg-up:disabled,
+.bg-view:disabled {
+  border-color: var(--ink-300);
+  background: var(--ink-100);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.bg-copy {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  margin-left: 6px;
+  border-radius: var(--radius-sm);
+  color: var(--accent-600);
+}
+
+.bg-copy:hover:not(:disabled) {
+  background: var(--tint-blue);
+}
+
+/* Confirms ON THE BUTTON. The panel is 80vh tall and the status line sits at its
+   foot, so a cell copied from the middle of the grid gave the user no feedback
+   they would ever look at — which reads as the button being broken. */
+.bg-copy.is-copied {
+  background: var(--tint-green);
+  color: var(--success);
+}
+
+.bg-copy:disabled {
+  color: var(--ink-300);
+  cursor: not-allowed;
+}
+
+/* The link variant of a cell, for a slot the schema marks as a URL rather than
+   an upload — production's `type === 'video'` branch. */
+.bg-url {
+  width: 190px;
+  padding: 6px 10px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-900);
+}
+
+.bg-url:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+.bg-empty td {
+  padding: 22px;
+  color: var(--text-muted);
+  font-size: 13px;
+  white-space: normal;
+}
+
+.bg-done {
+  padding: 10px 22px;
+  border-top: 1px solid var(--border);
+  color: var(--success);
+  font-size: 12.5px;
 }

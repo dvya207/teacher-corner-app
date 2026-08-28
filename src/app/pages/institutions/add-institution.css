@@ -10,7 +10,10 @@
   place-items: center;
   padding: 24px 16px;
   background: var(--overlay);
-  backdrop-filter: blur(2px);
+  /* NO BLUR. The page behind a modal is context — which unit you were looking
+     at, how many rows there were — and a blur destroys exactly the detail that
+     makes it context while leaving the shapes to distract. Production's dialogs
+     dim and do not blur; matched here. */
 }
 
 .modal-card {

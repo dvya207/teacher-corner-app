@@ -65,21 +65,24 @@ export class Shell {
    * `settings` is its icon because `settings` is already the icon the page's own
    * heading renders, and production draws a cog here too.
    *
-   * Learning Units is deliberately ABSENT.
+   * Learning Units is BACK, and this entry is the whole of the nav side of that.
    *
-   * Removed from the nav, and then its ROUTE was removed too, both on instruction.
-   * /learning-units no longer resolves: it falls through to the '**' route and lands
-   * on the splash. The page, its add/edit form and LearningUnitService are all still
-   * in the repo — see the note in app.routes.ts for why the code stays — so bringing
-   * it back is one route block and one entry in this list.
+   * It was withheld twice — first this entry, then its route — and both were
+   * restored on instruction. Nothing about the page changed while it was
+   * unreachable, which is why bringing it back cost one line here and one route
+   * block in app.routes.ts, exactly as the note that stood here predicted.
    *
-   * The three entries after Set Up Wizard are untouched, in their original order.
+   * LAST, after Programme, which is the order production's sidebar uses.
+   *
+   * `chart` is its icon because production draws a bar chart here, and `book` is
+   * already spoken for by the page's own Total LUs stat card.
    */
   readonly adminNav: NavItem[] = [
-    { label: 'Set Up Wizard', path: '/setup-wizard',  icon: 'settings' },
-    { label: 'Institutions',  path: '/institutions',  icon: 'building' },
-    { label: 'Classrooms',    path: '/classrooms',    icon: 'classroom' },
-    { label: 'Programme',     path: '/programme',     icon: 'programme' }
+    { label: 'Set Up Wizard',  path: '/setup-wizard',   icon: 'settings' },
+    { label: 'Institutions',   path: '/institutions',   icon: 'building' },
+    { label: 'Classrooms',     path: '/classrooms',     icon: 'classroom' },
+    { label: 'Programme',      path: '/programme',      icon: 'programme' },
+    { label: 'Learning Units', path: '/learning-units', icon: 'chart' }
   ];
 
   readonly collapsed = signal(false);

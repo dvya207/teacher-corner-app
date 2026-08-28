@@ -72,6 +72,22 @@ export const COLLECTIONS = Object.freeze({
   programmes: 'programmes',
   /** The learning units a programme is built from. */
   learningUnits: 'learningUnits',
+  /**
+   * The uploaded files a learning unit is made of, one document per maturity
+   * rung. Production names it `LearningUnitResources`; lowercase here for the
+   * same reason `learningUnits` is — this app's four other collections are
+   * lowercase, and the pair should flip together on the day production's names
+   * are adopted.
+   */
+  learningUnitResources: 'learningUnitResources',
+  /**
+   * Grade-dependent resource files, one document per board.
+   *
+   * A slot the schema marks grade-dependent does not hold one file: it holds one
+   * per board and grade. Those cannot live on the rung's resource document,
+   * which has room for a single path per slot, so they get a collection.
+   */
+  boardGradeResources: 'boardGradeResources',
   /** Teachers registered against an institution. NOT the signed-in user — see the model. */
   teachers: 'teachers',
   /** Option vocabularies every dropdown reads. Capitalised, as production has it. */
@@ -447,6 +463,152 @@ export function ownedTrashLearningUnits(uid: string): Query {
   assertSafeSegment(uid, 'uid');
 
   return query(trashLearningUnitsCollection(), where(OWNER_FIELD, '==', uid));
+}
+
+/* ==========================================================================
+   Learning unit resources
+
+     learningUnitResources/{resourceId}                          ← ACTIVE
+     learningUnitResources/trash/DeletedLearningUnitResources/{resourceId}  ← DELETED
+
+   A TRASH, the same shape the other five collections use. Production has none
+   here — a resource document belonged to a unit, and deleting the unit was what
+   disposed of it — but that left every deleted unit's resource documents sitting
+   in the live collection with nothing pointing at them, which no screen could
+   show and no query could distinguish from a resource in use. Deleted resources
+   now go where every other deleted thing in this app goes, and can come back.
+
+   THE SENTINEL. `trash` is a real document path in this collection now, so a
+   resource whose own document id is the string 'trash' would collide with the
+   container. learningUnitResourceDoc rejects it, as the other four do.
+
+   FLAT, not a subcollection of the unit. Production keeps it top-level and
+   joins on `learningUnitDocId`, which is also what lets one query answer "every
+   resource document at Gold" across units — a collection-group query would be
+   the only way to serve that from a nested shape.
+
+   ONE DOCUMENT PER MATURITY RUNG. A unit at Gold has a Silver document and a
+   Gold one, because the ladder is cumulative; see LEARNING_UNIT_MATURITY_LADDER
+   and the resource schema for which slots each rung carries.
+   ========================================================================== */
+
+/** Every learning unit resource document: learningUnitResources */
+export function learningUnitResourcesCollection(): CollectionReference {
+  return collection(db, COLLECTIONS.learningUnitResources);
+}
+
+/** One resource document: learningUnitResources/{docId} */
+export function learningUnitResourceDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'document id');
+  assertNotTrashSentinel(docId);
+
+  return doc(learningUnitResourcesCollection(), docId);
+}
+
+export const LEARNING_UNIT_RESOURCE_TRASH_SUBCOLLECTION = 'DeletedLearningUnitResources';
+
+/** learningUnitResources/trash — a container document, no fields of its own. */
+function learningUnitResourceTrashContainer(): DocumentReference {
+  return doc(db, COLLECTIONS.learningUnitResources, TRASH_DOC);
+}
+
+/**
+ * DELETED resource documents:
+ * learningUnitResources/trash/DeletedLearningUnitResources
+ */
+export function trashLearningUnitResourcesCollection(): CollectionReference {
+  return collection(
+    learningUnitResourceTrashContainer(),
+    LEARNING_UNIT_RESOURCE_TRASH_SUBCOLLECTION
+  );
+}
+
+/** One deleted resource document. SAME id as the active document it came from. */
+export function trashLearningUnitResourceDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'document id');
+
+  return doc(trashLearningUnitResourcesCollection(), docId);
+}
+
+/**
+ * Every DELETED resource document belonging to one learning unit.
+ *
+ * The mirror of resourcesForLearningUnit, on the same field, so restoring a
+ * unit can find exactly what was trashed with it.
+ */
+export function trashedResourcesForLearningUnit(learningUnitDocId: string): Query {
+  assertSafeSegment(learningUnitDocId, 'learning unit document id');
+
+  return query(
+    trashLearningUnitResourcesCollection(),
+    where('learningUnitDocId', '==', learningUnitDocId)
+  );
+}
+
+/** A fresh resource reference with a generated id, so the id is known before the write. */
+export function newLearningUnitResourceDoc(): DocumentReference {
+  return doc(learningUnitResourcesCollection());
+}
+
+/**
+ * Every resource document belonging to one learning unit.
+ *
+ * Filtered on learningUnitDocId — the unit's document id, NOT its readable
+ * learningUnitId — because that is the one of the two that cannot change.
+ */
+export function resourcesForLearningUnit(learningUnitDocId: string): Query {
+  assertSafeSegment(learningUnitDocId, 'learning unit document id');
+
+  return query(
+    learningUnitResourcesCollection(),
+    where('learningUnitDocId', '==', learningUnitDocId)
+  );
+}
+
+/* ==========================================================================
+   Board and grade resources
+
+     boardGradeResources/{docId}
+
+   ONE DOCUMENT PER BOARD, with the grades as keys inside it. Production's own
+   shape: a document carries learningUnitDocId, maturity, category, subCategory
+   and board, and a `resources` map keyed grade_01 … grade_10 holding the path
+   for each grade.
+
+   WHY NOT ONE PER BOARD AND GRADE. Because the same file usually covers several
+   grades, and a document per pair would multiply by ten what is really one
+   decision — which is also why the picker takes several grades at once.
+
+   FLAT, and joined on learningUnitDocId, for the reason learningUnitResources is:
+   a nested shape would need a collection-group query to answer anything across
+   units.
+   ========================================================================== */
+
+/** Every board-and-grade resource document: boardGradeResources */
+export function boardGradeResourcesCollection(): CollectionReference {
+  return collection(db, COLLECTIONS.boardGradeResources);
+}
+
+/** One of them: boardGradeResources/{docId} */
+export function boardGradeResourceDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'document id');
+
+  return doc(boardGradeResourcesCollection(), docId);
+}
+
+/** A fresh one with a generated id. */
+export function newBoardGradeResourceDoc(): DocumentReference {
+  return doc(boardGradeResourcesCollection());
+}
+
+/** Everything filed against one learning unit, across every board and slot. */
+export function boardGradeResourcesForUnit(learningUnitDocId: string): Query {
+  assertSafeSegment(learningUnitDocId, 'learning unit document id');
+
+  return query(
+    boardGradeResourcesCollection(),
+    where('learningUnitDocId', '==', learningUnitDocId)
+  );
 }
 
 /* ==========================================================================

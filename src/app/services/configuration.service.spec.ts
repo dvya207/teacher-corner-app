@@ -178,4 +178,199 @@ describe('ConfigurationService', () => {
     expect(service.dialFor('India')).toBe('+91');
     expect(service.dialFor('Nowhere')).toBe('+91');
   });
+
+  /* ======================================================================
+     The learning unit form's dropdowns.
+     ======================================================================
+     Every select in the Add-a-Learning-Unit dialog reads one of these. The two
+     properties asserted at the top of this file are asserted for each: Firestore
+     wins, and the shipped constant holds when the read gives nothing. */
+
+  describe('learning unit vocabularies', () => {
+
+    it('take the type list from Firestore, keyed by code', async () => {
+      documents.set('LearningUnitTypes', {
+        Types: {
+          ZZ: { code: 'ZZ', name: 'Experiment' },
+          TA: { code: 'TA', name: 'TACtivity' }
+        }
+      });
+
+      await service.load();
+
+      // Sorted by code, so the dropdown order does not follow map iteration.
+      expect(service.learningUnitTypes().map(t => t.code)).toEqual(['TA', 'ZZ']);
+    });
+
+    /** The map key stands in for a missing code field. */
+    it('fall back to the map key when a type has no code', async () => {
+      documents.set('LearningUnitTypes', { Types: { QQ: { name: 'Keyed only' } } });
+
+      await service.load();
+
+      expect(service.learningUnitTypes()).toEqual([{ code: 'QQ', name: 'Keyed only' }]);
+    });
+
+    /** A nameless type would render as a blank option that still mints a typeCode. */
+    it('drop a type with no name', async () => {
+      documents.set('LearningUnitTypes', {
+        Types: { AA: { code: 'AA' }, BB: { code: 'BB', name: 'Real' } }
+      });
+
+      await service.load();
+
+      expect(service.learningUnitTypes()).toEqual([{ code: 'BB', name: 'Real' }]);
+    });
+
+    it('keep all thirteen shipped types when the document is missing', async () => {
+      await service.load();
+
+      expect(service.learningUnitTypes()).toHaveLength(13);
+      expect(service.learningUnitTypes().map(t => t.code)).toContain('TT');
+    });
+
+    it('take the language list from Firestore', async () => {
+      documents.set('LearningUnitLanguages', {
+        langTypes: [{ code: 'BN', label: 'Bengali' }]
+      });
+
+      await service.load();
+
+      expect(service.learningUnitLanguages()).toEqual([{ code: 'BN', label: 'Bengali' }]);
+    });
+
+    /**
+     * THE REASON THIS IS A SEPARATE DOCUMENT.
+     *
+     * Configuration/Languages is a school's medium of instruction and carries OT
+     * 'Other'. A learning unit's isoCode becomes a segment of its learningUnitId, so OT
+     * would mint 'TA-AE04-OT-V10'. The two lists must not be wired to one document.
+     */
+    it('keep the school medium list out of the learning unit languages', async () => {
+      documents.set('Languages', {
+        langTypes: [{ code: 'EN', label: 'English' }, { code: 'OT', label: 'Other' }]
+      });
+
+      await service.load();
+
+      expect(service.languages().map(l => l.code)).toContain('OT');
+      expect(service.learningUnitLanguages().map(l => l.code)).not.toContain('OT');
+      expect(service.learningUnitLanguages()).toHaveLength(6);
+    });
+
+    it('take the difficulty levels from Firestore', async () => {
+      documents.set('LearningUnitDifficulty', { levels: ['1', '2', '3'] });
+
+      await service.load();
+
+      expect(service.learningUnitDifficulty()).toEqual(['1', '2', '3']);
+    });
+
+    it('keep the shipped difficulty levels when the document is empty', async () => {
+      documents.set('LearningUnitDifficulty', { levels: [] });
+
+      await service.load();
+
+      // SIX, starting at 0: production's units carry difficultyLevel 0.
+      expect(service.learningUnitDifficulty()).toEqual(['0', '1', '2', '3', '4', '5']);
+    });
+
+    it('take the taxonomy from Firestore, translating subdomainName', async () => {
+      documents.set('learningUnitDomains', {
+        domains: [{
+          subjectCode: 'M', subjectName: 'Mathematics',
+          domainCode: 'Q', domainName: 'Quaternions',
+          subDomainCode: 'X', subdomainName: 'Rotations'
+        }]
+      });
+
+      await service.load();
+
+      expect(service.learningUnitDomains()).toEqual([{
+        subjectCode: 'M', subjectName: 'Mathematics',
+        domainCode: 'Q', domainName: 'Quaternions',
+        subDomainCode: 'X', subDomainName: 'Rotations'
+      }]);
+    });
+
+    /** A hand edit that used this app's spelling still works. */
+    it('accept either spelling of the sub-domain name', async () => {
+      documents.set('learningUnitDomains', {
+        domains: [{ domainCode: 'Q', subDomainCode: 'X', subDomainName: 'CamelCased' }]
+      });
+
+      await service.load();
+
+      expect(service.learningUnitDomains()[0].subDomainName).toBe('CamelCased');
+    });
+
+    /** A row with no letter pair can never match a code; it would only pad the lists. */
+    it('drop a taxonomy row with no letter pair', async () => {
+      documents.set('learningUnitDomains', {
+        domains: [
+          { domainCode: 'Q', subDomainName: 'No sub-domain code' },
+          { domainCode: 'Q', subDomainCode: 'X', subdomainName: 'Kept' }
+        ]
+      });
+
+      await service.load();
+
+      expect(service.learningUnitDomains()).toHaveLength(1);
+      expect(service.learningUnitDomains()[0].subDomainName).toBe('Kept');
+    });
+
+    it('keep all 44 shipped taxonomy rows when the document is missing', async () => {
+      await service.load();
+
+      expect(service.learningUnitDomains()).toHaveLength(44);
+    });
+
+    it('take the maturity ladder from Firestore, in rank order', async () => {
+      documents.set('learningUnitMaturity', {
+        maturity: {
+          platinum: { level: 'Platinum', cumulativeMaturity: ['Platinum', 'Gold', 'Silver'] },
+          silver: { level: 'Silver', cumulativeMaturity: ['Silver'], upgradeable: true },
+          gold: { level: 'Gold', cumulativeMaturity: ['Gold', 'Silver'] }
+        }
+      });
+
+      await service.load();
+
+      expect(service.learningUnitMaturities().map(m => m.level))
+        .toEqual(['Silver', 'Gold', 'Platinum']);
+    });
+
+    /** cumulativeMaturity is what the document is for; without it a level is useless. */
+    it('drop a maturity with no cumulative ladder', async () => {
+      documents.set('learningUnitMaturity', {
+        maturity: {
+          gold: { level: 'Gold', cumulativeMaturity: ['Gold', 'Silver'] },
+          bronze: { level: 'Bronze' }
+        }
+      });
+
+      await service.load();
+
+      expect(service.learningUnitMaturities().map(m => m.level)).toEqual(['Gold']);
+    });
+
+    /**
+     * A REFUSED READ LEAVES EVERY DROPDOWN POPULATED.
+     *
+     * This is the property the whole fallback design exists for: moving these lists
+     * into Firestore must not be able to empty a select.
+     */
+    it('survive a refused read with every list intact', async () => {
+      shouldThrow = true;
+
+      await service.load();
+
+      expect(service.learningUnitTypes()).toHaveLength(13);
+      expect(service.learningUnitLanguages()).toHaveLength(6);
+      expect(service.learningUnitDifficulty()).toHaveLength(6);
+      expect(service.learningUnitDomains()).toHaveLength(44);
+      expect(service.learningUnitMaturities()).toHaveLength(4);
+      expect(service.programmeStatuses()).toHaveLength(2);
+    });
+  });
 });

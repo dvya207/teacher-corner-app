@@ -261,6 +261,16 @@ def ts(value):
     return {"timestampValue": value}
 
 
+def b(value):
+    return {"booleanValue": bool(value)}
+
+
+def arr():
+    # Every list on a learning unit is empty on the units sampled in production.
+    # Written rather than omitted so a reader gets [] where production gives [].
+    return {"arrayValue": {"values": []}}
+
+
 # The taxonomy rows these codes resolve to, matching
 # src/app/data/learning-unit-taxonomy.ts exactly. Written out rather than
 # derived, so the seed cannot silently disagree with the app: if the taxonomy
@@ -280,6 +290,10 @@ TAXONOMY = {
 # a type renamed later must not retroactively rewrite ids already minted.
 TYPE_NAME = "TACtivity"
 TYPE_CODE = "TA"
+
+# The maturity ladder, lowest first. A unit's resources map carries the rungs up
+# to and including its own — see the comment beside `resources` below.
+LADDER = ["Silver", "Gold", "Platinum", "Diamond"]
 
 
 def unit(doc_id, code, name, iso, version, status, maturity,
@@ -327,11 +341,125 @@ def unit(doc_id, code, name, iso, version, status, maturity,
         # the deleted document, where no profile join is possible.
         "tacOwnerName": s("Seed Data"),
 
+        # THE FIVE DESCRIPTION BOXES the editor's Descriptions tab edits. Four
+        # are production's; `tinyDescription` is this app's addition and is the
+        # one field here production's own documents do not carry.
         "shortDescription": s(f"Seeded by scripts/seed-learning-units.sh — {name}."),
+        "longDescription": s(""),
+        "alternateShortDescription": s(""),
+        "alternateLongDescription": s(""),
+        "tinyDescription": s(""),
         # A STRING, as the app's model types it: production types the field
         # `number | string` and stores both, and the app coerces on read.
         "difficultyLevel": s(str(difficulty)),
         "totalTime": i(total_time),
+        # The other two timings, at production's create-time default of 0. Absent
+        # rather than zero would read back as undefined, which Firestore refuses
+        # on the way back in.
+        "exploreTime": i(0),
+        "learnTime": i(0),
+
+        # IMAGE PATHS, and the point of them is the pair that is NOT here.
+        #
+        # The editor's Images tab offers View only where a path is stored, which
+        # is production's own rule: its Harmonica Model shows View beside Head
+        # Line and Other Image and only Upload beside QR Code, because that is
+        # exactly which of the three it has. Seeding two filled and one empty
+        # reproduces that state, so the two-of-three layout can be seen without
+        # Storage being wired up.
+        #
+        # THE FILES DO NOT EXIST. These are paths into a bucket nothing has
+        # uploaded to, which is harmless while View is disabled and is the first
+        # thing to fix when Storage is wired: a seeded unit will offer to view an
+        # object that 404s.
+        "learningUnitImage": s(f"learningUnits/{doc_id}/learningUnitImage.jpg"),
+        "learningUnitPreviewImage": s(
+            f"learningUnits/{doc_id}/learningUnitImage_200x200.jpg"
+        ),
+        # PRODUCTION'S THIRTEEN KEYS, read off
+        # LearningUnits/0MvRXYORh342Es0Gkd42 in thinktac-india-production. All
+        # empty except the one image path, because that is the state a unit is in
+        # before any resource has been produced for it.
+        #
+        # `gold` and `silver` are the maturity ladder: the id of the resource
+        # document at each rung. Empty here — this seed writes no resource
+        # documents, so an id would point at nothing.
+        "resources": {
+            "mapValue": {
+                "fields": {
+                    # CUMULATIVE, not all four: a unit carries only the rungs
+                    # it has reached, which is what production's own documents
+                    # do — Silver has `silver` alone, Gold has both.
+                    **{
+                        rung.lower(): s("")
+                        for rung in LADDER[: LADDER.index(maturity) + 1]
+                        if maturity in LADDER
+                    },
+                    "guidePath": s(""),
+                    "materialPath": s(""),
+                    "observationPath": s(""),
+                    "templatePath": s(""),
+                    "topicGuidePath": s(""),
+                    "varGuidePath": s(""),
+                    # Deliberately empty — this is the slot that must show Upload
+                    # rather than View.
+                    "qrCodeImagePath": s(""),
+                    "otherImagePath": s(
+                        f"learningUnits/{doc_id}/otherImage.jpg"
+                    ),
+                    "videoUrl": s(""),
+                    "topicVideoUrl": s(""),
+                    "varVideoUrl": s(""),
+                }
+            }
+        },
+
+        # ------------------------------------------------------------------
+        # THE REST OF PRODUCTION'S SIXTY FIELDS
+        # ------------------------------------------------------------------
+        # None of these is shown by any screen yet. They are written so a seeded
+        # unit is the same SHAPE as a production one — which is what makes the
+        # editor's carry-through behaviour testable, since a field absent from
+        # the document cannot be observed surviving an edit.
+        "makingTime": i(0),
+        "observationTime": i(0),
+        "firstLiveDate": s(""),
+        # A constant on every production unit — what the document was stamped
+        # from, not a per-unit value.
+        "masterDocId": s("learningunit_master_02"),
+        # FALSE, deliberately: it means a resource document exists for the unit,
+        # and this script writes none.
+        "containsResources": b(False),
+        "domain": s(""),
+        "numberOfTemplates": s(""),
+        "samples": s(""),
+        "tools": s(""),
+        "topicCodes": s(""),
+        "totalViews": i(0),
+        "userFeedback": s(""),
+        "versionNotes": s(""),
+        # The three people on a unit. Only the owner's name is filled, matching
+        # the tacOwnerName above.
+        "tacOwnerCountryCode": s(""),
+        "tacOwnerPhoneNumber": s(""),
+        "tacArchitectName": s(""),
+        "tacArchitectCountryCode": s(""),
+        "tacArchitectPhoneNumber": s(""),
+        "tacMentorName": s(""),
+        "tacMentorCountryCode": s(""),
+        "tacMentorPhoneNumber": s(""),
+        "associatedLearningUnits": arr(),
+        "prerequisiteLearningUnits": arr(),
+        "replacementLearningUnits": arr(),
+        "similarLearningUnits": arr(),
+        "tags": arr(),
+        "additionalResources": arr(),
+        # What the unit has been attached to. Present on some production
+        # documents and absent from others; written here so a seeded unit has
+        # the key rather than the app having to cope with both.
+        "linkedClassroomIds": arr(),
+        "linkedProgrammeIds": arr(),
+        "linkedWorkflowIds": arr(),
 
         "ownerId": s(owner),
         "createdAt": ts(created),

@@ -1,0 +1,44 @@
+<!-- The backdrop dismisses on click, and Escape dismisses from the keyboard —
+     bound on the host, because a div cannot receive a keydown it never has
+     focus for. The two rules disabled below ask for a keyboard equivalent on
+     this element; the equivalent exists, it just cannot live on a backdrop that
+     is deliberately not focusable. -->
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="confirm-overlay" (click)="cancelled.emit()">
+
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="confirm-card animate-fade-up"
+    role="alertdialog"
+    aria-modal="true"
+    [attr.aria-label]="heading()"
+    (click)="$event.stopPropagation()"
+  >
+    <span class="confirm-icon"><app-icon [name]="icon()" [size]="22" /></span>
+
+    <h2>{{ heading() }}</h2>
+
+    @if (message()) {
+      <p>{{ message() }}</p>
+    }
+
+    @if (warning()) {
+      <p class="confirm-warn">{{ warning() }}</p>
+    }
+
+    <div class="confirm-actions">
+      <button type="button" class="btn btn-ghost" (click)="cancelled.emit()">
+        {{ cancelLabel() }}
+      </button>
+
+      <button
+        type="button"
+        class="btn btn-danger"
+        [disabled]="busy()"
+        (click)="confirmed.emit()"
+      >
+        {{ busy() ? busyLabel() : confirmLabel() }}
+      </button>
+    </div>
+  </div>
+</div>

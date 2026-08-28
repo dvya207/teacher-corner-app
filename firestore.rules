@@ -281,6 +281,64 @@ service cloud.firestore {
       allow delete: if signedIn();
     }
 
+    // ========================================================================
+    // Learning unit resources
+    // ========================================================================
+    //
+    //   learningUnitResources/{resourceId}
+    //
+    // The uploaded files a unit is made of, one document per maturity rung.
+    //
+    // NO OWNER CHECK, matching the four collections above. Ownership on this
+    // document is the unit it points at, and the unit's own rule already grants
+    // every signed-in user read.
+    match /learningUnitResources/{resourceId} {
+      allow read:   if signedIn();
+      // `trash` is the container document for deleted resource documents and
+      // sits in this same collection. Excluding it here stops a resource being
+      // created with that id and overwriting the container — the same exclusion
+      // the four collections above carry.
+      allow create: if signedIn() && resourceId != 'trash';
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Learning unit resources — DELETED
+    // ========================================================================
+    //
+    //   learningUnitResources/trash/DeletedLearningUnitResources/{resourceId}
+    //
+    // Both segments PINNED, as with the four trashes above. update is NOT
+    // granted: nothing legitimately edits a resource document while it is in
+    // the trash.
+    //
+    // Production has no trash here. This one exists because deleting a unit
+    // used to leave its resource documents in the live collection with nothing
+    // pointing at them; see the note in core/firestore-paths.ts.
+    match /learningUnitResources/trash/DeletedLearningUnitResources/{resourceId} {
+      allow read:   if signedIn();
+      allow create: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Board and grade resources
+    // ========================================================================
+    //
+    //   boardGradeResources/{resourceId}
+    //
+    // One document per board for a grade-dependent slot, with the grades keyed
+    // inside it. Same grants as learningUnitResources: these are a learning
+    // unit's content, not anyone's private data, and the unit they belong to is
+    // already readable by every signed-in user.
+    match /boardGradeResources/{resourceId} {
+      allow read:   if signedIn();
+      allow create: if signedIn();
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
     // ------------------------------------------------------------------------
     // The programme-code counter lives at users/{uid}/counters/programmes and
     // needs NO rule of its own — the `users/{uid}/{document=**}` block above

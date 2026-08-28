@@ -22,6 +22,8 @@ import { isActiveStatus } from '../data/programme-options';
 import {
   LearningUnit,
   LearningUnitDraft,
+  emptyLearningUnitResources,
+  ladderKeysFor,
   PickableUnit,
   TRASH_METADATA_FIELDS,
   TrashedLearningUnit
@@ -39,6 +41,17 @@ import { AuthService } from './auth.service';
  * `difficultyLevel` is coerced with String() and `totalTime` with Number()
  * because production types both as `number | string` and stores both.
  */
+/** A stored id list. A field Firestore has never seen reads back undefined. */
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
+/** A stored timing, coerced the way totalTime is: unparseable or absent is 0. */
+function finiteOrZero(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export function normaliseLearningUnit<T extends { docId: string }>(
   docId: string,
   data: Record<string, unknown>
@@ -71,10 +84,68 @@ export function normaliseLearningUnit<T extends { docId: string }>(
     compositeCode: (data['compositeCode'] as string | undefined) ?? '',
     tacOwnerName: (data['tacOwnerName'] as string | undefined) ?? '',
     shortDescription: (data['shortDescription'] as string | undefined) ?? '',
+    longDescription: (data['longDescription'] as string | undefined) ?? '',
+    alternateShortDescription:
+      (data['alternateShortDescription'] as string | undefined) ?? '',
+    alternateLongDescription:
+      (data['alternateLongDescription'] as string | undefined) ?? '',
+    tinyDescription: (data['tinyDescription'] as string | undefined) ?? '',
+    learningUnitImage: (data['learningUnitImage'] as string | undefined) ?? '',
+    learningUnitPreviewImage:
+      (data['learningUnitPreviewImage'] as string | undefined) ?? '',
+    // SPREAD, so every key this app does not name survives being read and
+    // written back. A document's resources map holds a dozen paths the Images
+    // tab never shows, and rebuilding it from the two it does show would delete
+    // them.
+    resources: {
+      ...emptyLearningUnitResources(),
+      ...((data['resources'] as Record<string, unknown> | undefined) ?? {})
+    } as LearningUnit['resources'],
+
+    // The rest of production's document. Defaulted rather than left absent for
+    // the reason every field above is: undefined cannot be written back, so one
+    // missing key would fail the whole update.
+    makingTime: finiteOrZero(data['makingTime']),
+    observationTime: finiteOrZero(data['observationTime']),
+    firstLiveDate: (data['firstLiveDate'] as string | undefined) ?? '',
+    masterDocId: (data['masterDocId'] as string | undefined) ?? '',
+    containsResources: (data['containsResources'] as boolean | undefined) ?? false,
+    domain: (data['domain'] as string | undefined) ?? '',
+    numberOfTemplates: (data['numberOfTemplates'] as string | undefined) ?? '',
+    samples: (data['samples'] as string | undefined) ?? '',
+    tools: (data['tools'] as string | undefined) ?? '',
+    topicCodes: (data['topicCodes'] as string | undefined) ?? '',
+    totalViews: finiteOrZero(data['totalViews']),
+    userFeedback: (data['userFeedback'] as string | undefined) ?? '',
+    versionNotes: (data['versionNotes'] as string | undefined) ?? '',
+    tacOwnerCountryCode: (data['tacOwnerCountryCode'] as string | undefined) ?? '',
+    tacOwnerPhoneNumber: (data['tacOwnerPhoneNumber'] as string | undefined) ?? '',
+    tacArchitectName: (data['tacArchitectName'] as string | undefined) ?? '',
+    tacArchitectCountryCode: (data['tacArchitectCountryCode'] as string | undefined) ?? '',
+    tacArchitectPhoneNumber: (data['tacArchitectPhoneNumber'] as string | undefined) ?? '',
+    tacMentorName: (data['tacMentorName'] as string | undefined) ?? '',
+    tacMentorCountryCode: (data['tacMentorCountryCode'] as string | undefined) ?? '',
+    tacMentorPhoneNumber: (data['tacMentorPhoneNumber'] as string | undefined) ?? '',
+    associatedLearningUnits: stringList(data['associatedLearningUnits']),
+    prerequisiteLearningUnits: stringList(data['prerequisiteLearningUnits']),
+    replacementLearningUnits: stringList(data['replacementLearningUnits']),
+    similarLearningUnits: stringList(data['similarLearningUnits']),
+    tags: stringList(data['tags']),
+    additionalResources: Array.isArray(data['additionalResources'])
+      ? (data['additionalResources'] as unknown[])
+      : [],
+    linkedClassroomIds: stringList(data['linkedClassroomIds']),
+    linkedProgrammeIds: stringList(data['linkedProgrammeIds']),
+    linkedWorkflowIds: stringList(data['linkedWorkflowIds']),
     difficultyLevel:
       difficulty === undefined || difficulty === null ? '' : String(difficulty),
     // NaN would render as "NaN" and break the totals; an unparseable time is 0.
-    totalTime: Number.isFinite(total) ? total : 0
+    totalTime: Number.isFinite(total) ? total : 0,
+    // The other two timings, defaulted the same way and for the same reason. A
+    // document written before these existed reads them as undefined, which
+    // Firestore refuses on the way back in.
+    exploreTime: finiteOrZero(data['exploreTime']),
+    learnTime: finiteOrZero(data['learnTime'])
   } as unknown as T;
 }
 
@@ -207,6 +278,13 @@ export class LearningUnitService {
 
     const payload = {
       ...draft,
+      /*
+       * The ladder keys are added HERE, not in the empty draft, because they
+       * depend on the maturity the form has just collected. A Silver unit gets
+       * `silver` alone and a Gold one `silver` and `gold` — cumulative, the way
+       * production's own 1200 units carry them.
+       */
+      resources: { ...draft.resources, ...ladderKeysFor(draft.Maturity) },
       learningUnitDisplayName:
         draft.learningUnitDisplayName?.trim() || draft.learningUnitName,
       // Denormalised at creation, as production does: the Trash table's Owner

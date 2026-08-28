@@ -87,14 +87,15 @@ async function mount(): Promise<{ fixture: ComponentFixture<Shell>; el: HTMLElem
 
 describe('Shell — sidebar navigation', () => {
 
-  it('lists the four admin pages in order, Set Up Wizard first', async () => {
+  it('lists the five admin pages in order, Set Up Wizard first and Learning Units last', async () => {
     const { fixture } = await mount();
 
     expect(fixture.componentInstance.adminNav.map(item => item.label)).toEqual([
       'Set Up Wizard',
       'Institutions',
       'Classrooms',
-      'Programme'
+      'Programme',
+      'Learning Units'
     ]);
   });
 
@@ -162,24 +163,27 @@ describe('Shell — sidebar navigation', () => {
   });
 
   /**
-   * Learning Units stays out.
+   * Learning Units is IN, and reachable.
    *
-   * Its route still resolves and the page, its add/edit form and
-   * LearningUnitService all still exist; only the nav entry was removed, and
-   * adding Set Up Wizard must not have quietly restored this one alongside it.
+   * This test asserted the opposite until the entry and its route were restored.
+   * It is kept and inverted rather than deleted, because the thing worth guarding
+   * did not change — only its direction. The RENDERED HREF is half the assertion:
+   * the array can carry the entry while the route block in app.routes.ts is still
+   * missing, and that combination is a link in the sidebar that lands the user on
+   * the splash. Checking both together is what catches it.
    */
-  it('omits Learning Units', async () => {
+  it('includes Learning Units, and links to a route that resolves', async () => {
     const { fixture, el } = await mount();
     const labels = [
       ...fixture.componentInstance.primaryNav,
       ...fixture.componentInstance.adminNav
     ].map(item => item.label);
 
-    expect(labels).not.toContain('Learning Units');
+    expect(labels).toContain('Learning Units');
 
     const hrefs = [...el.querySelectorAll<HTMLAnchorElement>('.sidebar-nav a.nav-item')]
       .map(link => link.getAttribute('href'));
 
-    expect(hrefs).not.toContain('/learning-units');
+    expect(hrefs).toContain('/learning-units');
   });
 });

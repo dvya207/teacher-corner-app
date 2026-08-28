@@ -177,9 +177,17 @@
      off --brand-900, which is what this used to approximate it with. */
   --label: #23275c;
 
-  /* .edit-dialog-overlay, verbatim: a neutral black at 45%, not the navy-tinted
-     scrim each modal used to mix for itself. */
-  --overlay: rgba(0, 0, 0, 0.45);
+  /*
+   * A neutral black at 32%, not the navy-tinted scrim each modal used to mix
+   * for itself.
+   *
+   * 32%, NOT the 45% this carried before. Production's dialogs pass no
+   * backdropClass — filter-learning-unit.component.ts opens the Add Learning
+   * Unit dialog with a panelClass only — so they get Angular Material's default
+   * `cdk-overlay-dark-backdrop`, which is exactly rgba(0, 0, 0, 0.32). At 45%
+   * the page behind our modals read as switched off rather than as context.
+   */
+  --overlay: rgba(0, 0, 0, 0.32);
 
   /* Two slate steps production uses alongside the Tarang neutrals: the dialog
      close button's fill and its icon (#F1F5F9 / #64748B), and the programme
@@ -566,8 +574,11 @@ select:has(option[value='']:checked) {
   display: grid;
   place-items: center;
   padding: 24px 16px;
+  /* Heavier than --overlay, and deliberately: this one can open OVER the Trash
+     overlay, so it needs to separate from a surface that is already a scrim.
+     Production's own Delete Version dialog dims about this much. No blur, for
+     the reason given on every modal overlay. */
   background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(2px);
 }
 
 .confirm-card {

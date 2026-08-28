@@ -7,7 +7,7 @@ export type IconName =
   | 'mail' | 'lock' | 'eye' | 'eye-off' | 'plus' | 'check' | 'google'
   | 'trophy' | 'clipboard' | 'box' | 'edit' | 'arrow-right' | 'close' | 'check-mail'
   | 'trash' | 'plus-circle' | 'minus' | 'bank' | 'restore' | 'check-circle' | 'map-pin' | 'venus' | 'translate'
-  | 'grip' | 'list' | 'download';
+  | 'grip' | 'list' | 'download' | 'download-circle' | 'upload-circle' | 'copy';
 
 /**
  * Every icon in the app, in one place.
@@ -75,9 +75,14 @@ export type IconName =
           @case ('star') {
             <path d="m12 3.5 2.7 5.47 6.05.88-4.38 4.26 1.04 6.02L12 17.28l-5.41 2.85 1.04-6.02L3.25 9.85l6.05-.88Z" />
           }
+          <!-- Bars in a rounded square, matching the symbol production gives
+               Learning Units in the sidebar. This was an axis with a trend
+               line, which is a different mark for the same nav entry. -->
           @case ('chart') {
-            <path d="M3 3v16.5A1.5 1.5 0 0 0 4.5 21H21" />
-            <path d="m7 15 3.6-4.2 3.2 2.6L19 7" />
+            <rect x="3" y="3" width="18" height="18" rx="3" />
+            <path d="M8.4 16v-2.6" />
+            <path d="M12 16v-5.4" />
+            <path d="M15.6 16V8.4" />
           }
           @case ('building') {
             <rect x="4" y="3" width="16" height="18" rx="2" />
@@ -156,6 +161,31 @@ export type IconName =
           @case ('download') {
             <path d="M12 3.5v11M7.8 10.4 12 14.6l4.2-4.2" />
             <path d="M4.5 17v1.9A1.6 1.6 0 0 0 6.1 20.5h11.8a1.6 1.6 0 0 0 1.6-1.6V17" />
+          }
+          <!-- The upload control's mark in the reference: an arrow in a ring,
+               not the tray download above it. Kept as a second icon rather than
+               a replacement, because the tray one is the Export button's and the
+               two mean different things. (No backticks in this comment: the
+               whole template is a template literal, and one would end it.) -->
+          @case ('download-circle') {
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7.6v8.8" />
+            <path d="m8.4 12.8 3.6 3.6 3.6-3.6" />
+          }
+          <!-- The mirror of download-circle. Upload and download sit one row
+               apart on the resource tabs, so they have to be the same mark
+               turned over rather than two different drawings. -->
+          @case ('upload-circle') {
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 16.4V7.6" />
+            <path d="m8.4 11.2 3.6-3.6 3.6 3.6" />
+          }
+          <!-- Two overlapping sheets, which is the copy mark the reference uses
+               beside every path. NOT the clipboard above it: that one carries a
+               tick and means "checked", which is a different promise. -->
+          @case ('copy') {
+            <rect x="9" y="9" width="11" height="11" rx="2" />
+            <path d="M5.5 15H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v.5" />
           }
           @case ('arrow-right') {
             <path d="M4.5 12h14M13 6.5l5.5 5.5L13 17.5" />

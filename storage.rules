@@ -1,0 +1,282 @@
+rules_version = '2';
+
+// ============================================================================
+// MERGED Storage ruleset for helix-staging-india.
+//
+// WHY THIS FILE CONTAINS ANOTHER APP'S RULES
+//
+// Unlike Firestore, Cloud Storage has no per-database equivalent. The project
+// has ONE bucket, helix-staging-india.firebasestorage.app, and ONE ruleset
+// governing it. A Storage rules deploy REPLACES that ruleset wholesale, so a
+// file containing only the bugpulse_ block would delete expense-log's rules
+// and break its receipt uploads.
+//
+// The expenselog_receipts block below is therefore reproduced VERBATIM from
+// the ruleset currently live on the bucket.
+//
+// PROVENANCE, because this matters
+//
+// It was read from this project's own live ruleset via the Firebase Rules API
+//   GET firebaserules.googleapis.com/v1/projects/helix-staging-india
+//         /rulesets/b3057f87-ec8f-4932-b44d-5b81556b64d5
+//   (release firebase.storage/helix-staging-india.firebasestorage.app,
+//    deployed 2026-08-07T09:35:01Z)
+// It was NOT copied out of another repository. The live ruleset is the only
+// authority on what is actually being enforced right now.
+//
+// BEFORE DEPLOYING: re-fetch that release and diff the expenselog_ block
+// against this file. If expense-log has shipped a change since 2026-08-07,
+// deploying this would silently revert it.
+//
+// A DURABLE FIX EXISTS: give BugPulse its own Storage bucket, the way it now
+// has its own Firestore database. Rules are per-bucket, so that would end the
+// shared-file coordination permanently. See the note in firebase.json.
+// ============================================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ========================================================================
+    // expense-log — PRESERVED VERBATIM. Do not edit here.
+    // Source of truth is expense-log's own repo; this copy exists only so a
+    // BugPulse deploy does not delete it.
+    // ========================================================================
+
+    match /expenselog_receipts/{userId}/{expenseId}/{fileName} {
+
+      // Read only your own receipts.
+      allow read: if request.auth != null
+                  && request.auth.uid == userId;
+
+      // Create or overwrite: yours only, images only, under 5 MB.
+      // These mirror the client-side checks in receipt.service.ts. The client
+      // checks give a fast, specific error; these are what actually enforce it.
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+
+      // Delete your own receipt.
+      //
+      // Separate from write, and note there is no request.resource check here:
+      // on a delete there is no incoming file, so request.resource is null and
+      // any condition touching it would throw and deny every delete. Same trap
+      // as the Firestore update/delete split.
+      allow delete: if request.auth != null
+                    && request.auth.uid == userId;
+    }
+
+    // ========================================================================
+    // bug-pulse — NEW. This is the only block this repo owns.
+    // ========================================================================
+    //
+    // Storage rules match on PATHS and have no document to read an owner from,
+    // which is why attachment.service.ts puts the uid in the path:
+    //   bugpulse_attachments/<uid>/<bugId>/<fileName>
+    // The {userId} wildcard binds that segment, and comparing it to
+    // request.auth.uid is the entire ownership check.
+
+    match /bugpulse_attachments/{userId}/{bugId}/{fileName} {
+
+      // Read only your own screenshots.
+      allow read: if request.auth != null
+                  && request.auth.uid == userId;
+
+      // Create or overwrite: yours only, images only, under 5 MB.
+      // Mirrors AttachmentService.validate(). The client check gives a fast,
+      // specific message; this is what actually enforces it.
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+
+      // Delete your own screenshot. Separate from write, and with no
+      // request.resource reference, for the reason given in the block above.
+      allow delete: if request.auth != null
+                    && request.auth.uid == userId;
+    }
+    
+     match /posts/{userId}/{postId}/{fileName} {
+
+      // Read only your own post images.
+      allow read: if request.auth != null
+                  && request.auth.uid == userId;
+
+      // Create or overwrite: yours only, images only, under 5 MB.
+      // The uid segment is written from auth.currentUser.uid in
+      // PostService.createPost/updatePost, so it cannot mismatch in normal
+      // use; this is what enforces it against a crafted request.
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+
+      // Delete your own post image, used by updatePost when replacing an
+      // image and by deletePost. Separate from write, and with no
+      // request.resource reference, because on a delete request.resource is
+      // null and any condition touching it would throw and deny every delete.
+      allow delete: if request.auth != null
+                    && request.auth.uid == userId;
+    }
+    
+     // Images behind a quiz assignment's image options, one folder per author.
+    //
+    // Anyone signed in may read them: a quiz is shown to students, who are not
+    // the person who uploaded the picture. Writing is limited to the author's
+    // own folder, and capped at the same 5 MB and the same content types the
+    // picker enforces, so the rule and the UI agree rather than one being the
+    // real limit and the other a suggestion.
+    match /assignments/quiz-options/{uid}/{file} {
+      allow read: if request.auth != null;
+
+      allow write: if request.auth != null
+                   && request.auth.uid == uid
+                   && request.resource.size <= 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/(png|jpeg|webp|gif|svg[+]xml)');
+
+      // The wizard never deletes; an option that drops its image leaves the
+      // object in place. Allowing the author to clear their own folder keeps
+      // that recoverable without opening anyone else's.
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+     // Contest logos. One object per logo, named by a generated id.
+    //
+    // Anyone signed in may read them: a contest is shown to the people entering
+    // it, not only to whoever set it up. Writing is limited to signed-in users
+    // and capped at the same 10 MB and the same content types the picker
+    // enforces, so the rule and the UI agree rather than one being the real
+    // limit and the other a suggestion.
+    //
+    // There is no per-user folder here, unlike the quiz option images: a
+    // contest is an admin-level record that more than one person edits over its
+    // life, so scoping the objects to whoever uploaded first would stop the
+    // next editor replacing a logo.
+    match /contests/images/{file} {
+      allow read: if request.auth != null;
+
+      allow write: if request.auth != null
+                   && request.resource.size <= 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/(png|jpeg|webp)');
+
+      allow delete: if request.auth != null;
+    }
+
+    // The thumbnail shown for one grade of one category, filed under the
+    // contest it belongs to. Named after the grade, so re-uploading replaces
+    // the object instead of leaving the old one orphaned.
+    match /contests/categories/{contestId}/grade-thumbs/{file} {
+      allow read: if request.auth != null;
+
+      allow write: if request.auth != null
+                   && request.resource.size <= 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/(png|jpeg|webp)');
+
+      allow delete: if request.auth != null;
+    }
+
+    // ========================================================================
+    // Teacher Corner — a learning unit's own files
+    // ========================================================================
+    //
+    //   learningUnits/{learningUnitId}/{fileName}
+    //
+    // The headline image, QR code and other image a unit carries, the PDFs and
+    // decks hung off it as additional resources, and the guides and worksheets
+    // its resource tabs collect. Production files them under exactly this path,
+    // e.g. learningUnits/0Jgsn66ZQvGZ4eCKBMSN/TABP20EPENV10 Seed Dispersal.pptx.
+    //
+    // ADDED WITHOUT TOUCHING A LINE ABOVE. Cloud Storage has one ruleset for the
+    // whole bucket, so this file reproduces every other app's blocks verbatim —
+    // see the header. This block is the only thing that is new.
+    //
+    // TWO SIZE CAPS, because the content differs by an order of magnitude.
+    //
+    // A document or an image is capped at 25 MB — the image-only blocks above
+    // use 5 and 10 MB, but a PowerPoint with photographs in it routinely passes
+    // that, and refusing at the rule what the picker accepted is the failure
+    // that wastes the most time.
+    //
+    // A VIDEO gets 500 MB. A TAC video is a real recording and the Video tab
+    // takes the MP4, the project file and the without-sound cut; 25 MB would
+    // refuse almost every one of them.
+    //
+    // The types are a whitelist rather than `video/*`, which would admit
+    // anything a browser chose to label as video. A project file arrives as a
+    // zip rather than as media, so it is named explicitly.
+    // `{filePath=**}`, NOT `{fileName}`. A single wildcard binds ONE segment, so
+    // it matched learningUnits/{id}/guide.pdf and silently missed
+    // learningUnits/{id}/GradeDependentResources/guide.pdf — the grade-dependent
+    // files sit a level deeper, and Storage denied every one of them because no
+    // rule claimed that path.
+    match /learningUnits/{learningUnitId}/{filePath=**} {
+      allow read: if request.auth != null;
+
+      allow write: if request.auth != null
+                   && (
+                        (
+                          request.resource.size <= 25 * 1024 * 1024
+                          && (
+                               request.resource.contentType.matches('image/(png|jpeg|webp|gif)')
+                               || request.resource.contentType == 'application/pdf'
+                               || request.resource.contentType == 'application/vnd.ms-powerpoint'
+                               || request.resource.contentType ==
+                                    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                               // Word, for the guides and worksheets that come
+                               // as .doc and .docx — the resource schema has a
+                               // Word variant beside most of its PDF slots.
+                               || request.resource.contentType == 'application/msword'
+                               || request.resource.contentType ==
+                                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                             )
+                        )
+                        || (
+                          request.resource.size <= 500 * 1024 * 1024
+                          && (
+                               request.resource.contentType == 'video/mp4'
+                               || request.resource.contentType == 'video/quicktime'
+                               || request.resource.contentType == 'video/x-msvideo'
+                               || request.resource.contentType == 'video/webm'
+                               // Three spellings of the same thing. A .zip is
+                               // reported as application/zip by Firefox and by
+                               // Chrome on Linux, and as x-zip-compressed by
+                               // Chrome on Windows — the project files the Video
+                               // and Social Media tabs take are zips, so all of
+                               // them have to pass.
+                               || request.resource.contentType == 'application/zip'
+                               || request.resource.contentType == 'application/x-zip-compressed'
+                               || request.resource.contentType == 'application/x-zip'
+                             )
+                        )
+                      );
+
+      allow delete: if request.auth != null;
+    }
+
+    // ========================================================================
+    // contests — PRESERVED VERBATIM. Do not edit here.
+    // ========================================================================
+    //
+    // Contest submissions. Added to the live bucket ruleset by the contests team
+    // while this file was being worked on, and copied back in verbatim after a
+    // deploy from here overwrote it — see the header: the whole ruleset is
+    // replaced on every deploy, so anything not in this file is deleted.
+    //
+    // ALWAYS re-fetch the live ruleset and diff before deploying. That is not
+    // advice; it is how this block came to be missing for a few minutes.
+    match /contests/resources/{contestId}/{submissionId}/{file} {
+      allow read: if request.auth != null;
+
+      allow write: if request.auth != null
+                   && request.resource.size <= 150 * 1024 * 1024
+                   && (request.resource.contentType == 'application/pdf'
+                       || request.resource.contentType.matches('application/vnd.ms-powerpoint')
+                       || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.presentationml.presentation'));
+
+      allow delete: if request.auth != null;
+    }
+
+    // No catch-all. Firebase Storage denies by default, so any path neither
+    // block claims is already refused.
+  }
+  
+}

@@ -120,19 +120,29 @@ export const routes: Routes = [
         data: { title: 'Programme', crumbRoot: 'Admin', search: 'Search programmes...' }
 
       },
-      // Learning Units has NO ROUTE, on instruction.
+      // Learning Units — the activity catalogue. RESTORED, on instruction.
       //
-      // The code is deliberately still here: pages/learning-units/, its add/edit form,
-      // LearningUnitService, learning-unit-taxonomy.ts and the learningUnits rules all
-      // remain. Only the way in is gone, so /learning-units now falls through to the
-      // '**' route at the bottom of this file and lands on the splash.
+      // This route and its nav entry were withheld earlier, separately. The page,
+      // its add/edit form, LearningUnitService, learning-unit-taxonomy.ts and the
+      // learningUnits rules all stayed in the repo throughout, because the feature
+      // is not self-contained — Classrooms reaches into it through
+      // classroom.service.ts, classrooms.ts and edit-classroom.ts, and
+      // bulk-upload-options.ts derives BULK_SUBJECTS from LEARNING_UNIT_TAXONOMY.
+      // So restoring the page was this block plus one entry in shell.ts, and no
+      // change at all to the page itself.
       //
-      // KEPT RATHER THAN DELETED because the feature is not self-contained: Classrooms
-      // reaches into it through classroom.service.ts, classrooms.ts and
-      // edit-classroom.ts, and bulk-upload-options.ts derives BULK_SUBJECTS from
-      // LEARNING_UNIT_TAXONOMY. Removing the code means untangling those first, which
-      // is a refactor rather than a deletion. Restoring the page is re-adding this
-      // block and one nav entry in shell.ts.
+      // `crumbRoot: 'Admin'` and the search placeholder match the other three admin
+      // tables, which is what renders the topbar as "Admin › Learning Units".
+      {
+        path: 'learning-units',
+        loadComponent: () =>
+          import('./pages/learning-units/learning-units').then(m => m.LearningUnits),
+        data: {
+          title: 'Learning Units',
+          crumbRoot: 'Admin',
+          search: 'Search learning units...'
+        }
+      },
       // Reached from the topbar user menu, so it has no sidebar entry.
       {
         path: 'profile',
