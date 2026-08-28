@@ -502,8 +502,7 @@ export class AddClassroom {
       // Written empty rather than omitted, so a programme created from here has
       // the same shape as one created by the Programme wizard.
       programmeImagePath: '',
-      learningUnitsIds: [],
-      assignmentIds: []
+      learningUnitsIds: []
     });
 
     this.cancelProgrammeForm();

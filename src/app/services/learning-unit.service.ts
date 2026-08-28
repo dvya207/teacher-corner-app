@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import {
   Timestamp,
   deleteDoc,
+  getDoc,
   getDocs,
   runTransaction,
   serverTimestamp,
@@ -169,59 +170,50 @@ export function stripTrashMetadata(
 }
 
 /**
- * Collapses units sharing a code into one pickable row.
+ * The LIVE learning units, as the programme picker's rows.
  *
- * WHY THIS EXISTS. Production stores ONE LANGUAGE PER DOCUMENT — a unit that
- * exists in Tamil and English is two documents sharing `learningUnitCode`. The
- * programme picker shows one row reading "PT12 DIY Sundial / TA · EN · vV22", so
- * something has to fold the family back together, and doing it here means the
- * picker never has to know the storage shape.
+ * PRODUCTION'S OWN TRANSFORM, which is a filter and a sort and nothing else —
+ * learning-list.component.ts does:
  *
- * The FIRST document of a code wins for name and version, and the languages
- * accumulate. Sorting by code AND THEN BY docId is what makes that
- * deterministic: localeCompare returns 0 for two documents sharing a code, and
- * Array.sort is stable, so sorting by code alone leaves the winner decided by
- * query order — and the winner's docId is what EditProgramme persists into
- * learningUnitsIds, so it decides which language variant a programme references.
+ *   allLearningUnits.filter(lu => lu.status === 'LIVE')
+ *                   .sort((a, b) => b.creationDate - a.creationDate)
  *
- * Only LIVE units are offered — via isActiveStatus, NOT a strict
- * `status === 'LIVE'`. Production data carries both 'LIVE' and 'ACTIVE' in mixed
- * case, which is why that helper exists, and the Learning Units table counts and
- * filters with it. A strict comparison here would show a unit as Live in the
- * table and silently omit it from the picker.
+ * NO GROUPING. This used to collapse a code's language variants into one row,
+ * on a misreading of production's row meta: "TA · EN · vV22" is
+ * typeCode · isoCode · version, not two languages. A unit that exists in Tamil
+ * and English is TWO rows in production's panel, and two here — which is the
+ * honest shape, because `learningUnitsIds` stores one docId and therefore picks
+ * one language variant. Collapsing made that choice invisible.
+ *
+ * STATUS: isActiveStatus, NOT production's strict `=== 'LIVE'`. Production data
+ * carries both 'LIVE' and 'ACTIVE' in mixed case — the Learning Units table
+ * counts and filters with that helper, and a strict comparison here would show a
+ * unit as Live in the table and silently omit it from the picker. That is a
+ * deliberate divergence, and the only one.
+ *
+ * NEWEST FIRST, as production sorts. A missing createdAt sorts last rather than
+ * first, so a document predating the field does not jump the queue.
  */
 export function toPickableUnits(units: LearningUnit[]): PickableUnit[] {
-  const byCode = new Map<string, PickableUnit>();
-
-  const live = units
+  return units
     .filter(unit => isActiveStatus(unit.status))
-    .sort((a, b) =>
-      a.learningUnitCode.localeCompare(b.learningUnitCode) ||
-      a.docId.localeCompare(b.docId)
-    );
-
-  for (const unit of live) {
-    // A unit with no code cannot be grouped, so it stands alone under its id.
-    const key = unit.learningUnitCode || unit.docId;
-    const existing = byCode.get(key);
-
-    if (existing) {
-      if (unit.isoCode && !existing.languages.includes(unit.isoCode)) {
-        existing.languages.push(unit.isoCode);
-      }
-      continue;
-    }
-
-    byCode.set(key, {
+    .map(unit => ({
       docId: unit.docId,
       code: unit.learningUnitCode,
       name: unit.learningUnitDisplayName || unit.learningUnitName,
-      languages: unit.isoCode ? [unit.isoCode] : [],
-      version: unit.version
-    });
-  }
-
-  return [...byCode.values()];
+      typeCode: unit.typeCode,
+      isoCode: unit.isoCode,
+      version: unit.version,
+      // `?? null`, not the raw value: a document predating the field reads back
+      // undefined, and undefined is the one value Firestore refuses outright if
+      // the object is ever written again.
+      createdAt: unit.createdAt ?? null
+    }))
+    .sort(
+      (a, b) =>
+        (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0) ||
+        a.code.localeCompare(b.code)
+    );
 }
 
 @Injectable({
@@ -244,6 +236,41 @@ export class LearningUnitService {
     return snapshot.docs
       .map(document => normaliseLearningUnit<LearningUnit>(document.id, document.data()))
       .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+  }
+
+  /**
+   * One learning unit, by id.
+   *
+   * A DIRECT DOCUMENT READ, which is what production's classroom page does —
+   * learning-list's getLearningUnits maps each id through `luService.get(id)`
+   * rather than scanning the collection.
+   *
+   * NO STATUS FILTER, deliberately, and unlike toPickableUnits. A unit already
+   * ATTACHED to a programme must still render on the classroom page after
+   * someone moves it back to development — the class is running it either way,
+   * and hiding it would make the programme look shorter than it is. The picker
+   * filters on the way IN; this is the way out.
+   *
+   * Returns null for a missing document, so a stale id in learningUnitsIds is
+   * skipped rather than throwing.
+   */
+  async get(docId: string): Promise<LearningUnit | null> {
+    const id = docId.trim();
+
+    if (!id) {
+      return null;
+    }
+
+    try {
+      const snapshot = await getDoc(learningUnitDoc(id));
+
+      return snapshot.exists()
+        ? normaliseLearningUnit<LearningUnit>(snapshot.id, snapshot.data())
+        : null;
+    } catch {
+      // A denied read is one missing unit, not a broken page.
+      return null;
+    }
   }
 
   /** Everything in the teacher's learning-unit trash, most recently deleted first. */

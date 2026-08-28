@@ -63,13 +63,25 @@
    The connecting rule is drawn by the list itself rather than per item, so it
    cannot end up misaligned when a label wraps. */
 
+/*
+ * FIVE STEPS IN A 760px MODAL.
+ *
+ * It was three, and their labels fitted at full length. Five do not: 'Select
+ * Learning Units' and 'Select Assignments' alone are wider than the two short
+ * ones together, and the fifth step fell off the right edge entirely — a Review
+ * step the user could not see they were heading for.
+ *
+ * Production truncates instead of wrapping — its own stepper reads 'Instit…',
+ * 'Create Pro…', 'Select Learn…', 'Select Assi…', 'Review' — so the row stays
+ * one line at any width. Same here, via .step-label below.
+ */
 .stepper {
   position: relative;
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   margin: 0;
-  padding: 0 26px 22px;
+  padding: 0 20px 22px;
   list-style: none;
 }
 
@@ -86,12 +98,14 @@
 .step {
   position: relative;
   z-index: 1;
+  /* Shrinkable, so the labels give way before the row does. */
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 0 6px;
+  gap: 7px;
+  padding: 0 4px;
   background: var(--surface);
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -323,29 +337,11 @@
   cursor: pointer;
 }
 
-.step-note {
-  margin-top: 16px;
-  padding: 11px 14px;
-  border-left: 3px solid var(--ink-300);
-  border-radius: var(--radius-sm);
-  background: var(--ink-050);
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--text-muted);
-}
-
 /* ---- Review -------------------------------------------------------------- */
-
-.review-intro {
-  margin-bottom: 14px;
-  font-size: 13.5px;
-  color: var(--text-muted);
-}
 
 .review-list {
   margin: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
@@ -447,4 +443,390 @@
     left: 40px;
     right: 40px;
   }
+}
+
+/* ==========================================================================
+   Programme image
+   ========================================================================== */
+
+.image-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.image-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border: 1px solid var(--accent-500);
+  border-radius: var(--radius-sm);
+  background: var(--tint-blue);
+  color: var(--accent-600);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.image-btn:hover:not(:disabled) {
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+.image-btn:disabled {
+  border-color: var(--ink-300);
+  background: var(--ink-100);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.image-name {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.image-clear {
+  color: var(--danger);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.image-clear:hover {
+  text-decoration: underline;
+}
+
+.field-hint.is-error {
+  color: var(--danger);
+}
+
+/* ==========================================================================
+   THE RANGE SLIDER
+
+   Two native <input type="range"> stacked on one track, which is how
+   production's two-handle slider reads.
+
+   NATIVE, DELIBERATELY. A div-and-pointer slider needs arrow keys, Home, End,
+   focus styling and the ARIA a screen reader reads, all reimplemented;
+   <input type="range"> ships with every one of them. The cost is that the two
+   inputs overlap, so the rules below make their tracks transparent and let
+   pointer events through to whichever thumb is under the cursor.
+   ========================================================================== */
+
+.range-block {
+  margin-top: 4px;
+}
+
+.range-caption {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.range-ends {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.range-current {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--accent-600);
+}
+
+.range-track {
+  position: relative;
+  height: 28px;
+}
+
+/* The unfilled rail, drawn once behind both inputs. */
+.range-track::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: var(--radius-full);
+  background: var(--ink-200);
+}
+
+.range-fill {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: var(--radius-full);
+  background: var(--accent-500);
+}
+
+.range-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  background: none;
+  appearance: none;
+  /*
+   * THE TRACK IGNORES THE POINTER, THE THUMB DOES NOT.
+   *
+   * Both inputs cover the full width, so the top one would swallow every click
+   * and the lower handle could never be grabbed. Only the thumbs accept
+   * pointer events, which lets the cursor reach whichever handle is under it.
+   */
+  pointer-events: none;
+}
+
+.range-input::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--white);
+  border-radius: 50%;
+  background: var(--accent-500);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.range-input::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--white);
+  border-radius: 50%;
+  background: var(--accent-500);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+  cursor: grab;
+  pointer-events: auto;
+}
+
+.range-input:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--focus-ring), 0 1px 4px rgb(0 0 0 / 25%);
+}
+
+.range-input:disabled::-webkit-slider-thumb,
+.range-input:disabled::-moz-range-thumb {
+  background: var(--ink-300);
+  cursor: not-allowed;
+}
+
+/* ---- The range switch --------------------------------------------------- */
+
+.range-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+/* The checkbox stays in the DOM and keeps the label, the focus ring and the
+   keyboard behaviour; the span beside it is what is actually seen. */
+.range-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.range-switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--ink-300);
+  transition: background 0.15s var(--ease);
+}
+
+.range-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--white);
+  transition: transform 0.15s var(--ease);
+}
+
+.range-toggle input:checked + .range-switch {
+  background: var(--accent-500);
+}
+
+.range-toggle input:checked + .range-switch::after {
+  transform: translateX(16px);
+}
+
+.range-toggle input:focus-visible + .range-switch {
+  box-shadow: var(--focus-ring);
+}
+
+/*
+ * Truncated, not wrapped — production's own treatment.
+ *
+ * The CURRENT step gets more room than the rest: it is the one being read, and
+ * 'Select Learning Units' clipped to 'Select Learn…' on the step you are
+ * actually filling in is the one place the full label earns its width.
+ */
+.step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 76px;
+}
+
+.step.is-current .step-label {
+  max-width: 150px;
+  font-weight: 600;
+}
+
+@media (max-width: 620px) {
+  /* Numbers only. Below this the labels cannot be truncated to anything that
+     still distinguishes 'Select Learning Units' from 'Select Assignments'. */
+  .step-label {
+    display: none;
+  }
+
+  .step.is-current .step-label {
+    display: inline;
+    max-width: 160px;
+  }
+}
+
+/* ==========================================================================
+   REVIEW — two cards, as production has
+
+   The details, then what was chosen. Cards rather than one long list, because
+   the second half is a different KIND of thing: nine labelled facts followed by
+   a set of picked items reads as one undifferentiated table otherwise.
+
+   RESTORED. These rules were lost when the learning-unit picker was extracted
+   into its own component — the cut took everything from the step-3 marker to the
+   end of the file, and this block had been appended after it. The symptom was a
+   Review step whose Selected Learning Units read as one run of unstyled text:
+   "N/ASterling PointAE02".
+   ========================================================================== */
+
+.review-card {
+  margin-bottom: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.review-card:last-child {
+  margin-bottom: 0;
+}
+
+.review-card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 12px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+
+.review-count {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--tint-blue);
+  color: var(--on-blue);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+/* Absent, not blank. A dash or "No image" says the field was READ and had
+   nothing in it, where an empty cell is indistinguishable from a rendering
+   bug. */
+.review-empty {
+  color: var(--ink-400);
+  font-style: italic;
+}
+
+.review-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--tint-amber);
+  color: var(--on-amber);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* Green for live, amber otherwise — the same two tints the learning-unit and
+   programme tables use for status, so one glance means the same thing on all
+   three screens. */
+.review-pill.is-live {
+  background: var(--tint-green);
+  color: var(--on-green);
+}
+
+.review-units {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.review-unit {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+/* The placeholder production draws for a unit with no thumbnail. A PickableUnit
+   carries no image at all, so every row shows it. */
+.review-thumb {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--ink-100);
+  color: var(--ink-400);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.review-unit-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.review-unit-text strong {
+  font-size: 13px;
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-unit-code {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent-600);
 }

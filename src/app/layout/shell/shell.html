@@ -50,6 +50,79 @@
         </a>
       }
 
+      <!-- ==============================================================
+           INSTITUTIONS — the signed-in teacher's own schools and classes
+
+           Production's own sidebar group, between Dashboard and Admin: a
+           collapsible item listing the schools this person teaches at, each
+           expanding to the classes they teach there.
+
+           BUTTONS, NOT LINKS, for the two levels that only toggle. A row that
+           expands a list is not a destination, and an <a> with no href is
+           unreachable from a keyboard. Only the class rows navigate.
+           ============================================================== -->
+      @if (allotment().length > 0) {
+        <button
+          type="button"
+          class="nav-item nav-group"
+          [class.is-open]="institutionsOpen()"
+          [attr.aria-expanded]="institutionsOpen()"
+          (click)="toggleInstitutions()"
+        >
+          <app-icon name="bank" [size]="19" />
+          <span class="nav-label">Institutions</span>
+          <app-icon
+            class="nav-chevron"
+            [name]="institutionsOpen() ? 'chevron-down' : 'chevron-left'"
+            [size]="15"
+          />
+        </button>
+
+        @if (institutionsOpen()) {
+          <div class="nav-tree">
+            @for (school of allotment(); track schoolKey(school)) {
+              <button
+                type="button"
+                class="nav-school"
+                [class.is-open]="isSchoolOpen(school)"
+                [attr.aria-expanded]="isSchoolOpen(school)"
+                [title]="school.institutionName"
+                (click)="toggleSchool(school)"
+              >
+                <app-icon name="bank" [size]="17" />
+                <span class="nav-label">{{ school.institutionName }}</span>
+                <app-icon
+                  class="nav-chevron"
+                  [name]="isSchoolOpen(school) ? 'chevron-down' : 'chevron-left'"
+                  [size]="14"
+                />
+              </button>
+
+              @if (isSchoolOpen(school)) {
+                <div class="nav-classes">
+                  @for (classroom of school.classrooms; track classroom.classroomId) {
+                    <!-- The one row that navigates. Classrooms is where a class
+                         is actually opened, so the tree leads there rather than
+                         being a display of names that cannot be acted on. -->
+                    <a
+                      class="nav-class"
+                      [routerLink]="['/classrooms', classroom.classroomId]"
+                      [queryParams]="{ programmeId: firstProgrammeId(classroom) }"
+                      routerLinkActive="is-active"
+                      [routerLinkActiveOptions]="{ exact: true }"
+                      [title]="classroom.classroomName || classLabel(classroom)"
+                    >
+                      <app-icon name="classroom" [size]="16" />
+                      <span class="nav-label">{{ classLabel(classroom) }}</span>
+                    </a>
+                  }
+                </div>
+              }
+            }
+          </div>
+        }
+      }
+
       <p class="nav-section">Admin</p>
 
       @for (item of adminNav; track item.path) {

@@ -19,14 +19,25 @@
 }
 
 .welcome-banner {
-  /* Takes whatever height is left after the error notice, if one renders. */
-  flex: 1;
+  /*
+   * A STRIP, not the page.
+   *
+   * This was `flex: 1` with padding up to 60px, and the note above it said the
+   * banner "takes whatever height is left" — correct when it was the only thing
+   * on the dashboard, and wrong now that My Institutions & Classrooms sits under
+   * it. Filling the viewport pushed the schools below the fold, so the first
+   * thing a teacher signs in to see was a gradient.
+   *
+   * `flex: 0 0 auto` and roughly half the padding, which is close to the height
+   * production's own banner takes.
+   */
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: clamp(32px, 5vw, 64px);
+  gap: clamp(24px, 4vw, 48px);
   flex-wrap: wrap;
-  padding: clamp(32px, 5vw, 60px);
+  padding: clamp(24px, 3vw, 32px) clamp(24px, 3.5vw, 40px);
   border-radius: var(--radius-xl);
   /* Navy into cyan, left to right: production's two base colours, #272B66 and
      #169CD8. The radial sits on top so the left end reads as a lit corner
@@ -204,5 +215,286 @@
   .welcome-actions .banner-btn {
     flex: 1;
     justify-content: center;
+  }
+}
+
+/* ==========================================================================
+   MY INSTITUTIONS & CLASSROOMS
+
+   Production's shape: a row of coloured school cards, one of which expands into
+   a panel of the classes taught there. Its own colours, because a school is
+   recognised by the tile's colour as much as by its name — the same reasoning
+   the learning-unit card gradients are copied under.
+   ========================================================================== */
+
+.my-schools {
+  margin-top: 26px;
+}
+
+.my-schools h2 {
+  margin-bottom: 14px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.inst-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 18px;
+}
+
+/*
+ * A BUTTON, not a div with a click handler. The whole card toggles its panel, so
+ * it has to be reachable by keyboard and announce its expanded state — which is
+ * also why aria-expanded is bound on it rather than on the chevron.
+ */
+.inst-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 26px 18px 20px;
+  border: none;
+  border-radius: var(--radius-lg);
+  color: var(--white);
+  text-align: center;
+  cursor: pointer;
+  transition: box-shadow 0.16s var(--ease), transform 0.16s var(--ease);
+}
+
+.inst-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.inst-card.is-open {
+  box-shadow: var(--shadow-lg);
+}
+
+.inst-chevron {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  opacity: 0.85;
+}
+
+.inst-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-md);
+  background: rgb(255 255 255 / 18%);
+}
+
+.inst-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.inst-count {
+  font-size: 12.5px;
+  opacity: 0.9;
+}
+
+/* PRODUCTION'S FOUR INSTITUTION GRADIENTS, verbatim from .ic-0 … .ic-3, and
+   cycled by index as it cycles them. */
+.inst-card--0 { background: linear-gradient(135deg, #272B66, #4338CA); }
+.inst-card--1 { background: linear-gradient(135deg, #169CD8, #0284C7); }
+.inst-card--2 { background: linear-gradient(135deg, #059669, #10B981); }
+.inst-card--3 { background: linear-gradient(135deg, #7C3AED, #8B5CF6); }
+
+.inst-card.is-skeleton {
+  min-height: 148px;
+  background: var(--ink-100);
+  cursor: default;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ---- The expanded panel -------------------------------------------------- */
+
+/* A FULL GRID ROW of its own, which is what makes the institutions after it
+   reflow onto the next line instead of sitting beside it. */
+.class-panel {
+  grid-column: 1 / -1;
+  margin-top: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.class-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.class-panel-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.class-panel-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--slate-100);
+  color: var(--slate-500);
+}
+
+.class-panel-close:hover {
+  background: var(--ink-200);
+  color: var(--ink-700);
+}
+
+.class-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+
+.class-card {
+  /* The positioning context for the watermark behind it. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background-clip: padding-box;
+  color: var(--white);
+  overflow: hidden;
+}
+
+/* Above the watermark. Positioned, so they paint over a static sibling without
+   a z-index race between them. */
+.class-card > *:not(.class-watermark) {
+  position: relative;
+}
+
+/* PRODUCTION'S SIX CLASSROOM GRADIENTS, verbatim from .tcc-color-0 … -5. Note
+   the 145deg — its classroom cards tilt differently from its institution ones. */
+.class-card--0 { background: linear-gradient(145deg, #272B66, #169CD8); }
+.class-card--1 { background: linear-gradient(145deg, #10B981, #059669); }
+.class-card--2 { background: linear-gradient(145deg, #F59E0B, #D97706); }
+.class-card--3 { background: linear-gradient(145deg, #A855F7, #7C3AED); }
+.class-card--4 { background: linear-gradient(145deg, #EF4444, #DC2626); }
+.class-card--5 { background: linear-gradient(145deg, #169CD8, #0284C7); }
+
+/*
+ * The house behind the content — production's .tcc-icon-bg, at its own 12%.
+ *
+ * Centred and inert. The card is `position: relative` for it, and every real
+ * child sits above it on the stacking order without needing a z-index of its
+ * own, because a positioned element paints over a static sibling.
+ */
+.class-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgb(255 255 255 / 12%);
+  pointer-events: none;
+}
+
+/* Dimmed rather than hidden. Production shows a withdrawn class greyed, and a
+   class disappearing from the dashboard reads as data loss. */
+.class-card.is-inactive {
+  opacity: 0.62;
+  filter: saturate(0.5);
+}
+
+.class-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.class-name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.class-status {
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: rgb(255 255 255 / 22%);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.class-chip {
+  align-self: flex-start;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  background: rgb(255 255 255 / 20%);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.class-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  color: var(--white);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.class-open:hover {
+  text-decoration: underline;
+}
+
+/* ---- Nothing allotted ---------------------------------------------------- */
+
+.no-schools {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 42px 24px;
+  border: 1px dashed var(--ink-300);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.no-schools strong {
+  color: var(--ink-900);
+}
+
+.no-schools .banner-btn {
+  margin-top: 10px;
+}
+
+@media (max-width: 560px) {
+  .inst-grid,
+  .class-grid {
+    grid-template-columns: 1fr;
   }
 }

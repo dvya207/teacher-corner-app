@@ -1,0 +1,159 @@
+<div class="unit-filters">
+  <div class="field">
+    <label for="lup-language" class="visually-hidden">Language</label>
+    <select id="lup-language" (change)="language.set(valueOf($event))">
+      <option value="" [selected]="language() === ''">All languages</option>
+      @for (option of languageOptions(); track option.code) {
+        <option [value]="option.code" [selected]="option.code === language()">
+          {{ option.label }}
+        </option>
+      }
+    </select>
+  </div>
+
+  <div class="field unit-search">
+    <label for="lup-search" class="visually-hidden">Search learning unit</label>
+    <app-icon name="search" [size]="15" />
+    <input
+      id="lup-search"
+      type="text"
+      autocomplete="off"
+      placeholder="Search learning unit"
+      [value]="query()"
+      (input)="query.set(valueOf($event))"
+    />
+  </div>
+</div>
+
+<div class="unit-columns">
+  <!-- ---- Available ---- -->
+  <section class="unit-col">
+    <header class="unit-col-head">
+      <span>Available</span>
+      <span class="unit-count">{{ available().length }}</span>
+    </header>
+
+    <!-- Also a DROP TARGET: dragging a chosen unit back here removes it,
+         which is the gesture production's two columns imply. -->
+    <div
+      class="unit-list"
+      [class.is-drop-target]="dropOnAvailable()"
+      (dragover)="onDragOverAvailable($event)"
+      (drop)="onDropAvailable($event)"
+    >
+      @for (unit of available(); track unit.docId) {
+        <!-- A BUTTON as well as draggable. Click still adds it: dragging
+             is unavailable on a touchscreen and from a keyboard, so it
+             cannot be the only way in. -->
+        <button
+          type="button"
+          class="unit-row"
+          draggable="true"
+          [class.is-dragging]="draggingId() === unit.docId"
+          [title]="tooltip(unit)"
+          (dragstart)="onDragStart($event, unit.docId, 'available')"
+          (dragend)="onDragEnd()"
+          (click)="add(unit.docId)"
+        >
+          <app-icon name="grip" [size]="14" />
+          <span class="unit-text">
+            <span class="unit-name">
+              <strong class="unit-code">{{ unit.code }}</strong> {{ unit.name }}
+            </span>
+            <span class="unit-meta">{{ meta(unit) }}</span>
+          </span>
+          <app-icon name="plus" [size]="15" />
+        </button>
+      } @empty {
+        <p class="unit-empty">
+          @if (units().length === 0) {
+            No learning units available.
+          } @else {
+            Nothing matches that filter.
+          }
+        </p>
+      }
+    </div>
+  </section>
+
+  <!-- ---- Selected ---- -->
+  <section class="unit-col">
+    <header class="unit-col-head">
+      <span>Selected</span>
+      <span class="unit-count">{{ picked().length }}</span>
+    </header>
+
+    <!-- The whole column takes the drop; a drop on empty space below the
+         rows appends, which is why dropIndex is null by default. -->
+    <div
+      class="unit-list"
+      [class.is-drop-target]="dropIndex() !== null || (draggingId() !== '' && !dropOnAvailable())"
+      (dragover)="onDragOverSelected($event, null)"
+      (drop)="onDropSelected($event)"
+    >
+      @for (unit of picked(); track unit.docId; let i = $index) {
+        <!-- The gap the row would drop into. Rendered before the row it
+             would displace, so the marker sits where the unit will. -->
+        @if (dropIndex() === i) {
+          <span class="unit-drop-line" aria-hidden="true"></span>
+        }
+
+        <div
+          class="unit-row is-selected"
+          draggable="true"
+          [class.is-dragging]="draggingId() === unit.docId"
+          [title]="tooltip(unit)"
+          (dragstart)="onDragStart($event, unit.docId, 'selected')"
+          (dragend)="onDragEnd()"
+          (dragover)="onDragOverSelected($event, i)"
+          (drop)="onDropSelected($event)"
+        >
+          <app-icon name="grip" [size]="14" />
+          <!-- The position, because it is what gets stored. -->
+          <span class="unit-index">{{ i + 1 }}</span>
+
+          <span class="unit-text">
+            <span class="unit-name">
+              <strong class="unit-code">{{ unit.code }}</strong> {{ unit.name }}
+            </span>
+            <span class="unit-meta">{{ meta(unit) }}</span>
+          </span>
+
+          <span class="unit-actions">
+            <button
+              type="button"
+              class="unit-move"
+              [disabled]="i === 0"
+              [attr.aria-label]="'Move ' + unit.code + ' earlier'"
+              (click)="move(i, -1)"
+            >
+              <app-icon name="chevron-down" [size]="14" />
+            </button>
+            <button
+              type="button"
+              class="unit-move is-down"
+              [disabled]="i === picked().length - 1"
+              [attr.aria-label]="'Move ' + unit.code + ' later'"
+              (click)="move(i, 1)"
+            >
+              <app-icon name="chevron-down" [size]="14" />
+            </button>
+            <button
+              type="button"
+              class="unit-remove"
+              [attr.aria-label]="'Remove ' + unit.code"
+              (click)="remove(unit.docId)"
+            >
+              <app-icon name="close" [size]="14" />
+            </button>
+          </span>
+        </div>
+        @if (dropIndex() === null && draggingId() !== '' && !dropOnAvailable() && $last) {
+          <span class="unit-drop-line" aria-hidden="true"></span>
+        }
+      } @empty {
+        <p class="unit-empty is-drop">Drag learning units here to assign</p>
+      }
+    </div>
+  </section>
+</div>

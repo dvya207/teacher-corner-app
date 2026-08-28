@@ -386,7 +386,7 @@ export type ProgrammeStatus = 'LIVE' | 'DEVELOPEMENT';
  * A programme, using ThinkTac production's field names verbatim.
  *
  * Wider than it needs to be for this app alone: `learningUnitsIds`,
- * `assignmentIds` and `programmeImagePath` are stored but never populated here,
+ * `programmeImagePath` is stored but was never populated here,
  * because the Learning Units and Assignments collections and Firebase Storage
  * are not wired into this app yet. They are written as empty rather than omitted
  * so a programme created here is the same SHAPE as one created by production —
@@ -454,10 +454,28 @@ export interface Programme {
    */
   programmeImagePath: string;
 
-  /** Learning units attached to this programme. Always [] here. */
+  /** Learning units attached to this programme, IN ORDER — see below. */
   learningUnitsIds: string[];
-  /** Assignments attached to this programme. Always [] here. */
-  assignmentIds: string[];
+  /**
+   * PRODUCTION'S, and derived rather than collected.
+   *
+   * `activeStatus` duplicates what `programmeStatus` already says, and
+   * production's own screens filter on the boolean — so a document written
+   * without it reads as inactive there. ProgrammeService keeps the two in step
+   * on both create and update; nothing asks a form for it.
+   */
+  activeStatus: boolean;
+
+  /**
+   * Which surface wrote the document, and whether it was a developer's machine.
+   *
+   * Production stores both. `createdSource` names the flow — its own says
+   * 'one-click-institution-classroom-programme-creation' — and this app writes a
+   * value naming ITS wizard rather than borrowing that one, because a row
+   * claiming production's flow would be misattributed forever.
+   */
+  createdSource: string;
+  isLocalHost: boolean;
 
   /** OURS. */
   ownerId: string;
@@ -475,7 +493,18 @@ export interface Programme {
  */
 export type ProgrammeDraft = Omit<
   Programme,
-  'docId' | 'programmeId' | 'programmeCode' | 'ownerId' | 'createdAt' | 'updatedAt'
+  | 'docId'
+  | 'programmeId'
+  | 'programmeCode'
+  | 'ownerId'
+  | 'createdAt'
+  | 'updatedAt'
+  // DERIVED OR STAMPED BY THE SERVICE, never collected. activeStatus follows
+  // programmeStatus, and the other two describe where the write came from — a
+  // form-supplied value for any of the three could only be wrong.
+  | 'activeStatus'
+  | 'createdSource'
+  | 'isLocalHost'
 >;
 
 /** A programme sitting in programmes/trash/DeletedProgrammes. */
@@ -502,7 +531,7 @@ export interface TrashedProgramme extends Programme {
  *
  * Both tabs pick from the same shape, so one interface serves both. What differs
  * is which collection they come from and which field on the programme records
- * them: `learningUnitsIds` or `assignmentIds`.
+ * them: `learningUnitsIds`.
  */
 /* ==========================================================================
    Learning units
@@ -1008,17 +1037,28 @@ export interface PickableUnit {
   /** Short code shown in bold: 'PT12', 'NF05'. */
   code: string;
   name: string;
+
   /**
-   * ISO language codes the unit exists in: ['TA', 'EN'].
+   * ONE ROW PER DOCUMENT, and one language on it.
    *
-   * Drives the panel's "All languages" filter. Production stores a single
-   * `isoCode` per document and the panel shows several, so a unit is really a
-   * family of rows; this collapses that to one row with several languages, which
-   * is what the panel actually displays.
+   * This carried `languages: string[]` and toPickableUnits collapsed a code's
+   * language variants into a single row, on a misreading of production's panel:
+   * its row meta is "TA · EN · vV22", which is typeCode · isoCode · version —
+   * TACtivity, English, v22 — not Tamil AND English.
+   *
+   * Production's picker maps its LIVE documents straight to rows, so a unit that
+   * exists in two languages is two rows there, and its language filter is a
+   * strict `isoCode === selected`. Collapsing them here also hid the choice that
+   * matters most: `learningUnitsIds` stores ONE docId, so it decides which
+   * language variant the programme references — and the collapsed row picked
+   * that silently.
    */
-  languages: string[];
-  /** Version label, shown verbatim: 'vV22'. */
+  typeCode: string;
+  isoCode: string;
+  /** Version label, shown verbatim after a 'v': 'V22' renders as 'vV22'. */
   version: string;
+  /** For the newest-first order production's panel uses. */
+  createdAt: Timestamp | null;
 }
 
 /* ==========================================================================
@@ -1409,6 +1449,35 @@ export interface TeacherProfile {
 export interface DashboardCounts {
   institutions: number;
   classrooms: number;
+}
+
+/**
+ * One institution on the dashboard, with the classes the signed-in person
+ * actually teaches there.
+ *
+ * BUILT FROM THE TEACHER'S OWN DOCUMENTS, not from a join. Every field a card
+ * needs — the institution's name, each class's name, grade, section and type —
+ * is already denormalised onto TeacherClassroom, so the whole section is one
+ * query against `teachers` rather than a read of classrooms and institutions on
+ * top of it. That is also why a class shows here with the name it had when the
+ * teacher was attached to it: the copy on the teacher document is the copy being
+ * read. See appendClassrooms for the write that keeps it current.
+ *
+ * ONE PERSON CAN HOLD SEVERAL TEACHER DOCUMENTS — one per class, which is what
+ * assigning a registered teacher to another class creates — so `classrooms` here
+ * is the UNION across all of them, deduplicated by classroomId.
+ */
+export interface AllottedInstitution {
+  institutionId: string;
+  institutionName: string;
+  classrooms: TeacherClassroom[];
+}
+
+/** Everything the dashboard renders for the signed-in person. */
+export interface TeacherAllotment {
+  institutions: AllottedInstitution[];
+  /** Across every institution, so the tile does not have to sum the cards. */
+  classroomCount: number;
 }
 
 /* ==========================================================================

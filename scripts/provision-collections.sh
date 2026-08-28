@@ -326,7 +326,12 @@ def programme(doc_id, trashed=False):
         "programmeStatus": s("LIVE"),
         "programmeImagePath": s(""),
         "learningUnitsIds": arr([]),
-        "assignmentIds": arr([]),
+        # activeStatus, createdSource and isLocalHost mirror what
+        # ProgrammeService.create writes; assignmentIds was removed with the
+        # Select Assignments step.
+        "activeStatus": {"booleanValue": True},
+        "createdSource": s("provision-collections"),
+        "isLocalHost": {"booleanValue": False},
         "ownerId": s(owner),
         "createdAt": ts(now),
         "updatedAt": ts(now),

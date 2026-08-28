@@ -249,6 +249,5 @@ describe('emptyProgrammeDraft', () => {
 
     expect(draft.programmeImagePath).toBe('');
     expect(draft.learningUnitsIds).toEqual([]);
-    expect(draft.assignmentIds).toEqual([]);
   });
 });

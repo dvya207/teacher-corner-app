@@ -1323,17 +1323,7 @@
   overflow-y: auto;
 }
 
-/* Off screen, not display:none: the input is still the thing the button clicks
-   and the thing a screen reader announces, and display:none would take it out of
-   the accessibility tree entirely. */
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
+/* .visually-hidden moved to styles.css — see the note there. */
 
 /* Said once, above the footer, rather than per row: only one View can have just
    been clicked, and a message under each of thirteen slots would be noise. */

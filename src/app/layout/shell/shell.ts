@@ -15,7 +15,12 @@ import { NotificationModule } from '../../models/teaching.model';
 import { NotificationService } from '../../services/notification.service';
 import { Logo } from '../../components/logo/logo';
 import { UpdateProfile } from '../../components/update-profile/update-profile';
+import {
+  AllottedInstitution,
+  TeacherClassroom
+} from '../../models/teaching.model';
 import { AuthService } from '../../services/auth.service';
+import { DashboardService } from '../../services/dashboard.service';
 import { ConfigurationService } from '../../services/configuration.service';
 
 export interface NavItem {
@@ -53,6 +58,89 @@ export class Shell {
   readonly primaryNav: NavItem[] = [
     { label: 'Dashboard', path: '/dashboard', icon: 'grid' }
   ];
+
+  /* ======================================================================
+     INSTITUTIONS — the signed-in teacher's own schools and classes
+
+     Production's sidebar carries this between Dashboard and the Admin group: a
+     collapsible 'Institutions' item listing the schools this person teaches at,
+     each expanding to the classes they teach there.
+
+     THE SAME ALLOTMENT THE DASHBOARD USES. DashboardService.myAllotment reads
+     the teacher's own documents and groups them, so the sidebar and the
+     dashboard cards can never disagree about what someone is assigned to —
+     which they would if this counted separately.
+     ====================================================================== */
+
+  private dashboard = inject(DashboardService);
+
+  readonly allotment = signal<AllottedInstitution[]>([]);
+
+  /** Whether the Institutions group itself is open. Closed until asked for. */
+  readonly institutionsOpen = signal(false);
+
+  /**
+   * Which school's classes are showing, by key, or null.
+   *
+   * AN ACCORDION — one at a time, which is production's behaviour: opening
+   * Airaa Academy closes ThinkTac. With five schools and three classes each,
+   * all-open would push the whole Admin group off the bottom of the sidebar.
+   */
+  readonly openSchool = signal<string | null>(null);
+
+  private async loadAllotment(): Promise<void> {
+    try {
+      this.allotment.set((await this.dashboard.myAllotment()).institutions);
+    } catch {
+      // The group renders empty. A sidebar that cannot list schools must not
+      // stop the rest of the sidebar rendering.
+      this.allotment.set([]);
+    }
+  }
+
+  schoolKey(institution: AllottedInstitution): string {
+    return institution.institutionId || institution.institutionName;
+  }
+
+  toggleInstitutions(): void {
+    this.institutionsOpen.update(open => !open);
+  }
+
+  toggleSchool(institution: AllottedInstitution): void {
+    const key = this.schoolKey(institution);
+
+    this.openSchool.update(open => (open === key ? null : key));
+  }
+
+  isSchoolOpen(institution: AllottedInstitution): boolean {
+    return this.openSchool() === this.schoolKey(institution);
+  }
+
+  /**
+   * A class's label in the tree: '1 A'.
+   *
+   * Grade and section, which is what production shows — not the classroom's
+   * name, because a name like 'ThinkTac STEM Forge' is far too long for a
+   * sidebar row and the grade is what distinguishes one class from the next.
+   * A class with neither falls back to its name rather than rendering blank.
+   */
+  /**
+   * The programme a class row should open on.
+   *
+   * THE FIRST ATTACHED, which is the same choice the dashboard cards make and
+   * the same one the page falls back to when given nothing. Passing it keeps the
+   * two entry points landing identically rather than one relying on the
+   * fallback.
+   */
+  firstProgrammeId(classroom: TeacherClassroom): string {
+    return classroom.programmes?.[0]?.programmeId ?? '';
+  }
+
+  classLabel(classroom: TeacherClassroom): string {
+    const parts = [classroom.grade, classroom.section].filter(part => part.trim() !== '');
+
+    return parts.length > 0 ? parts.join(' ') : classroom.classroomName || '—';
+  }
 
   /**
    * Set Up Wizard leads the Admin group, as it does in production's sidebar.
@@ -154,6 +242,11 @@ export class Shell {
     // page that uses an option list lives inside here. load() is a no-op on repeat
     // calls, and every list already holds its built-in value, so nothing waits on it.
     void this.configuration.load();
+
+    // Same reasoning for the sidebar's Institutions tree: the shell is a layout
+    // route and outlives every page, so reading the teacher's allotment here is
+    // once per session rather than once per navigation.
+    void this.loadAllotment();
 
     this.router.events
       .pipe(

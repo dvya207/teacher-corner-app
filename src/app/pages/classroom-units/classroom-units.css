@@ -1,0 +1,298 @@
+/* ==========================================================================
+   A CLASSROOM'S LEARNING UNITS
+
+   Production's page, at its proportions: a programme pill and the student count
+   in a header strip, a filter row, then a card grid.
+   ========================================================================== */
+
+.cu-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.cu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+/* ---- The programme tabs -------------------------------------------------
+   One per programme the classroom runs. The SELECTED one is the blue pill in
+   production's UI; the rest are quiet, because a row of five filled pills says
+   nothing about which is showing. */
+
+.cu-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cu-tab {
+  display: inline-block;
+  max-width: 420px;
+  padding: 9px 18px;
+  border-radius: var(--radius-full);
+  background: var(--ink-100);
+  color: var(--ink-700);
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.cu-tab:hover {
+  background: var(--tint-blue);
+  color: var(--accent-600);
+}
+
+.cu-tab.is-selected {
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+.cu-tab.is-empty {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.cu-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cu-students {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--ink-700);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cu-count {
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--tint-blue);
+  color: var(--on-blue);
+  font-size: 11.5px;
+}
+
+/* ---- Filters ------------------------------------------------------------- */
+
+.cu-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 190px);
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+/* The magnifier sits inside the field, so the input carries the padding for it
+   rather than the icon being a sibling that pushes the text along. */
+.cu-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cu-search app-icon {
+  position: absolute;
+  left: 13px;
+  color: var(--ink-400);
+  pointer-events: none;
+}
+
+.cu-search input,
+.cu-lang select {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  color: var(--ink-900);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.cu-search input {
+  padding-left: 38px;
+}
+
+.cu-search input::placeholder {
+  color: var(--ink-400);
+}
+
+.cu-search input:focus,
+.cu-lang select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Cards --------------------------------------------------------------- */
+
+.cu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.cu-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+  transition: box-shadow 0.16s var(--ease), transform 0.16s var(--ease);
+}
+
+.cu-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+/*
+ * THE PLACEHOLDER, not an image.
+ *
+ * A unit's preview image is a Storage PATH and nothing in this app mints a
+ * download URL from one yet, so there is no src to give an <img>. The code is
+ * shown instead, which is how a unit is recognised in every other list here —
+ * and it is honest, where a broken image icon would not be.
+ */
+.cu-thumb {
+  display: grid;
+  place-items: center;
+  height: 130px;
+  background: linear-gradient(135deg, var(--brand-900), var(--accent-500));
+}
+
+.cu-thumb-code {
+  color: var(--white);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-shadow: 0 2px 6px rgb(0 0 0 / 25%);
+}
+
+.cu-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+/* Two lines then an ellipsis, as the learning-unit cards do: names run long and
+   a single clamped line loses the parenthetical that distinguishes variants. */
+.cu-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink-900);
+  overflow: hidden;
+}
+
+.cu-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.cu-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cu-dot {
+  color: var(--ink-300);
+}
+
+.cu-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-100);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* A scheduled unit is the exception, so it is the one that gets colour. */
+.cu-chip.is-scheduled {
+  background: var(--tint-green);
+  color: var(--on-green);
+}
+
+.cu-card.is-skeleton {
+  min-height: 250px;
+  background: var(--ink-100);
+  animation: cu-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes cu-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ---- Empty --------------------------------------------------------------- */
+
+.cu-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 46px 24px;
+  border: 1px dashed var(--ink-300);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.cu-empty strong {
+  color: var(--ink-900);
+}
+
+.cu-link {
+  margin-top: 8px;
+  padding: 9px 16px;
+  border-radius: var(--radius-md);
+  background: var(--accent-500);
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 620px) {
+  .cu-filters {
+    grid-template-columns: 1fr;
+  }
+}

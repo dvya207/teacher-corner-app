@@ -3,6 +3,7 @@ import {
   Timestamp,
   deleteDoc,
   deleteField,
+  getDoc,
   getDocs,
   runTransaction,
   serverTimestamp,
@@ -130,8 +131,82 @@ export function normaliseProgramme(docId: string, data: Record<string, unknown>)
     programmeStatus: (data['programmeStatus'] as Programme['programmeStatus'] | undefined) ?? 'LIVE',
     programmeImagePath: (data['programmeImagePath'] as string | undefined) ?? '',
     learningUnitsIds: toStringList(data['learningUnitsIds']),
-    assignmentIds: toStringList(data['assignmentIds'])
+
+    /*
+     * DEFAULTED, because documents written before these fields existed do not
+     * carry them — and `undefined` is the one value Firestore refuses outright
+     * if such an object is ever written back.
+     *
+     * activeStatus falls back to what programmeStatus says rather than to false:
+     * a LIVE programme with no boolean is live, and defaulting it off would hide
+     * every pre-existing row from anything filtering on it.
+     */
+    activeStatus:
+      typeof data['activeStatus'] === 'boolean'
+        ? (data['activeStatus'] as boolean)
+        : isActiveStatus((data['programmeStatus'] as string | undefined) ?? ''),
+    createdSource: (data['createdSource'] as string | undefined) ?? '',
+    isLocalHost: data['isLocalHost'] === true
   } as unknown as Programme;
+}
+
+/**
+ * PRODUCTION'S WIRE SHAPE for a programme, from a real document.
+ *
+ * A programme created by production carries these beside the fields this app
+ * already wrote, and they are not decoration: `activeStatus` is what its own
+ * screens filter on, and a document missing it reads as inactive there.
+ *
+ *   activeStatus   boolean, DERIVED from programmeStatus rather than collected.
+ *                  Two fields for one fact, which is production's shape; keeping
+ *                  them in step is this module's job, not the form's.
+ *   createdSource  provenance. Production's says
+ *                  'one-click-institution-classroom-programme-creation'; ours
+ *                  names the surface that actually created the document, because
+ *                  claiming its flow would misattribute the row.
+ *   isLocalHost    whether it was written from a developer's machine. Production
+ *                  stores it, and a staging database full of rows that cannot be
+ *                  told apart from production ones is the reason to keep it.
+ *
+ * NOT WRITTEN, deliberately:
+ *
+ *   templateId     removed on instruction. It points at a programme template,
+ *                  which this app has no concept of.
+ *   masterDocId    a production shard pointer ('programme_master_04') that
+ *                  cannot be derived here. Writing '' would repeat exactly the
+ *                  mistake scripts/strip-masterdocid.sh exists to undo — a field
+ *                  nothing reads, written blank forever.
+ */
+const CREATED_SOURCE = 'teacher-corner-web-create-programme-wizard';
+
+/**
+ * True when this is running against a developer's machine.
+ *
+ * Guarded, because `location` does not exist in a Node context — the seed
+ * scripts import from this module, and a bare reference would throw there
+ * rather than in the browser where it means something.
+ */
+function runningOnLocalhost(): boolean {
+  if (typeof location === 'undefined') {
+    return false;
+  }
+
+  return /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+}
+
+/**
+ * Grades and ages on the wire: NUMBERS where production stores numbers.
+ *
+ * Production's `grades` is an array of int64 — [6], not ['6'] — and this app
+ * holds them as strings because every comparison in it does. normaliseProgramme
+ * already coerces on the way IN; this is the matching coercion on the way OUT,
+ * so a document written here is byte-comparable with one production wrote.
+ *
+ * The pre-primary years are not numeric and stay strings, which is also what
+ * production does with them.
+ */
+function toWireScope(values: readonly string[]): (string | number)[] {
+  return values.map(value => (/^\d+$/.test(value.trim()) ? Number(value) : value));
 }
 
 /**
@@ -197,6 +272,28 @@ export class ProgrammeService {
       .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
   }
 
+  /**
+   * One programme, by id.
+   *
+   * A direct read, for the same reason ClassroomService.get is one: the
+   * classroom page is opened by URL and needs exactly one programme, so pulling
+   * a catalogue of 13,898 to find it would scale with everyone else's work.
+   *
+   * Returns null for a missing document, so a stale link says so rather than
+   * rendering an empty unit list that looks like a programme with no units.
+   */
+  async get(docId: string): Promise<Programme | null> {
+    if (!docId) {
+      return null;
+    }
+
+    const snapshot = await getDoc(programmeDoc(docId));
+
+    return snapshot.exists()
+      ? normaliseProgramme(snapshot.id, snapshot.data())
+      : null;
+  }
+
   /** Everything in the teacher's programme trash, most recently deleted first. */
   async listTrash(): Promise<TrashedProgramme[]> {
     const snapshot = await getDocs(trashProgrammesCollection());
@@ -207,6 +304,47 @@ export class ProgrammeService {
         trashAt: document.data()['trashAt']
       }) as TrashedProgramme)
       .sort((a, b) => (b.trashAt?.toMillis?.() ?? 0) - (a.trashAt?.toMillis?.() ?? 0));
+  }
+
+  /**
+   * What the next code WOULD be, without taking it.
+   *
+   * Production shows the code in step 2 of Create Programme, prefilled, before
+   * anything is saved. `allocateCode` cannot serve that: it is a transaction
+   * that WRITES the counter, so opening the wizard and abandoning it would burn
+   * a code and leave a hole in the sequence.
+   *
+   * A PLAIN READ, and therefore a PREDICTION rather than a reservation. Two
+   * people creating a programme at the same moment will both be shown the same
+   * number, and exactly one of them will get it — `allocateCode` at save is
+   * still the only thing that decides. The field says so rather than implying
+   * the code is held.
+   *
+   * A denied or missing counter is not an error here: `floor` alone is a correct
+   * answer for a teacher who has never created one.
+   */
+  async previewCode(floor: number): Promise<string> {
+    const uid = this.auth.currentUid();
+
+    if (!uid) {
+      return formatProgrammeCode(Math.max(floor, FIRST_PROGRAMME_NUMBER - 1) + 1);
+    }
+
+    let stored: number | null = null;
+
+    try {
+      const snapshot = await getDoc(programmeCounterDoc(uid));
+
+      stored = snapshot.exists()
+        ? programmeCodeNumber(String(snapshot.data()['programmeCode'] ?? ''))
+        : null;
+    } catch {
+      // Falls through to the floor, as above.
+    }
+
+    return formatProgrammeCode(
+      Math.max(stored ?? 0, floor, FIRST_PROGRAMME_NUMBER - 1) + 1
+    );
   }
 
   /**
@@ -262,6 +400,15 @@ export class ProgrammeService {
       docId: reference.id,
       programmeId: reference.id,
       ownerId: uid,
+
+      // Production's shape — see the note on CREATED_SOURCE for what is written,
+      // what is derived, and the two fields deliberately left out.
+      activeStatus: isActiveStatus(draft.programmeStatus),
+      createdSource: CREATED_SOURCE,
+      isLocalHost: runningOnLocalhost(),
+      grades: toWireScope(draft.grades ?? []),
+      age: toWireScope(draft.age ?? []),
+
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
@@ -272,7 +419,20 @@ export class ProgrammeService {
     // only resolves server-side, so the written value is not readable here.
     const now = Timestamp.now();
 
-    return { ...payload, createdAt: now, updatedAt: now } as Programme;
+    /*
+     * THE MODEL'S SHAPE, NOT THE WIRE'S.
+     *
+     * The payload above is what Firestore gets, with numeric grades. Every
+     * reader in this app expects arrays of strings, and
+     * normaliseProgramme is what converts them on the way back in.
+     */
+    return {
+      ...payload,
+      grades: draft.grades ?? [],
+      age: draft.age ?? [],
+      createdAt: now,
+      updatedAt: now
+    } as unknown as Programme;
   }
 
   /**
@@ -294,12 +454,33 @@ export class ProgrammeService {
       ...fields
     } = patch;
 
-    const defined = Object.fromEntries(
+    const defined: Record<string, unknown> = Object.fromEntries(
       Object.entries(fields).filter(([, value]) => value !== undefined)
     );
 
     if (Object.keys(defined).length === 0) {
       return;
+    }
+
+    /*
+     * TWO FIELDS FOR ONE FACT, kept in step here.
+     *
+     * Production stores `activeStatus` beside `programmeStatus` and its screens
+     * filter on the boolean. An edit that moved a programme from LIVE to DRAFT
+     * and left activeStatus true would leave it live everywhere production
+     * looks, which is the worst kind of divergence: invisible from this app.
+     */
+    if (typeof defined['programmeStatus'] === 'string') {
+      defined['activeStatus'] = isActiveStatus(defined['programmeStatus'] as string);
+    }
+
+    // The same out-coercion create does, for an edit that changes the scope.
+    if (Array.isArray(defined['grades'])) {
+      defined['grades'] = toWireScope(defined['grades'] as string[]);
+    }
+
+    if (Array.isArray(defined['age'])) {
+      defined['age'] = toWireScope(defined['age'] as string[]);
     }
 
     await updateDoc(programmeDoc(docId), { ...defined, updatedAt: serverTimestamp() });

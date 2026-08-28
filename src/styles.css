@@ -526,6 +526,29 @@ select:has(option[value='']:checked) {
   font-size: 14px;
 }
 
+/* ==========================================================================
+   .visually-hidden
+
+   GLOBAL, and it has to be. This lived in learning-unit-form.css, which is a
+   COMPONENT stylesheet and therefore scoped — so the class worked in that one
+   template and silently did nothing everywhere else. Add Programme used it on
+   its file input and got a raw "Choose File / No file chosen" control rendered
+   in the middle of the form, because nothing was hiding it.
+
+   Off screen, not `display: none`: the input is still the thing the visible
+   button clicks and the thing a screen reader announces, and display:none would
+   take it out of the accessibility tree entirely.
+   ========================================================================== */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 /* ---- Motion -------------------------------------------------------------- */
 
 @keyframes fade-up {

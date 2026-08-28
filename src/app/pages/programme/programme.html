@@ -183,6 +183,8 @@
 @if (showAdd()) {
   <app-add-programme
     [institutions]="institutions()"
+    [existing]="programmes()"
+    [units]="pickableUnits()"
     [saving]="saving()"
     [error]="modalError()"
     (closed)="closeAdd()"
@@ -193,6 +195,7 @@
 @if (editing(); as target) {
   <app-edit-programme
     [programme]="target"
+    [units]="pickableUnits()"
     [saving]="saving()"
     [error]="modalError()"
     (closed)="closeEdit()"

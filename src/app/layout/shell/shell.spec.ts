@@ -2,7 +2,13 @@ import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
+import {
+  AllottedInstitution,
+  TeacherAllotment,
+  TeacherClassroom
+} from '../../models/teaching.model';
 import { AuthService } from '../../services/auth.service';
+import { DashboardService } from '../../services/dashboard.service';
 import { NotificationService } from '../../services/notification.service';
 import { Shell } from './shell';
 
@@ -185,5 +191,181 @@ describe('Shell — sidebar navigation', () => {
       .map(link => link.getAttribute('href'));
 
     expect(hrefs).toContain('/learning-units');
+  });
+});
+
+/**
+ * Shell — the Institutions tree.
+ *
+ * WHY THIS EXISTS. The tree is driven by the teacher's own allotment, the same
+ * read the dashboard cards use, and it is three levels deep with an accordion at
+ * the second. What can silently go wrong is the wiring rather than the styling:
+ * an empty allotment rendering an empty group, both schools open at once, or a
+ * class row labelled by something other than grade and section.
+ *
+ * DashboardService is stubbed so nothing reaches Firestore — the real one is
+ * injected by the shell's constructor, which is why the group renders empty
+ * rather than throwing when a read fails.
+ */
+describe('Shell — the Institutions tree', () => {
+
+  class StubDashboardService {
+    constructor(private institutions: AllottedInstitution[]) {}
+
+    async myAllotment(): Promise<TeacherAllotment> {
+      return {
+        institutions: this.institutions,
+        classroomCount: this.institutions.reduce((n, i) => n + i.classrooms.length, 0)
+      };
+    }
+  }
+
+  function classroom(overrides: Partial<TeacherClassroom> = {}): TeacherClassroom {
+    return {
+      activeStatus: true,
+      classroomId: 'c1',
+      classroomName: '1 A',
+      grade: '1',
+      section: 'A',
+      institutionId: 'inst-1',
+      institutionName: 'ThinkTac',
+      type: 'CLASSROOM',
+      ...overrides
+    } as unknown as TeacherClassroom;
+  }
+
+  async function mountTree(institutions: AllottedInstitution[]) {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [Shell],
+      providers: [
+        provideRouter([]),
+        { provide: AuthService, useValue: new StubAuthService() },
+        { provide: NotificationService, useValue: new StubNotificationService() },
+        { provide: DashboardService, useValue: new StubDashboardService(institutions) }
+      ]
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    return fixture;
+  }
+
+  const TWO_SCHOOLS: AllottedInstitution[] = [
+    {
+      institutionId: 'inst-1',
+      institutionName: 'ThinkTac',
+      classrooms: [
+        classroom({ classroomId: 'a', grade: '1', section: 'A' }),
+        classroom({ classroomId: 'b', grade: '2', section: 'A' })
+      ]
+    },
+    {
+      institutionId: 'inst-2',
+      institutionName: 'Airaa Academy',
+      classrooms: [classroom({ classroomId: 'c', grade: '4', section: 'A' })]
+    }
+  ];
+
+  /* NO GROUP AT ALL when nothing is allotted — an "Institutions" header opening
+     onto an empty list says the read failed when it did not. */
+  it('renders no group when nothing is allotted', async () => {
+    const fixture = await mountTree([]);
+
+    expect(fixture.nativeElement.querySelector('.nav-group')).toBeNull();
+  });
+
+  it('renders the group, closed, when schools are allotted', async () => {
+    const fixture = await mountTree(TWO_SCHOOLS);
+    const group = fixture.nativeElement.querySelector('.nav-group');
+
+    expect(group).toBeTruthy();
+    expect(group.getAttribute('aria-expanded')).toBe('false');
+    expect(fixture.nativeElement.querySelector('.nav-tree')).toBeNull();
+  });
+
+  it('lists the schools once opened', async () => {
+    const fixture = await mountTree(TWO_SCHOOLS);
+    const component = fixture.componentInstance;
+
+    component.toggleInstitutions();
+    fixture.detectChanges();
+
+    const names = Array.from(
+      fixture.nativeElement.querySelectorAll('.nav-school .nav-label')
+    ).map((el: unknown) => (el as HTMLElement).textContent?.trim());
+
+    expect(names).toEqual(['ThinkTac', 'Airaa Academy']);
+  });
+
+  /* AN ACCORDION, which is production's behaviour: opening the second school
+     closes the first, or five schools of three classes push Admin off-screen. */
+  it('opens one school at a time', async () => {
+    const fixture = await mountTree(TWO_SCHOOLS);
+    const component = fixture.componentInstance;
+
+    component.toggleInstitutions();
+    component.toggleSchool(TWO_SCHOOLS[0]);
+    fixture.detectChanges();
+
+    expect(component.isSchoolOpen(TWO_SCHOOLS[0])).toBe(true);
+    expect(fixture.nativeElement.querySelectorAll('.nav-class').length).toBe(2);
+
+    component.toggleSchool(TWO_SCHOOLS[1]);
+    fixture.detectChanges();
+
+    expect(component.isSchoolOpen(TWO_SCHOOLS[0])).toBe(false);
+    expect(component.isSchoolOpen(TWO_SCHOOLS[1])).toBe(true);
+    expect(fixture.nativeElement.querySelectorAll('.nav-class').length).toBe(1);
+  });
+
+  it('closes a school when it is clicked again', async () => {
+    const fixture = await mountTree(TWO_SCHOOLS);
+    const component = fixture.componentInstance;
+
+    component.toggleInstitutions();
+    component.toggleSchool(TWO_SCHOOLS[0]);
+    component.toggleSchool(TWO_SCHOOLS[0]);
+    fixture.detectChanges();
+
+    expect(component.openSchool()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.nav-class')).toBeNull();
+  });
+
+  /* GRADE AND SECTION, which is what production's rows show — not the
+     classroom's name, which is far too long for a sidebar row. */
+  it('labels a class by grade and section', async () => {
+    const fixture = await mountTree(TWO_SCHOOLS);
+    const component = fixture.componentInstance;
+
+    expect(component.classLabel(classroom({ grade: '1', section: 'A' }))).toBe('1 A');
+    expect(component.classLabel(classroom({ grade: '10', section: 'NA' }))).toBe('10 NA');
+  });
+
+  /* A STEM club carries neither, so the name is the only thing left to show. */
+  it('falls back to the name when there is no grade or section', async () => {
+    const fixture = await mountTree(TWO_SCHOOLS);
+    const component = fixture.componentInstance;
+
+    expect(
+      component.classLabel(
+        classroom({ grade: '', section: '', classroomName: 'ThinkTac STEM Forge' })
+      )
+    ).toBe('ThinkTac STEM Forge');
+  });
+
+  it('leaves the Admin group and Dashboard untouched', async () => {
+    const fixture = await mountTree(TWO_SCHOOLS);
+    const component = fixture.componentInstance;
+
+    component.toggleInstitutions();
+    fixture.detectChanges();
+
+    expect(component.primaryNav.map(item => item.label)).toEqual(['Dashboard']);
+    expect(fixture.nativeElement.textContent).toContain('Admin');
+    expect(fixture.nativeElement.textContent).toContain('Classrooms');
   });
 });

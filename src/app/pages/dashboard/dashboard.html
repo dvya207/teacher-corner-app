@@ -26,7 +26,7 @@
         } @else if (error()) {
           &mdash;
         } @else {
-          {{ counts()?.institutions }}
+          {{ institutionCount() }}
         }
       </strong>
       <span>Institutions</span>
@@ -39,7 +39,7 @@
         } @else if (error()) {
           &mdash;
         } @else {
-          {{ counts()?.classrooms }}
+          {{ classroomCount() }}
         }
       </strong>
       <span>Classrooms</span>
@@ -50,7 +50,133 @@
 
 @if (error()) {
   <div class="load-error" role="alert">
-    <strong>Dashboard counts unavailable.</strong>
+    <strong>Dashboard unavailable.</strong>
     {{ error() }}
   </div>
 }
+
+<!-- ==========================================================================
+     MY INSTITUTIONS & CLASSROOMS
+
+     One card per school the signed-in person teaches at, expanding into the
+     classes they teach there. Production's own shape, and its own wording.
+
+     BUILT FROM THE TEACHER'S OWN DOCUMENTS — every field here is denormalised
+     onto their classroom entries, so this section reads no institutions and no
+     classrooms of its own. See AllottedInstitution.
+     ========================================================================== -->
+<section class="my-schools">
+  <h2>My Institutions &amp; Classrooms</h2>
+
+  @if (loading()) {
+    <div class="inst-grid" aria-busy="true">
+      @for (placeholder of [1, 2, 3]; track placeholder) {
+        <div class="inst-card is-skeleton" aria-hidden="true"></div>
+      }
+    </div>
+  } @else if (nothingAllotted()) {
+    <!-- NOT rendered when the read failed: the banner above owns that case, and
+         "nothing is allotted to you" would send the reader to the wrong person
+         for help. -->
+    <div class="no-schools">
+      <app-icon name="bank" [size]="26" />
+      <p><strong>You are not assigned to any classroom yet.</strong></p>
+      <p>
+        Once an administrator assigns you to a class it appears here, with the
+        school it belongs to.
+      </p>
+      <a class="banner-btn is-solid" routerLink="/institutions">View Institutions</a>
+    </div>
+  } @else {
+    <div class="inst-grid">
+      @for (institution of institutions(); track keyFor(institution); let i = $index) {
+        <button
+          type="button"
+          class="inst-card"
+          [class]="'inst-card inst-card--' + instColour(i)"
+          [class.is-open]="isExpanded(institution)"
+          [attr.aria-expanded]="isExpanded(institution)"
+          (click)="toggle(institution)"
+        >
+          <span class="inst-chevron" aria-hidden="true">
+            <app-icon [name]="isExpanded(institution) ? 'chevron-left' : 'chevron-down'" [size]="16" />
+          </span>
+
+          <span class="inst-icon"><app-icon name="bank" [size]="22" /></span>
+          <strong class="inst-name">{{ institution.institutionName }}</strong>
+          <span class="inst-count">{{ classroomLabel(institution) }}</span>
+        </button>
+
+        <!-- INLINE IN THE GRID, immediately after the card it belongs to, and
+             spanning every column.
+
+             That is what pushes the institutions AFTER this one down below the
+             panel — production's own behaviour, and the reason its markup keeps
+             the panel inside the same *ngFor as the card. Rendered after the
+             whole grid instead, the cards stayed put and the panel could open a
+             long way from the card that opened it.
+
+             The comment that used to sit here claimed a per-card panel would
+             push the other cards SIDEWAYS. It does not: the panel takes a full
+             grid row of its own, so they reflow downwards. -->
+        @if (isExpanded(institution)) {
+        <div class="class-panel animate-fade-up">
+          <header class="class-panel-head">
+            <h3><app-icon name="bank" [size]="17" /> {{ institution.institutionName }}</h3>
+
+            <button
+              type="button"
+              class="class-panel-close"
+              aria-label="Close"
+              (click)="expanded.set(null)"
+            >
+              <app-icon name="close" [size]="18" />
+            </button>
+          </header>
+
+          <!-- PRODUCTION'S CARD, as it is: a house watermark behind the content,
+               the name and its status, ONE grade-or-type badge, and Open. Colour
+               cycles per classroom rather than taking the school's, which is what
+               makes a row of three read as three distinct classes. -->
+          <div class="class-grid">
+            @for (classroom of institution.classrooms; track classroom.classroomId; let i = $index) {
+              <article
+                class="class-card"
+                [class]="'class-card class-card--' + classColour(i)"
+                [class.is-inactive]="!classroom.activeStatus"
+              >
+                <!-- Behind everything, and inert: it is texture, not an icon
+                     anyone can act on. -->
+                <span class="class-watermark" aria-hidden="true">
+                  <app-icon name="classroom" [size]="48" />
+                </span>
+
+                <div class="class-card-top">
+                  <strong class="class-name">{{ classroom.classroomName || '—' }}</strong>
+                  <span class="class-status">
+                    {{ classroom.activeStatus ? 'ACTIVE' : 'INACTIVE' }}
+                  </span>
+                </div>
+
+                <span class="class-chip">{{ chipFor(classroom) }}</span>
+
+                <!-- Opens THIS classroom's learning units, not the Classrooms table.
+                     The programme rides along as a query parameter so the page opens
+                     on the one the card is about. -->
+                <a
+                  class="class-open"
+                  [routerLink]="['/classrooms', classroom.classroomId]"
+                  [queryParams]="{ programmeId: firstProgrammeId(classroom) }"
+                >
+                  Open
+                  <app-icon name="arrow-right" [size]="15" />
+                </a>
+              </article>
+            }
+          </div>
+        </div>
+        }
+      }
+    </div>
+  }
+</section>

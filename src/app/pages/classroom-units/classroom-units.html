@@ -1,0 +1,137 @@
+<!-- ==========================================================================
+     A CLASSROOM'S LEARNING UNITS
+
+     What the dashboard's classroom cards and the sidebar's class rows open.
+     Production's page: the programme as a pill, the student count, a search and
+     language filter, then a card per unit.
+     ========================================================================== -->
+<section class="cu-page">
+
+  <header class="cu-head">
+    <!-- A TAB PER PROGRAMME, which is what production's page is: a mat-tab-group
+         labelled displayName || programmeName. The blue pill in its UI is the
+         SELECTED tab, not a title — a classroom running two programmes has two
+         tabs, and showing only one left the second unreachable.
+
+         Each tab is a LINK carrying programmeId, so the URL always says which
+         programme is showing and the page stays shareable and reloadable. -->
+    @if (programmeTabs().length > 0) {
+      <div class="cu-tabs" role="tablist">
+        @for (tab of programmeTabs(); track tab.programmeId) {
+          <a
+            class="cu-tab"
+            role="tab"
+            [class.is-selected]="isSelectedProgramme(tab.programmeId)"
+            [attr.aria-selected]="isSelectedProgramme(tab.programmeId)"
+            [routerLink]="[]"
+            [queryParams]="{ programmeId: tab.programmeId }"
+            queryParamsHandling="merge"
+            [title]="tab.label"
+          >
+            {{ tab.label }}
+          </a>
+        }
+      </div>
+    } @else if (!loading()) {
+      <span class="cu-tab is-empty">No programme attached</span>
+    }
+
+    <div class="cu-head-actions">
+      <!-- Real data. Production's Schedule and Year View buttons are NOT here:
+           neither has anything behind it in this app, and the dashboard's action
+           tiles were removed for exactly that reason. -->
+      <span class="cu-students">
+        <app-icon name="users" [size]="16" />
+        Students
+        <span class="cu-count">{{ studentCount() }}</span>
+      </span>
+    </div>
+  </header>
+
+  @if (error()) {
+    <div class="load-error" role="alert">{{ error() }}</div>
+  }
+
+  @if (!error()) {
+    <div class="cu-filters">
+      <div class="cu-search">
+        <app-icon name="search" [size]="16" />
+        <label for="cu-q" class="visually-hidden">Search learning units</label>
+        <input
+          id="cu-q"
+          type="text"
+          autocomplete="off"
+          placeholder="Search by learning unit code or name"
+          [value]="search()"
+          (input)="search.set(valueOf($event))"
+        />
+      </div>
+
+      <div class="cu-lang">
+        <label for="cu-lang" class="visually-hidden">Language</label>
+        <select id="cu-lang" (change)="language.set(valueOf($event))">
+          <option value="" [selected]="language() === ''">All</option>
+          @for (code of languageOptions(); track code) {
+            <option [value]="code" [selected]="code === language()">
+              {{ languageName(code) }}
+            </option>
+          }
+        </select>
+      </div>
+    </div>
+
+    @if (loading()) {
+      <div class="cu-grid" aria-busy="true">
+        @for (placeholder of [1, 2, 3]; track placeholder) {
+          <div class="cu-card is-skeleton" aria-hidden="true"></div>
+        }
+      </div>
+    } @else if (visibleUnits().length === 0) {
+      <div class="cu-empty">
+        @if (units().length === 0) {
+          <p><strong>No learning units are attached to this programme yet.</strong></p>
+          <p>Units are chosen when the programme is created, or by editing it.</p>
+          <a class="cu-link" routerLink="/programme">Open Programmes</a>
+        } @else {
+          <p>Nothing matches that search.</p>
+        }
+      </div>
+    } @else {
+      <div class="cu-grid">
+        @for (unit of visibleUnits(); track unit.docId) {
+          <article class="cu-card">
+            <!-- The thumbnail. A unit's preview image is a STORAGE PATH, not a
+                 URL, and nothing in this app mints download URLs yet — so the
+                 placeholder shows the code, which is how a unit is recognised
+                 anyway. See learningUnitPreviewImage on the model. -->
+            <div class="cu-thumb">
+              <span class="cu-thumb-code">{{ unit.code || '—' }}</span>
+            </div>
+
+            <div class="cu-body">
+              <h3 class="cu-name" [title]="unit.name">{{ unit.name || '—' }}</h3>
+
+              <p class="cu-meta">
+                <span>{{ languageName(unit.language) }}</span>
+                @if (unit.minutes > 0) {
+                  <span class="cu-dot" aria-hidden="true">·</span>
+                  <span class="cu-time">
+                    <app-icon name="clipboard" [size]="13" />
+                    {{ unit.minutes }} min
+                  </span>
+                }
+              </p>
+
+              <!-- Production's own chip. Empty dates are the usual state, and
+                   saying so beats an empty row. -->
+              <span class="cu-chip" [class.is-scheduled]="unit.scheduled">
+                <app-icon name="clipboard" [size]="13" />
+                {{ unit.scheduled || 'Not scheduled' }}
+              </span>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  }
+</section>

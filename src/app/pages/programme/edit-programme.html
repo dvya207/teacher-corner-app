@@ -28,6 +28,35 @@
         <div class="modal-error" role="alert">{{ error() }}</div>
       }
 
+      <!-- ==============================================================
+           TWO PANES: Basic Info, and Manage Learning Units
+
+           Production had both, and the second was removed on instruction
+           along with Manage Assignments. It is back on instruction too:
+           without it a programme's units could only be set at creation, so
+           changing them meant recreating the programme.
+
+           TABS, not two dialogs. The Save button is shared — an edit to a
+           field and a change to the unit list are one patch, so splitting
+           them would mean two saves for one intent.
+           ============================================================== -->
+      <div class="ep-tabs" role="tablist">
+        @for (name of tabs; track name) {
+          <button
+            type="button"
+            class="ep-tab"
+            role="tab"
+            [class.is-current]="tab() === name"
+            [attr.aria-selected]="tab() === name"
+            (click)="tab.set(name)"
+          >
+            {{ name }}
+          </button>
+        }
+      </div>
+
+      @if (tab() === 'Basic Info') {
+
 
         <div class="field">
           <label for="ep-name">Programme Name <span class="req" aria-hidden="true">*</span></label>
@@ -108,6 +137,18 @@
           </span>
         </div>
 
+      }
+
+      @if (tab() === 'Learning Units') {
+        <!-- The same panel step 3 of Create Programme uses. Its selection is
+             patched into `edits` like every other field, so Save writes it and
+             Cancel discards it. -->
+        <app-learning-unit-picker
+          [units]="units()"
+          [selected]="selectedIds()"
+          (selectedChange)="setUnits($event)"
+        />
+      }
     </div>
 
     <footer class="modal-foot">

@@ -147,6 +147,24 @@
         </div>
 
         <div class="field">
+          <label for="pg-code">Programme Code</label>
+          <input
+            id="pg-code"
+            type="text"
+            readonly
+            [value]="programmeCode()"
+            placeholder="Allocated on save"
+          />
+          <!-- A PREDICTION, NOT A RESERVATION. Nothing holds this number until
+               Save, so two people opening the wizard together see the same one
+               and exactly one of them gets it. Saying so beats a field that
+               looks like a guarantee. -->
+          <span class="field-hint">
+            The next code in your sequence. Confirmed when the programme is saved.
+          </span>
+        </div>
+
+        <div class="field">
           <label for="pg-desc">Description <span class="req" aria-hidden="true">*</span></label>
           <textarea
             id="pg-desc"
@@ -163,6 +181,7 @@
             <label for="pg-status">Status <span class="req" aria-hidden="true">*</span></label>
             <select id="pg-status"
                 [disabled]="locked('status')" (change)="status.set(valueOf($event))">
+              <option value="" disabled [selected]="status() === ''">Select programme status</option>
               @for (option of statuses(); track option.value) {
                 <option [value]="option.value" [selected]="option.value === status()">
                   {{ option.label }}
@@ -175,6 +194,7 @@
             <label for="pg-type">Type <span class="req" aria-hidden="true">*</span></label>
             <select id="pg-type"
                 [disabled]="locked('type')" (change)="type.set(valueOf($event))">
+              <option value="" disabled [selected]="type() === ''">Select programme type</option>
               @for (option of types(); track option.value) {
                 <option [value]="option.value" [selected]="option.value === type()">
                   {{ option.label }}
@@ -184,7 +204,64 @@
           </div>
         </div>
 
-        <!-- Grade OR age, never both — flipping clears the other side. -->
+        <!-- Programme Image. Filed under the INSTITUTION, because the programme
+             has no document id until Save — see uploadImage. -->
+        <div class="field">
+          <!-- The control this labels is the hidden file input below; the visible
+               button is what opens it, which is why the label points at the input
+               by id rather than wrapping the button. -->
+          <label for="pg-image">Programme Image</label>
+
+          <div class="image-row">
+            <button
+              type="button"
+              class="image-btn"
+              [disabled]="uploadingImage() || institutionId() === ''"
+              (click)="programmeImage.click()"
+            >
+              <app-icon name="upload-circle" [size]="16" />
+              @if (uploadingImage()) {
+                Uploading… {{ uploadPercent() }}%
+              } @else if (imagePath()) {
+                Replace
+              } @else {
+                Upload
+              }
+            </button>
+
+            <input
+              #programmeImage
+              id="pg-image"
+              type="file"
+              class="visually-hidden"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              aria-label="Choose the programme image"
+              (change)="uploadImage($event)"
+            />
+
+            @if (imageName()) {
+              <span class="image-name">{{ imageName() }}</span>
+              <button type="button" class="image-clear" (click)="clearImage()">Remove</button>
+            }
+          </div>
+
+          @if (uploadError()) {
+            <span class="field-hint is-error" role="alert">{{ uploadError() }}</span>
+          }
+        </div>
+
+        <!--
+             HIDDEN UNTIL TYPE IS CHOSEN, not shown disabled.
+
+             Production's step 2 on an empty form ends at Programme Image, with
+             Continue greyed; the Grade/Age section only appears once the fields
+             above it are filled. `locked('scope')` already knew when that was —
+             it was being used to DISABLE those controls, which left the section
+             visible and made the form look longer and more demanding than it is.
+
+             Grade OR age, never both — flipping clears the other side.
+        -->
+        @if (!locked('scope')) {
         <div class="scope-block">
           <div class="scope-head">
             <div class="scope-toggle" role="group" aria-label="Scope by grade or age">
@@ -207,39 +284,87 @@
             </div>
 
             <label class="range-toggle">
+              <span>
+                Is this programme mapped to
+                {{ isGradeScoped() ? 'a Grade' : 'an Age' }} range?
+              </span>
               <input type="checkbox" [checked]="isRange()" (change)="toggleRange()" />
-              Range
+              <span class="range-switch" aria-hidden="true"></span>
             </label>
           </div>
 
-          <div class="field-row">
-            <div class="field">
-              <label for="pg-from">
-                {{ isRange() ? 'From' : (isGradeScoped() ? 'Grade' : 'Age') }}
-                <span class="req" aria-hidden="true">*</span>
-              </label>
-              <select id="pg-from"
-                [disabled]="locked('scope')" (change)="setScopeFrom(valueOf($event))">
-                <option value="" disabled [selected]="scopeFrom() === ''">Select</option>
-                @for (value of scopeValues(); track value) {
-                  <option [value]="value" [selected]="value === scopeFrom()">{{ value }}</option>
-                }
-              </select>
-            </div>
+        @if (isRange()) {
+            <!-- TWO NATIVE RANGE INPUTS over one track, which is how production's
+                 two-handle slider reads. Native, deliberately: a div-and-pointer
+                 slider is not keyboard-operable without reimplementing arrow
+                 keys, Home, End and the ARIA that a screen reader needs, and
+                 <input type=range> has all of it already.
 
-            @if (isRange()) {
+                 The handles cannot cross — setRangeFrom and setRangeTo clamp each
+                 to the other — because a `from` above `to` makes expandRange
+                 produce nothing, which would be a silently empty scope on a form
+                 that looks valid. -->
+            <div class="range-block">
+              <span class="range-caption">
+                {{ isGradeScoped() ? 'Grade Range' : 'Age Range (in years)' }}
+              </span>
+
+              <div class="range-ends">
+                <span>{{ scopeValues()[0] }}</span>
+                <strong class="range-current">
+                  {{ scopeFrom() || scopeValues()[0] }} – {{ scopeTo() || scopeValues()[0] }}
+                </strong>
+                <span>{{ scopeValues()[scopeValues().length - 1] }}</span>
+              </div>
+
+              <div class="range-track">
+                <!-- The filled span between the handles. -->
+                <span
+                  class="range-fill"
+                  [style.left.%]="handleAt(scopeFrom() || scopeValues()[0])"
+                  [style.right.%]="100 - handleAt(scopeTo() || scopeValues()[0])"
+                ></span>
+
+                <input
+                  type="range"
+                  class="range-input is-from"
+                  min="0"
+                  [max]="scopeValues().length - 1"
+                  [value]="scopeValues().indexOf(scopeFrom())"
+                  [disabled]="locked('scope')"
+                  [attr.aria-label]="(isGradeScoped() ? 'Lowest grade' : 'Youngest age')"
+                  (input)="setRangeFrom(scopeValues()[+valueOf($event)])"
+                />
+
+                <input
+                  type="range"
+                  class="range-input is-to"
+                  min="0"
+                  [max]="scopeValues().length - 1"
+                  [value]="scopeValues().indexOf(scopeTo())"
+                  [disabled]="locked('scope')"
+                  [attr.aria-label]="(isGradeScoped() ? 'Highest grade' : 'Oldest age')"
+                  (input)="setRangeTo(scopeValues()[+valueOf($event)])"
+                />
+              </div>
+            </div>
+          } @else {
+            <div class="field-row">
               <div class="field">
-                <label for="pg-to">To <span class="req" aria-hidden="true">*</span></label>
-                <select id="pg-to"
-                [disabled]="locked('scope')" (change)="setScopeTo(valueOf($event))">
-                  <option value="" disabled [selected]="scopeTo() === ''">Select</option>
+                <label for="pg-from">
+                  {{ isGradeScoped() ? 'Grade' : 'Age' }}
+                  <span class="req" aria-hidden="true">*</span>
+                </label>
+                <select id="pg-from"
+                  [disabled]="locked('scope')" (change)="setScopeFrom(valueOf($event))">
+                  <option value="" disabled [selected]="scopeFrom() === ''">Select</option>
                   @for (value of scopeValues(); track value) {
-                    <option [value]="value" [selected]="value === scopeTo()">{{ value }}</option>
+                    <option [value]="value" [selected]="value === scopeFrom()">{{ value }}</option>
                   }
                 </select>
               </div>
-            }
-          </div>
+            </div>
+          }
 
           @if (scopeValuesChosen().length > 1) {
             <span class="field-hint">
@@ -247,33 +372,102 @@
             </span>
           }
         </div>
-
-        <!-- Production has two more steps here. Saying so beats a silently
-             shorter wizard that looks like a different product. -->
-        <p class="step-note">
-          Learning Units and Assignments are selected in two further steps in
-          ThinkTac production. Neither is available in this app yet, so a new
-          programme is created with none attached.
-        </p>
+        }
       }
 
       <!-- ================================================================
-           Step 3 — Review
-           ================================================================ -->
-      @if (step() === 3) {
-        <p class="review-intro">
-          Check the programme before creating it. The programme code is allocated
-          automatically when it is saved.
-        </p>
+           Step 3 — Select Learning Units
+           ================================================================
+           Production's two-column panel: a language filter and a search over an
+           AVAILABLE column, and a SELECTED column that holds the programme's
+           units IN ORDER.
 
-        <dl class="review-list">
-          @for (row of reviewRows(); track row.label) {
-            <div class="review-row">
-              <dt>{{ row.label }}</dt>
-              <dd>{{ row.value }}</dd>
-            </div>
-          }
-        </dl>
+           CLICK TO MOVE, NOT DRAG. Production drags, which needs @angular/cdk —
+           a dependency this project does not have — and dragging alone is not
+           operable from a keyboard, so it would need these buttons anyway. The
+           layout, the counts and the row shape are production's.
+
+           REORDER BUTTONS, because the order is stored: `learningUnitsIds` is
+           positional against a classroom's per-unit locking. -->
+      @if (step() === 3) {
+        <app-learning-unit-picker
+          [units]="units()"
+          [selected]="selectedIds()"
+          (selectedChange)="selectedIds.set($event)"
+        />
+      }
+
+      <!-- ================================================================
+           Step 4 — Review
+           ================================================================ -->
+      @if (step() === reviewStep) {
+        <!-- TWO CARDS, as production has: the details, then what was chosen. -->
+        <section class="review-card">
+          <h3 class="review-card-head">Programme Details</h3>
+
+          <dl class="review-list">
+            @for (row of reviewRows(); track row.label) {
+              <div class="review-row">
+                <dt>{{ row.label }}</dt>
+                <dd>
+                  @switch (row.kind) {
+                    @case ('status') {
+                      @if (row.value) {
+                        <span class="review-pill" [class.is-live]="isLiveStatus(row.value)">
+                          {{ row.value }}
+                        </span>
+                      } @else {
+                        <span class="review-empty">Not set</span>
+                      }
+                    }
+                    @case ('image') {
+                      <!-- Production's own wording, and italic as it is there:
+                           no image is a fact about the programme, not a gap in
+                           this list. -->
+                      @if (row.value) {
+                        {{ row.value }}
+                      } @else {
+                        <span class="review-empty">No image</span>
+                      }
+                    }
+                    @default {
+                      @if (row.value) {
+                        {{ row.value }}
+                      } @else {
+                        <span class="review-empty">&mdash;</span>
+                      }
+                    }
+                  }
+                </dd>
+              </div>
+            }
+          </dl>
+        </section>
+
+        <section class="review-card">
+          <h3 class="review-card-head">
+            Selected Learning Units
+            <span class="review-count">{{ selectedUnits().length }}</span>
+          </h3>
+
+          <div class="review-units">
+            @for (unit of selectedUnits(); track unit.docId) {
+              <article class="review-unit">
+                <!-- N/A, because a PickableUnit carries no image: the picker
+                     shows code, name, languages and version and nothing else.
+                     Production draws the same placeholder for a unit with no
+                     thumbnail. -->
+                <span class="review-thumb" aria-hidden="true">N/A</span>
+                <span class="review-unit-text">
+                  <strong>{{ unit.name }}</strong>
+                  <span class="review-unit-code">{{ unit.code }}</span>
+                </span>
+              </article>
+            } @empty {
+              <p class="review-empty">No learning units selected.</p>
+            }
+          </div>
+        </section>
       }
 
     </div>
@@ -285,11 +479,11 @@
         <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
       }
 
-      @if (step() < 3) {
+      @if (step() < reviewStep) {
         <button
           type="button"
           class="btn btn-primary next-btn"
-          [disabled]="step() === 1 ? !stepOneValid() : !stepTwoValid()"
+          [disabled]="continueBlocked()"
           (click)="next()"
         >
           Continue

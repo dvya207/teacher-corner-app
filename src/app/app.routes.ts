@@ -111,6 +111,24 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/classrooms/classrooms').then(m => m.Classrooms),
         data: { title: 'Classrooms', crumbRoot: 'Admin', search: 'Search classrooms...' }
       },
+      /*
+       * ONE CLASSROOM'S LEARNING UNITS.
+       *
+       * AFTER the bare 'classrooms' route, because Angular matches in order and
+       * a parameterised path declared first would swallow it.
+       *
+       * The classroom is a PATH segment and the programme a QUERY parameter,
+       * following production's own URL: a classroom has one page, and which of
+       * its programmes is being looked at is a view of that page rather than a
+       * different one. It also means a link that loses its query string still
+       * resolves — the page falls back to the first programme attached.
+       */
+      {
+        path: 'classrooms/:classroomId',
+        loadComponent: () =>
+          import('./pages/classroom-units/classroom-units').then(m => m.ClassroomUnits),
+        data: { title: 'Classroom', crumbRoot: 'Admin', search: 'Search learning units...' }
+      },
       // ProgrammePage, not Programme: the component sits alongside a Programme
       // MODEL interface of the same name, and importing both into one file is
       // the kind of collision that gets resolved with an alias nobody expects.

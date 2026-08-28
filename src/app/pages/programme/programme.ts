@@ -12,12 +12,17 @@ import {
 import {
   Classroom,
   Institution,
+  PickableUnit,
   Programme,
   ProgrammeDraft,
   TrashedProgramme
 } from '../../models/teaching.model';
 import { ClassroomService } from '../../services/classroom.service';
 import { InstitutionService } from '../../services/institution.service';
+import {
+  LearningUnitService,
+  toPickableUnits
+} from '../../services/learning-unit.service';
 import { ProgrammeService } from '../../services/programme.service';
 import { AddProgramme } from './add-programme';
 import { EditProgramme } from './edit-programme';
@@ -45,6 +50,7 @@ export class ProgrammePage implements OnInit {
   private service = inject(ProgrammeService);
   private institutionService = inject(InstitutionService);
   private classroomService = inject(ClassroomService);
+  private learningUnitService = inject(LearningUnitService);
 
   readonly programmes = signal<Programme[]>([]);
   readonly loading = signal(true);
@@ -52,6 +58,15 @@ export class ProgrammePage implements OnInit {
 
   /** Feeds the wizard's school picker. */
   readonly institutions = signal<Institution[]>([]);
+
+  /**
+   * The learning units the Create Programme wizard offers, one row per code.
+   *
+   * COLLAPSED HERE, not in the wizard: toPickableUnits applies the LIVE filter
+   * and groups the language variants, and the wizard should receive what it
+   * displays rather than the raw catalogue.
+   */
+  readonly pickableUnits = signal<PickableUnit[]>([]);
 
   /**
    * The teacher's classrooms, loaded for ONE reason: deleting a programme has to
@@ -104,10 +119,11 @@ export class ProgrammePage implements OnInit {
   async load(): Promise<void> {
     this.loading.set(true);
 
-    const [programmes, institutions, classrooms] = await Promise.allSettled([
+    const [programmes, institutions, classrooms, units] = await Promise.allSettled([
       this.service.list(),
       this.institutionService.list(),
-      this.classroomService.list()
+      this.classroomService.list(),
+      this.learningUnitService.list()
     ]);
 
     if (programmes.status === 'fulfilled') {
@@ -119,6 +135,12 @@ export class ProgrammePage implements OnInit {
 
     this.institutions.set(institutions.status === 'fulfilled' ? institutions.value : []);
     this.classrooms.set(classrooms.status === 'fulfilled' ? classrooms.value : []);
+
+    // Degrades like the other two: a failed read leaves step 3's Available column
+    // empty and saying so, rather than blanking the table this page is for.
+    this.pickableUnits.set(
+      units.status === 'fulfilled' ? toPickableUnits(units.value) : []
+    );
 
     this.loading.set(false);
   }
@@ -233,9 +255,33 @@ export class ProgrammePage implements OnInit {
 
   // ---- Add ---------------------------------------------------------------
 
+  /**
+   * Opens the wizard, and REFRESHES the learning units it offers.
+   *
+   * WHY THE REFRESH. The catalogue was read once in ngOnInit, so a unit made
+   * Live after this page loaded was absent from step 3 with nothing to explain
+   * it — the picker looked broken when it was simply holding a snapshot from
+   * before the change. Anyone editing a unit and then building a programme with
+   * it hits that, which is the normal order of work.
+   *
+   * NOT AWAITED. The modal opens immediately and step 3 is two clicks away, so
+   * the read has time to land; blocking the open on a network round trip would
+   * make the button feel dead. A failure leaves the previous list in place
+   * rather than emptying it — stale is better than blank here, because the user
+   * can still pick the units that were already loaded.
+   */
   openAdd(): void {
     this.modalError.set('');
     this.showAdd.set(true);
+    void this.refreshPickableUnits();
+  }
+
+  private async refreshPickableUnits(): Promise<void> {
+    try {
+      this.pickableUnits.set(toPickableUnits(await this.learningUnitService.list()));
+    } catch {
+      // Keeps whatever was loaded before. See the note above.
+    }
   }
 
   closeAdd(): void {
@@ -276,7 +322,16 @@ export class ProgrammePage implements OnInit {
   /** The programme open in the edit modal, or null. */
   readonly editing = signal<Programme | null>(null);
 
+  /**
+   * Opens the editor, and REFRESHES the catalogue its Learning Units tab shows.
+   *
+   * Same reasoning as openAdd: the list was read once in ngOnInit, so a unit
+   * made Live after this page loaded was missing from the tab with nothing to
+   * explain it. Not awaited — the dialog opens on Basic Info and the tab is a
+   * click away.
+   */
   openEdit(programme: Programme): void {
+    void this.refreshPickableUnits();
     this.modalError.set('');
     this.editing.set(programme);
   }

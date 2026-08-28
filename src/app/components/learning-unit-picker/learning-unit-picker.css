@@ -1,0 +1,430 @@
+/* ==========================================================================
+   THE LEARNING UNIT PICKER
+
+   Two columns — Available and Selected — with the counts in their headers, a
+   language filter and a search above. Production's own panel, shared by Create
+   Programme's step 3 and Edit Programme's Manage Learning Units tab.
+
+   SELF-CONTAINED. This lived in add-programme.css and leaned on that file's
+   `.field` rules for the filter row; a component whose styling depends on its
+   host's stylesheet renders differently in the second place it is used, which
+   is exactly what moving it here prevents.
+   ========================================================================== */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field select,
+.field input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  color: var(--ink-900);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.field select:focus,
+.field input:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+.field input::placeholder {
+  color: var(--ink-400);
+}
+
+
+.unit-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+/* The magnifier sits inside the field, so the input carries the padding for it
+   rather than the icon being a sibling that pushes the text. */
+.unit-search {
+  position: relative;
+}
+
+.unit-search app-icon {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  color: var(--ink-400);
+  pointer-events: none;
+}
+
+.unit-search input {
+  padding-left: 34px;
+}
+
+.unit-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.unit-col {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.unit-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--ink-050);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+
+.unit-count {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--tint-blue);
+  color: var(--on-blue);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+/*
+ * A FIXED HEIGHT, not a max-height.
+ *
+ * The two columns must stay the same height whatever is in them: production's
+ * Selected column is empty at 0 and the panel does not resize as units move
+ * across, and a modal that grows and shrinks under the cursor is unusable.
+ */
+.unit-list {
+  height: 340px;
+  padding: 8px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.unit-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  text-align: left;
+  color: var(--ink-700);
+  transition: border-color 0.14s var(--ease), background 0.14s var(--ease);
+}
+
+/* Only the Available rows are buttons, so only they invite a click. */
+button.unit-row {
+  cursor: pointer;
+}
+
+button.unit-row:hover {
+  border-color: var(--accent-500);
+  background: var(--tint-blue);
+}
+
+.unit-row.is-selected {
+  border-color: var(--accent-300);
+  background: var(--tint-blue);
+}
+
+.unit-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.unit-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unit-code {
+  color: var(--accent-600);
+  font-weight: 700;
+}
+
+.unit-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* The stored position, which is the whole reason the order is editable. */
+.unit-index {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent-500);
+  color: var(--white);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.unit-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.unit-move,
+.unit-remove {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--accent-600);
+}
+
+/* One chevron asset, rotated for "earlier" — the icon set has chevron-down and
+   no chevron-up, and rotating is cheaper than a second path that must be kept
+   optically identical to the first. */
+.unit-move {
+  transform: rotate(180deg);
+}
+
+.unit-move.is-down {
+  transform: none;
+}
+
+.unit-move:hover:not(:disabled),
+.unit-remove:hover {
+  background: rgb(255 255 255 / 70%);
+}
+
+.unit-move:disabled {
+  color: var(--ink-300);
+  cursor: not-allowed;
+}
+
+.unit-remove {
+  color: var(--danger);
+}
+
+.unit-empty {
+  margin: auto;
+  padding: 0 18px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.unit-empty.is-drop {
+  font-style: italic;
+}
+
+@media (max-width: 620px) {
+  .unit-filters,
+  .unit-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .unit-list {
+    height: 220px;
+  }
+}
+
+/* ---- Drag and drop ------------------------------------------------------
+   Native HTML5 — see the note on the handlers. These rules are the whole of
+   the affordance: a grip to say the row moves, a dimmed source while it is in
+   flight, a tinted column to say where it may land, and a line for exactly
+   where it will land. */
+
+.unit-row {
+  cursor: grab;
+}
+
+.unit-row:active {
+  cursor: grabbing;
+}
+
+/* The grip. Muted until the row is hovered, so a column of them does not read
+   as louder than the names beside them. */
+.unit-row > app-icon:first-child {
+  color: var(--ink-300);
+  flex-shrink: 0;
+}
+
+.unit-row:hover > app-icon:first-child {
+  color: var(--slate-500);
+}
+
+/*
+ * The row being dragged, NOT hidden.
+ *
+ * Left in place and faded: removing it would collapse the list under the
+ * cursor mid-drag and move every other row, so the insertion marker would
+ * point somewhere the user did not aim at.
+ */
+.unit-row.is-dragging {
+  opacity: 0.4;
+}
+
+.unit-list.is-drop-target {
+  background: var(--tint-blue);
+  outline: 2px dashed var(--accent-300);
+  outline-offset: -4px;
+}
+
+/* Where the row will land. `flex-shrink: 0` because the list is a flex column
+   and a 3px marker would otherwise be squeezed to nothing once the list is
+   full. */
+.unit-drop-line {
+  height: 3px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent-500);
+}
+
+/* ==========================================================================
+   REVIEW — two cards, as production has
+
+   The details, then what was chosen. Cards rather than one long list, because
+   the second half is a different KIND of thing: nine labelled facts followed by
+   a set of picked items reads as one undifferentiated table otherwise.
+   ========================================================================== */
+
+.review-card {
+  margin-bottom: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.review-card:last-child {
+  margin-bottom: 0;
+}
+
+.review-card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 12px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+
+.review-count {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--tint-blue);
+  color: var(--on-blue);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+/* Absent, not blank. A dash or "No image" says the field was READ and had
+   nothing in it, where an empty cell is indistinguishable from a rendering
+   bug. */
+.review-empty {
+  color: var(--ink-400);
+  font-style: italic;
+}
+
+.review-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--tint-amber);
+  color: var(--on-amber);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* Green for live, amber otherwise — the same two tints the learning-unit and
+   programme tables use for status, so one glance means the same thing on all
+   three screens. */
+.review-pill.is-live {
+  background: var(--tint-green);
+  color: var(--on-green);
+}
+
+.review-units {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.review-unit {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+/* The placeholder production draws for a unit with no thumbnail. A PickableUnit
+   carries no image at all, so every row shows it. */
+.review-thumb {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--ink-100);
+  color: var(--ink-400);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.review-unit-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.review-unit-text strong {
+  font-size: 13px;
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-unit-code {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent-600);
+}

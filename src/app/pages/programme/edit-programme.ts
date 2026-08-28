@@ -2,13 +2,14 @@ import { Component, computed, input, output, signal, inject } from '@angular/cor
 import { ConfigurationService } from '../../services/configuration.service';
 
 import { Icon } from '../../components/icon/icon';
+import { LearningUnitPicker } from '../../components/learning-unit-picker/learning-unit-picker';
 import {
   isActiveStatus,
   rangeLabel,
   scopeOf,
   statusLabel
 } from '../../data/programme-options';
-import { Programme } from '../../models/teaching.model';
+import { PickableUnit, Programme } from '../../models/teaching.model';
 
 /**
  * Edit Programme — the Basic Info form.
@@ -17,7 +18,7 @@ import { Programme } from '../../models/teaching.model';
  * Manage Assignments tabs; both were removed on instruction. Nothing about the
  * learningUnits collection, its rules or its trash changed with them — only this
  * dialog's tabs and the reads that fed them, so a programme's stored
- * `learningUnitsIds` and `assignmentIds` are left exactly as they are, written by
+ * `learningUnitsIds` is left exactly as it is, written by
  * nothing and read by nothing here.
  *
  * WHAT BASIC INFO SHOWS, AND WHAT IT DOES NOT. The field set is production's
@@ -42,7 +43,7 @@ import { Programme } from '../../models/teaching.model';
  */
 @Component({
   selector: 'app-edit-programme',
-  imports: [Icon],
+  imports: [Icon, LearningUnitPicker],
   templateUrl: './edit-programme.html',
   styleUrl: './edit-programme.css',
   /**
@@ -64,6 +65,14 @@ export class EditProgramme {
 
   readonly programme = input.required<Programme>();
 
+  /**
+   * The learning-unit catalogue, for the Manage Learning Units tab.
+   *
+   * Supplied by the parent, like the wizard's is: this dialog reads nothing, and
+   * toPickableUnits is where the live filter and the row shape live.
+   */
+  readonly units = input<PickableUnit[]>([]);
+
   readonly saving = input(false);
   readonly error = input('');
 
@@ -82,6 +91,37 @@ export class EditProgramme {
    * frame of empty fields first.
    */
   private readonly edits = signal<Partial<Programme> | null>(null);
+
+  /* ======================================================================
+     TABS — Basic Info, and Manage Learning Units
+
+     PRODUCTION HAD BOTH, and the second was removed on instruction along with
+     Manage Assignments. It is back on instruction too: without it a programme's
+     units could only ever be set at creation, so changing them meant recreating
+     the programme.
+
+     `learningUnitsIds` is edited exactly like every other field — through
+     `edits`, emitted on Save, written by ProgrammeService.update, which does not
+     strip it. Nothing about the collection, its rules or its trash is involved.
+     ====================================================================== */
+
+  readonly tabs = ['Basic Info', 'Learning Units'] as const;
+  readonly tab = signal<(typeof this.tabs)[number]>('Basic Info');
+
+  /**
+   * The units currently attached, in order.
+   *
+   * The EDIT if one has been made, otherwise what is stored — the same rule
+   * every other field here follows, so an untouched tab reports the stored list
+   * and a touched one reports the pending change.
+   */
+  readonly selectedIds = computed(
+    () => this.edits()?.learningUnitsIds ?? this.programme().learningUnitsIds ?? []
+  );
+
+  setUnits(ids: string[]): void {
+    this.patch('learningUnitsIds', ids);
+  }
 
   private field<K extends keyof Programme>(key: K): Programme[K] {
     const edited = this.edits();

@@ -901,6 +901,84 @@ export class TeacherService {
     return null;
   }
 
+  /**
+   * Every class allotted to one person, across every teacher document they hold.
+   *
+   * WHY A UNION AND NOT ONE READ. Assigning a registered teacher to another class
+   * creates ANOTHER teacher document for the same person — see the note on
+   * registeredName — so a single document holds only part of what they teach. A
+   * teacher with classes at two schools has two records, and reading either one
+   * alone would drop a whole institution off their dashboard.
+   *
+   * MATCHED THE WAY THE GATE MATCHES: by uid, then by either spelling of the
+   * stored number. On a first sign-in `linkSignedInUid` may not have stamped the
+   * uid yet, and the number is what the administrator actually typed.
+   *
+   * DEDUPLICATED BY classroomId. Two records for the same person can name the
+   * same class — nothing stops an administrator assigning it twice — and a
+   * dashboard that showed it twice would look broken rather than tolerant.
+   *
+   * DEACTIVATED RECORDS DO NOT COUNT, matching isRegisteredTeacher: a withdrawn
+   * teacher is not shown classes they no longer teach. The per-classroom
+   * `activeStatus` flag is left alone and rendered, because production shows an
+   * inactive class greyed rather than hiding it.
+   *
+   * A DENIED READ RETURNS NOTHING, as every reader in this app does — the
+   * dashboard's empty state is the honest rendering of "nothing to show".
+   */
+  async allottedClassrooms(uid: string, phoneDigits: string): Promise<TeacherClassroom[]> {
+    const clauses = [
+      ...(uid ? [where('teacherMeta.uid', '==', uid)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phoneNumber', '==', phoneDigits)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phone', '==', phoneDigits)] : [])
+    ];
+
+    if (clauses.length === 0) {
+      return [];
+    }
+
+    const byClassroom = new Map<string, TeacherClassroom>();
+
+    for (const clause of clauses) {
+      let snapshot;
+
+      try {
+        snapshot = await getDocs(query(activeTeachersCollection(), clause));
+      } catch {
+        continue;
+      }
+
+      for (const document of snapshot.docs) {
+        const data = document.data() as { active?: boolean; classrooms?: unknown };
+
+        if (data.active === false) {
+          continue;
+        }
+
+        const classrooms = data.classrooms;
+
+        if (!classrooms || typeof classrooms !== 'object') {
+          continue;
+        }
+
+        for (const [key, value] of Object.entries(classrooms as Record<string, unknown>)) {
+          // normaliseTeacherClassroom already falls back to the MAP KEY for
+          // classroomId, which is where the id actually lives — the field inside
+          // the entry repeats it, and an older entry may not carry it at all.
+          const entry = normaliseTeacherClassroom(key, (value ?? {}) as Partial<TeacherClassroom>);
+
+          // First one wins: the records carry the same class, so arbitrating
+          // between copies would be inventing a rule the data does not have.
+          if (entry.classroomId && !byClassroom.has(entry.classroomId)) {
+            byClassroom.set(entry.classroomId, entry);
+          }
+        }
+      }
+    }
+
+    return [...byClassroom.values()];
+  }
+
   /** Saves an edit. Ownership and school membership are not editable here. */
   async update(docId: string, patch: Partial<Teacher>): Promise<void> {
     const fields = withoutUndefinedTeacherFields(stripImmutableTeacherFields(patch));

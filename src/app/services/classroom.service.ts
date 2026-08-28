@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import {
   Timestamp,
   deleteDoc,
+  getDoc,
   getDocs,
   runTransaction,
   serverTimestamp,
@@ -141,6 +142,30 @@ export class ClassroomService {
   }
 
   /** Everything in the teacher's classroom trash, most recently deleted first. */
+  /**
+   * One classroom, by id.
+   *
+   * A DIRECT DOCUMENT READ, not a find over list(): the classroom page is
+   * opened by URL — including on a hard refresh or a shared link — and pulling
+   * the whole collection to locate one row would scale with everyone else's
+   * classrooms rather than with this one.
+   *
+   * Returns null for a missing document rather than throwing, so the page can
+   * say "that classroom no longer exists" instead of showing an error banner
+   * that reads like a fault.
+   */
+  async get(docId: string): Promise<Classroom | null> {
+    if (!docId) {
+      return null;
+    }
+
+    const snapshot = await getDoc(activeClassroomDoc(docId));
+
+    return snapshot.exists()
+      ? normaliseClassroom<Classroom>(snapshot.id, snapshot.data())
+      : null;
+  }
+
   async listTrash(): Promise<TrashedClassroom[]> {
     const snapshot = await getDocs(trashClassroomsCollection());
 
