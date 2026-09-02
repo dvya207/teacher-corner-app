@@ -672,6 +672,63 @@ describe('ClassroomWorkflow', () => {
     });
   });
 
+  describe('what the workflow document says about itself', () => {
+
+    /**
+     * PRODUCTION'S WORKFLOW NAMES NOTHING — not the classroom, not the programme,
+     * not the unit. `linkedClassrooms` is an empty map in all 324 documents that
+     * have it, so a workflow opened in the console gives no clue what it is for,
+     * and a trashed one cannot be put back. These fields are this app's own.
+     */
+    it('writes the classroom, programme and learning unit onto the document', async () => {
+      const { component, workflows } = await mount();
+
+      await component.save();
+
+      const draft = workflows.updated[0].draft as unknown as Record<string, string>;
+
+      expect(draft['classroomId']).toBe('c1');
+      expect(draft['programmeId']).toBe('p1');
+      expect(draft['learningUnitId']).toBe('u1');
+    });
+
+    /**
+     * A HAND-BUILT WORKFLOW GETS A MINTED TEMPLATE ID. Steps added by hand came
+     * from no template, so both template fields were blank — which is what
+     * prompted this. `custom-` prefixed so it cannot be mistaken for a
+     * WorkflowTemplates document id, which a bare copy of the workflow's own id
+     * would be.
+     */
+    it('mints a custom template id when no template was applied', async () => {
+      const { component, workflows } = await mount();
+
+      component.templateId.set('');
+      component.templateName.set('');
+
+      await component.save();
+
+      const draft = workflows.updated[0].draft as unknown as Record<string, string>;
+
+      expect(draft['templateId']).toMatch(/^custom-/);
+      expect(draft['templateName']).toBe('Custom workflow');
+    });
+
+    /** AND AN APPLIED TEMPLATE KEEPS ITS OWN ID, which is the whole point of it. */
+    it('keeps a real template id when one was applied', async () => {
+      const { component, workflows } = await mount();
+
+      component.templateId.set('wt-7');
+      component.templateName.set('Stem Club Standard');
+
+      await component.save();
+
+      const draft = workflows.updated[0].draft as unknown as Record<string, string>;
+
+      expect(draft['templateId']).toBe('wt-7');
+      expect(draft['templateName']).toBe('Stem Club Standard');
+    });
+  });
+
   describe('archiving a removed step', () => {
 
     /**

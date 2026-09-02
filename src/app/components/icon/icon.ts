@@ -36,7 +36,7 @@ export type IconName =
         [attr.width]="size()"
         [attr.height]="size()"
         viewBox="0 0 24 24"
-        fill="none"
+        [attr.fill]="filled() ? 'currentColor' : 'none'"
         stroke="currentColor"
         [attr.stroke-width]="strokeWidth()"
         stroke-linecap="round"
@@ -326,4 +326,19 @@ export class Icon {
   readonly name = input.required<IconName>();
   readonly size = input(20);
   readonly strokeWidth = input(1.8);
+
+  /**
+   * Fills the glyph from `currentColor` instead of drawing it as an outline.
+   *
+   * AN INPUT RATHER THAN A CSS RULE AT THE CALL SITE, and it has to be. The set
+   * is drawn `fill="none"` with a stroke, which is right for almost all of it —
+   * but a star rating needs SOLID stars, and an outlined star reads as "not
+   * chosen" whichever state it is in. A parent's scoped style cannot reach the
+   * `path`: emulated encapsulation stamps this component's own attribute on it,
+   * so `.af-star app-icon svg path { fill: … }` matched nothing and the stars
+   * stayed hollow on screen while the CSS looked correct.
+   *
+   * OFF BY DEFAULT, so every existing caller is unchanged.
+   */
+  readonly filled = input(false);
 }

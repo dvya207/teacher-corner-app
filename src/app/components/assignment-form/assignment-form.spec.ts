@@ -2,7 +2,6 @@ import { ComponentRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { AssignmentForm, FormOutcome } from './assignment-form';
-import { AnsweredFormQuestion } from '../../services/form-submission.service';
 import { ConfigurationService } from '../../services/configuration.service';
 import { FormQuestion } from '../../models/teaching.model';
 
@@ -56,10 +55,7 @@ interface Mounted {
   setInput: (name: string, value: unknown) => void;
 }
 
-function mount(
-  questions: FormQuestion[],
-  stored: AnsweredFormQuestion[] | null = null
-): Mounted {
+function mount(questions: FormQuestion[]): Mounted {
   TestBed.configureTestingModule({
     providers: [
       {
@@ -72,7 +68,6 @@ function mount(
   const fixture = TestBed.createComponent(AssignmentForm);
 
   fixture.componentRef.setInput('questions', questions);
-  fixture.componentRef.setInput('stored', stored);
   fixture.detectChanges();
 
   const outcomes: FormOutcome[] = [];
@@ -288,109 +283,13 @@ describe('AssignmentForm', () => {
     });
   });
 
-  describe('prefilling from a previous submission', () => {
-
-    /**
-     * MATCHED BY `questionNumber`. Position would be wrong the moment a question
-     * is inserted, and the consequence is not cosmetic: a form keeps no history,
-     * so a resubmission built on mismatched prefills overwrites the real answers
-     * with answers attached to the wrong questions.
-     */
-    it('fills answers in by question number, not by position', () => {
-      const stored: AnsweredFormQuestion[] = [
-        {
-          questionType: 'text',
-          questionNumber: 2,
-          question: 'Second',
-          prompt: '',
-          fieldIcon: null,
-          isSubquestion: false,
-          dropDownOptions: [],
-          answer: 'the second answer'
-        }
-      ];
-
-      const { component } = mount(
-        [
-          question({ questionNumber: 1, question: 'First' }),
-          question({ questionNumber: 2, question: 'Second' })
-        ],
-        stored
-      );
-
-      expect(component.value(0)).toBe('');
-      expect(component.value(1)).toBe('the second answer');
-    });
-
-    /** AND A PREFILLED FORM IS ALREADY UNLOCKED where the answers reach. */
-    it('unlocks a question whose predecessor was prefilled', () => {
-      const stored: AnsweredFormQuestion[] = [
-        {
-          questionType: 'text',
-          questionNumber: 1,
-          question: 'First',
-          prompt: '',
-          fieldIcon: null,
-          isSubquestion: false,
-          dropDownOptions: [],
-          answer: 'done'
-        }
-      ];
-
-      const { component } = mount(
-        [question({ questionNumber: 1 }), question({ questionNumber: 2 })],
-        stored
-      );
-
-      expect(component.isOpen(1)).toBe(true);
-    });
-
-    /** A stored star rating comes back as a number, so the stars light up. */
-    it('restores a star rating', () => {
-      const stored: AnsweredFormQuestion[] = [
-        {
-          questionType: 'starRating',
-          questionNumber: 1,
-          question: 'Rate it',
-          prompt: '',
-          fieldIcon: null,
-          isSubquestion: false,
-          dropDownOptions: [],
-          answer: 4
-        }
-      ];
-
-      const { component } = mount(
-        [question({ questionNumber: 1, questionType: 'starRating' })],
-        stored
-      );
-
-      expect(component.rating(0)).toBe(4);
-    });
-
-    /** An answer stored as '' is not a prefill, and must not unlock the next. */
-    it('ignores an empty stored answer', () => {
-      const stored: AnsweredFormQuestion[] = [
-        {
-          questionType: 'text',
-          questionNumber: 1,
-          question: 'First',
-          prompt: '',
-          fieldIcon: null,
-          isSubquestion: false,
-          dropDownOptions: [],
-          answer: ''
-        }
-      ];
-
-      const { component } = mount(
-        [question({ questionNumber: 1 }), question({ questionNumber: 2 })],
-        stored
-      );
-
-      expect(component.isOpen(1)).toBe(false);
-    });
-  });
+  /*
+   * THE PREFILL TESTS WERE HERE, and they went with the prefill itself. The form
+   * matched production and opened showing the stored submission; on instruction it
+   * now opens EMPTY every time. What that removed is worth remembering: a reader
+   * who submitted over a prefill was overwriting answers the fields had supplied,
+   * and a form keeps no version history to get them back from.
+   */
 
   describe('emptying the form after a successful submission', () => {
 
@@ -448,26 +347,6 @@ describe('AssignmentForm', () => {
       expect(component.value(0)).toBe('');
     });
 
-    /** NOTHING IS CLEARED BEFORE THE FIRST SUCCESS — a fresh form is not a cleared
-        one, and treating them alike would wipe a prefill on load. */
-    it('leaves a prefilled form alone at zero', () => {
-      const stored: AnsweredFormQuestion[] = [
-        {
-          questionType: 'text',
-          questionNumber: 1,
-          question: 'First',
-          prompt: '',
-          fieldIcon: null,
-          isSubquestion: false,
-          dropDownOptions: [],
-          answer: 'from before'
-        }
-      ];
-
-      const { component } = mount([question({ questionNumber: 1 })], stored);
-
-      expect(component.value(0)).toBe('from before');
-    });
   });
 
   describe('what submit reports', () => {

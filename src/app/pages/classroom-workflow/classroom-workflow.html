@@ -126,9 +126,31 @@
 
           @if (showTemplatePicker()) {
             <div class="field">
-              <label for="cw-template">Select the Workflow Template</label>
-              <select id="cw-template" (change)="chooseTemplate(valueOf($event))">
-                <option value="">Select a workflow Template</option>
+              <!-- ==========================================================
+                   NO SEPARATE FIELD LABEL, on instruction: three stacked lines
+                   all began with "Select".
+
+                   Production carries all three — the toggle's "Select New
+                   Template", a mat-label "Select the Workflow Template" and a
+                   placeholder "Select a workflow Template" — but Material FLOATS
+                   its label, so the middle one sits inside the field until
+                   something is chosen. Rendered as a plain label above a plain
+                   select, the same three read as repetition.
+
+                   THE TOGGLE ABOVE AND THE PLACEHOLDER BELOW both say what this
+                   is, so the label is the one that goes. `aria-label` keeps the
+                   select named for a screen reader, which a visible label was
+                   also doing.
+                   ========================================================== -->
+              <select
+                id="cw-template"
+                aria-label="Select the workflow template"
+                (change)="chooseTemplate(valueOf($event))"
+              >
+                <!-- DISABLED, so it cannot be chosen — production writes
+                     `<mat-option value="" disabled selected>` for the same
+                     reason. It labels the field; it is not one of the answers. -->
+                <option value="" disabled selected>Select a workflow Template</option>
                 @for (template of templateOptions(); track template.docId) {
                   <option [value]="template.docId">{{ template.templateName }}</option>
                 }
@@ -450,7 +472,6 @@
                   <app-assignment-form
                     [questions]="formQuestions()"
                     [instructions]="formInstructions()"
-                    [stored]="storedFormAnswers()"
                     [submitting]="formSubmitting()"
                     [submissionNote]="formNote()"
                     [submissionFailed]="formFailed()"

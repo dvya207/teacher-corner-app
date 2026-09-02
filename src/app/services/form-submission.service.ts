@@ -1,6 +1,12 @@
 import { Injectable, inject } from '@angular/core';
-import { arrayUnion, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import {
+  arrayUnion,
+  runTransaction,
+  serverTimestamp,
+  setDoc
+} from 'firebase/firestore';
 
+import { db } from '../core/firebase';
 import { submissionSummaryDoc, userProfileDoc } from '../core/firestore-paths';
 import { FormQuestion } from '../models/teaching.model';
 import { ConfigurationService } from './configuration.service';
@@ -65,9 +71,13 @@ export interface FormAnswers {
  * alternative is writing a subtree its own screens do not read; the reader is told
  * plainly that resubmitting replaces.
  *
- * ONE SUBMISSION PER FORM, NOT PER ATTEMPT, which follows from the same fact:
- * there is no attempt counter and no cap. A form can be resubmitted any number of
- * times and only the latest survives.
+ * ONE STORED SUBMISSION PER FORM, NOT ONE PER ATTEMPT, which follows from the
+ * same fact: with no `versions` subtree, a resubmission overwrites and only the
+ * latest survives.
+ *
+ * AND THE FORM DOES NOT PREFILL. Production reads the stored answers back and
+ * builds the form from those; this app opens an empty form every time, on
+ * instruction. `submissionCount` is the only record of how many have been sent.
  */
 @Injectable({ providedIn: 'root' })
 export class FormSubmissionService {
@@ -75,50 +85,51 @@ export class FormSubmissionService {
   private config = inject(ConfigurationService);
 
   /**
-   * The answers already recorded for this form, or null.
+   * Writes the answers. UNLIMITED SUBMISSIONS, on instruction.
    *
-   * READ SO THE FORM OPENS PREFILLED, which is production's behaviour: it reads
-   * the stored `questions` and builds the form from those instead of the
-   * assignment's, so a reader coming back sees what they submitted rather than an
-   * empty form they might fill in again from scratch.
-   */
-  async storedAnswers(
-    where: FormSubmissionTarget
-  ): Promise<AnsweredFormQuestion[] | null> {
-    const snapshot = await getDoc(
-      submissionSummaryDoc(where.uid, where.classroomId, where.programmeId)
-    );
-
-    if (!snapshot.exists()) {
-      return null;
-    }
-
-    const scope = snapshot.data()[scopeKey(where)] as
-      | Record<string, { questions?: AnsweredFormQuestion[] }>
-      | undefined;
-
-    const questions = scope?.[`assignmentId_${where.assignmentId}`]?.questions;
-
-    return Array.isArray(questions) && questions.length > 0 ? questions : null;
-  }
-
-  /**
-   * Writes the answers.
+   * NO CAP, which is production's behaviour too — its quiz counts attempts and
+   * its form does not. A cap of two was briefly added here and then removed: the
+   * ask was for the FIELDS to be empty each time, not for the submissions to run
+   * out.
    *
    * MERGED, NEVER SET WHOLE. One summary document holds every assignment, every
    * upload and every quiz attempt for a classroom and programme; a whole-document
    * write would take the rest with it.
+   *
+   * STILL A TRANSACTION, because `submissionCount` is derived from what is already
+   * there. Nothing gates on that number — it is the only trace that more than one
+   * submission ever happened, since a form keeps no version history — but two tabs
+   * submitting at once should not both write "2".
    */
-  async save(where: FormSubmissionTarget, answers: FormAnswers): Promise<void> {
+  async save(where: FormSubmissionTarget, answers: FormAnswers): Promise<number> {
     const summary = submissionSummaryDoc(
       where.uid,
       where.classroomId,
       where.programmeId
     );
 
-    await setDoc(
-      summary,
-      stripUndefined({
+    const attempt = await runTransaction(db, async transaction => {
+      const snapshot = await transaction.get(summary);
+      const record = snapshot.exists()
+        ? (
+            snapshot.data()[scopeKey(where)] as
+              | Record<string, { questions?: unknown[]; submissionCount?: number }>
+              | undefined
+          )?.[`assignmentId_${where.assignmentId}`]
+        : undefined;
+
+      /* A RECORD WITH ANSWERS BUT NO COUNT COUNTS AS ONE, so a form submitted
+         before this field existed does not restart at one. */
+      const stored = Number(record?.submissionCount);
+      const used = Number.isFinite(stored) && stored > 0
+        ? stored
+        : Array.isArray(record?.questions) && record.questions.length > 0
+          ? 1
+          : 0;
+
+      transaction.set(
+        summary,
+        stripUndefined({
         [scopeKey(where)]: {
           [`assignmentId_${where.assignmentId}`]: {
             /*
@@ -138,6 +149,13 @@ export class FormSubmissionService {
                from a device-info lookup this app has no equivalent of, and writes
                '' itself when that lookup fails. */
             clientIp: '',
+            /*
+             * HOW MANY TIMES THIS FORM HAS BEEN SUBMITTED. This app's own field:
+             * production keeps no `versions` subtree for a form, so without this
+             * a document holding one submission and a document holding twenty
+             * look identical. NOTHING GATES ON IT — submissions are unlimited.
+             */
+            submissionCount: used + 1,
             ...answers
           }
         },
@@ -145,8 +163,11 @@ export class FormSubmissionService {
         createdAt: serverTimestamp(),
         submissionMeta: arrayUnion({ clientIp: '', submissionTime: new Date() })
       }) as Record<string, unknown>,
-      { merge: true }
-    );
+        { merge: true }
+      );
+
+      return used + 1;
+    });
 
     /*
      * OUTSIDE THE WRITE ABOVE AND ALLOWED TO FAIL ON ITS OWN. Production marks
@@ -163,6 +184,8 @@ export class FormSubmissionService {
     } catch {
       /* The answers are written; this index is not worth failing the submit for. */
     }
+
+    return attempt;
   }
 
   /**

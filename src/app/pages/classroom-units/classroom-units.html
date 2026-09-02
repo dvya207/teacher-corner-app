@@ -189,7 +189,10 @@
                 <td class="cu-cell-name" [title]="unit.name">{{ unit.name || '—' }}</td>
                 <td>{{ unit.type || '—' }}</td>
                 <td>{{ languageName(unit.language) }}</td>
-                <td>{{ unit.minutes > 0 ? unit.minutes + ' min' : '—' }}</td>
+                <!-- THE WORKFLOW'S OWN TOTAL where the unit has one — see
+                     `cardMinutes`. The unit's `totalTime` defaults to 45, so a
+                     unit nobody edited claims 45 minutes whatever its steps say. -->
+                <td>{{ cardMinutes(unit) > 0 ? cardMinutes(unit) + ' min' : '—' }}</td>
                 <td>
                   <span class="cu-chip" [class.is-scheduled]="unit.scheduled">
                     {{ unit.scheduled || 'Not scheduled' }}
@@ -259,11 +262,14 @@
 
               <p class="cu-meta">
                 <span>{{ languageName(unit.language) }}</span>
-                @if (unit.minutes > 0) {
+                <!-- GUARDED ON THE SAME NUMBER IT PRINTS. This read
+                     `unit.minutes`, so a unit whose own totalTime was 0 hid the
+                     row even once its workflow had minutes to show. -->
+                @if (cardMinutes(unit) > 0) {
                   <span class="cu-dot" aria-hidden="true">·</span>
                   <span class="cu-time">
                     <app-icon name="clipboard" [size]="13" />
-                    {{ unit.minutes }} min
+                    {{ cardMinutes(unit) }} min
                   </span>
                 }
               </p>

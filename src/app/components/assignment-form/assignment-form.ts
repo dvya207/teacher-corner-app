@@ -29,6 +29,11 @@ export interface FormOutcome {
  * form, and a Feedback step whose feedback cannot be given is a step that does
  * nothing.
  *
+ * IT NEVER PREFILLS AND EMPTIES AFTER EACH SUBMISSION, on instruction — so the
+ * fields are blank every time a step is opened, whatever was sent before.
+ * Submissions are unlimited; `submissionCount` on the record is the only trace of
+ * how many there have been.
+ *
  * ANSWERS UNLOCK IN ORDER, which is production's rule and the surprising part of
  * this component: every field after the first is DISABLED until the one before it
  * has an answer. Its `addQuestion` creates each control with
@@ -55,9 +60,6 @@ export class AssignmentForm {
   readonly questions = input.required<readonly FormQuestion[]>();
   readonly instructions = input('');
 
-  /** Answers already recorded, so a reader coming back sees what they submitted. */
-  readonly stored = input<readonly AnsweredFormQuestion[] | null>(null);
-
   readonly submitting = input(false);
   /** What the parent's write did. Blank until something has been submitted. */
   readonly submissionNote = input('');
@@ -83,52 +85,17 @@ export class AssignmentForm {
 
   constructor() {
     /*
-     * PREFILLS FROM THE STORED SUBMISSION, matched by `questionNumber`.
-     *
-     * BY NUMBER RATHER THAN BY POSITION, because the two can disagree: the stored
-     * answers were written against the form as it was, and a question inserted
-     * since would shift every position after it — silently attaching one
-     * question's answer to another. `questionNumber` is stored on both sides and
-     * survives an edit.
-     */
-    effect(() => {
-      const stored = this.stored();
-      const questions = this.questions();
-
-      if (!stored || stored.length === 0) {
-        return;
-      }
-
-      const filled: Record<number, string | number> = {};
-
-      questions.forEach((question, at) => {
-        const previous = stored.find(
-          entry => entry.questionNumber === question.questionNumber
-        );
-
-        if (previous && previous.answer !== '' && previous.answer !== undefined) {
-          filled[at] = previous.answer;
-        }
-      });
-
-      this.answers.set(filled);
-    });
-
-    /*
      * EMPTIES THE FORM AFTER A SUCCESSFUL SUBMISSION, on instruction.
      *
-     * THIS OVERRIDES THE PREFILL ABOVE, and the two would otherwise fight: the
-     * parent sets the stored answers to what was just submitted, which would
-     * refill the form the instant it was cleared. So the parent clears its stored
-     * copy at the same moment it bumps this counter — see `submitForm`.
+     * NOT PRODUCTION'S BEHAVIOUR, and the departure is deliberate on both halves:
+     * its form PREFILLS from the stored submission and stays filled after
+     * submitting. This one never prefills and empties itself after each send, so
+     * every reader starts from a blank form rather than editing somebody's
+     * previous answers.
      *
-     * NOT PRODUCTION'S BEHAVIOUR, and worth naming as a departure: its form stays
-     * filled after submitting, which is consistent with it prefilling from the
-     * stored submission. An emptied form is the "submit another response" reading,
-     * and it comes with a cost worth stating out loud — a form keeps NO version
-     * history, so submitting again overwrites, and an empty form no longer shows
-     * what would be overwritten. The popup and the note under it are what carry
-     * that warning instead.
+     * A PREFILL WAS BUILT FIRST, matching production, and removed on instruction.
+     * What it cost: a form keeps no version history, so a reader who submitted
+     * over a prefill was overwriting answers the fields had put there for them.
      */
     effect(() => {
       const cleared = this.clearedAt();

@@ -16,6 +16,7 @@ import {
   Classroom,
   ClassroomProgramme,
   LearningUnit,
+  WorkflowStep,
   classLabel
 } from '../../models/teaching.model';
 import { ClassroomService } from '../../services/classroom.service';
@@ -24,6 +25,7 @@ import { LearningUnitService } from '../../services/learning-unit.service';
 import { PageContextService } from '../../services/page-context.service';
 import { ProgrammeService } from '../../services/programme.service';
 import { ResourceLinkService } from '../../services/resource-link.service';
+import { WorkflowService } from '../../services/workflow.service';
 
 /** One card on this page: a learning unit, plus what the classroom says about it. */
 export interface ClassroomUnit {
@@ -31,7 +33,18 @@ export interface ClassroomUnit {
   code: string;
   name: string;
   language: string;
+  /** The learning unit's own `totalTime`. Production's card shows this. */
   minutes: number;
+  /**
+   * The sum of this unit's WORKFLOW step durations, or 0 when it has no workflow.
+   *
+   * SEPARATE FROM `minutes` rather than overwriting it, because the two answer
+   * different questions and the card has to be able to fall back: `minutes` is
+   * what the unit was authored to take (45 by default, straight off production's
+   * own template), and this is how long the steps a teacher actually built add up
+   * to. Where a workflow exists, that is the honest number for this class.
+   */
+  workflowMinutes: number;
   /** Storage path of the unit's thumbnail, or '' — see the note on the card. */
   imagePath: string;
   /** Empty when the classroom has no open/close dates for this unit. */
@@ -81,6 +94,7 @@ export class ClassroomUnits implements OnInit {
   private programmes = inject(ProgrammeService);
   private learningUnits = inject(LearningUnitService);
   private links = inject(ResourceLinkService);
+  private workflows = inject(WorkflowService);
   private config = inject(ConfigurationService);
   private pageContext = inject(PageContextService);
 
@@ -395,6 +409,7 @@ export class ClassroomUnits implements OnInit {
           name: unit.learningUnitDisplayName || unit.learningUnitName,
           language: unit.isoCode,
           minutes: Number(unit.totalTime) || 0,
+          workflowMinutes: 0,
           imagePath: unit.learningUnitPreviewImage || unit.learningUnitImage || '',
           scheduled: scheduleLabel(programme, unit.docId),
           type: unit.type
@@ -404,6 +419,70 @@ export class ClassroomUnits implements OnInit {
     // AFTER the cards are on screen. Each is one Storage round trip, and a card
     // must not wait on an image to render its name and duration.
     void this.resolveThumbnails();
+    void this.resolveWorkflowMinutes(programme);
+  }
+
+  /**
+   * Adds up each unit's workflow step durations.
+   *
+   * WHY THE CARD SHOWS THIS RATHER THAN THE UNIT'S OWN TIME. `totalTime` is
+   * authored on the learning unit and defaults to 45 — production's own
+   * `add-new-learningunit` writes `totalTime: 45` literally — so every unit
+   * nobody has edited claims 45 minutes. The workflow is the plan a teacher
+   * actually built for this class, and its steps carry the minutes they wrote. A
+   * card saying 45 beside a workflow of 20 + 15 is reporting a default.
+   *
+   * A DEPARTURE FROM PRODUCTION, which shows `totalTime` on its card and does not
+   * read the workflow at all.
+   *
+   * AFTER THE CARDS RENDER, and only for units that HAVE a workflow — the
+   * classroom's own entry says which without a read, so a programme of six units
+   * where two have been started costs two reads rather than six. A card shows the
+   * unit's own time until its workflow lands, and keeps it if the read fails.
+   */
+  private async resolveWorkflowMinutes(programme: ClassroomProgramme): Promise<void> {
+    const entries = (programme.workflowIds ?? []).filter(entry => entry.workflowId);
+
+    if (entries.length === 0) {
+      return;
+    }
+
+    const totals = await Promise.all(
+      entries.map(async entry => {
+        try {
+          const workflow = await this.workflows.get(entry.workflowId);
+
+          return {
+            learningUnitId: entry.learningUnitId,
+            minutes: workflowMinutes(workflow?.workflowSteps ?? [])
+          };
+        } catch {
+          /* A refused or missing workflow leaves the card on the unit's own
+             time, which is what it is already showing. */
+          return { learningUnitId: entry.learningUnitId, minutes: 0 };
+        }
+      })
+    );
+
+    const byUnit = new Map(totals.map(total => [total.learningUnitId, total.minutes]));
+
+    this.units.update(units =>
+      units.map(unit => ({
+        ...unit,
+        workflowMinutes: byUnit.get(unit.docId) ?? 0
+      }))
+    );
+  }
+
+  /**
+   * What the card shows.
+   *
+   * THE WORKFLOW WINS WHERE IT HAS ONE. Zero means either no workflow or a
+   * workflow whose steps carry no durations at all, and both fall back to the
+   * unit's authored time rather than showing '0 min'.
+   */
+  cardMinutes(unit: ClassroomUnit): number {
+    return unit.workflowMinutes > 0 ? unit.workflowMinutes : unit.minutes;
   }
 
   /**
@@ -455,6 +534,23 @@ export class ClassroomUnits implements OnInit {
   valueOf(event: Event): string {
     return (event.target as HTMLInputElement | HTMLSelectElement).value;
   }
+}
+
+/**
+ * The total minutes a workflow's steps add up to.
+ *
+ * `workflowStepDuration` IS `number | string`, and the stored values are why this
+ * coerces rather than adds: measured across production's 238 template steps it
+ * holds a number in 221, the empty string in 6 and null in 11. `Number('')` and
+ * `Number(null)` are both 0, but `Number(undefined)` is NaN — and one NaN would
+ * make the whole total NaN and the card read 'NaN min'.
+ */
+export function workflowMinutes(steps: readonly WorkflowStep[]): number {
+  return steps.reduce((total, step) => {
+    const minutes = Number(step.workflowStepDuration);
+
+    return total + (Number.isFinite(minutes) && minutes > 0 ? minutes : 0);
+  }, 0);
 }
 
 /**

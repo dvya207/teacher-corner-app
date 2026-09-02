@@ -7,12 +7,14 @@ import {
   Classroom,
   ClassroomProgramme,
   LearningUnit,
-  Programme
+  Programme,
+  WorkflowStep,
+  emptyWorkflowStep
 } from '../../models/teaching.model';
 import { ClassroomService } from '../../services/classroom.service';
 import { LearningUnitService } from '../../services/learning-unit.service';
 import { ProgrammeService } from '../../services/programme.service';
-import { ClassroomUnits } from './classroom-units';
+import { ClassroomUnits, workflowMinutes } from './classroom-units';
 
 /**
  * A classroom's learning units.
@@ -398,5 +400,48 @@ describe('ClassroomUnits', () => {
 
     expect(component.programmeTabs()).toEqual([]);
     expect(component.units()).toEqual([]);
+  });
+});
+
+/** One workflow step, with only the field this sum reads. */
+function step(workflowStepDuration: unknown): WorkflowStep {
+  return { ...emptyWorkflowStep(1), workflowStepDuration } as WorkflowStep;
+}
+
+describe('workflowMinutes', () => {
+
+  /**
+   * WHAT THE CARD NOW SHOWS. A learning unit's own `totalTime` defaults to 45 —
+   * production writes `totalTime: 45` literally when creating one — so a unit
+   * nobody edited claims 45 minutes whatever its steps say. The workflow is the
+   * plan a teacher actually built, so its steps are what the card adds up.
+   */
+  it('adds the step durations', () => {
+    expect(workflowMinutes([step(20), step(10), step(20), step(4)])).toBe(54);
+  });
+
+  it('is zero for a workflow with no steps', () => {
+    expect(workflowMinutes([])).toBe(0);
+  });
+
+  /**
+   * THE COERCION IS THE POINT OF THIS FUNCTION. Measured across production's 238
+   * template steps, `workflowStepDuration` holds a number in 221, the empty
+   * string in 6 and null in 11 — and a single NaN in a reduce makes the whole
+   * total NaN, so the card would read 'NaN min'.
+   */
+  it('skips the empty string, null and undefined', () => {
+    expect(workflowMinutes([step(20), step(''), step(null), step(undefined)])).toBe(20);
+    expect(Number.isNaN(workflowMinutes([step(undefined)]))).toBe(false);
+  });
+
+  /** A number stored as a string still counts — production holds both. */
+  it('counts a numeric string', () => {
+    expect(workflowMinutes([step('15'), step(5)])).toBe(20);
+  });
+
+  /** Nonsense and negatives contribute nothing rather than subtracting. */
+  it('ignores a negative or unparseable duration', () => {
+    expect(workflowMinutes([step(10), step(-30), step('soon')])).toBe(10);
   });
 });

@@ -60,14 +60,30 @@
 }
 
 /* The current step's name, as production badges it. */
+/*
+ * THE CURRENT STEP'S NAME.
+ *
+ * `max-width: 100%` AND WRAPPING, because a real template's step names are long
+ * — "Activity Demonstration & Preparation", "Make / Create (Core Execution)" —
+ * and without a ceiling the pill sized itself to its text and ran straight out of
+ * the rail, past its own rounded background and under the content pane. It sizes
+ * to its content up to the rail's width and then wraps inside the pill.
+ *
+ * `overflow-wrap` FOR THE PATHOLOGICAL CASE: a single unbroken word longer than
+ * the rail has nowhere to wrap, so it is allowed to break mid-word rather than
+ * overflow.
+ */
 .cw-step-pill {
   align-self: flex-start;
+  max-width: 100%;
   padding: 6px 14px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-lg);
   background: var(--tint-blue);
   font-size: 14px;
   font-weight: 650;
+  line-height: 1.4;
   color: var(--accent-600);
+  overflow-wrap: anywhere;
 }
 
 .cw-step-note {

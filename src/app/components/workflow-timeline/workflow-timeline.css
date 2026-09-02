@@ -82,20 +82,55 @@
   min-width: 0;
 }
 
+/*
+ * UP TO TWO LINES, THEN ELLIPSISED — not one line, which is what this was.
+ *
+ * A REAL TEMPLATE'S STEPS HAVE LONG NAMES: "Activity Demonstration &
+ * Preparation", "Make / Create (Core Execution)", "Teacher Feedback &
+ * Reflection". Clamped to one line, every one of those became
+ * "Activity Demonstratio…" and the rail turned into a column of prefixes a reader
+ * could not tell apart. Two lines fits all of them and still bounds the row.
+ *
+ * `-webkit-line-clamp` IS THE ONLY WAY TO DO THIS IN CSS and it is supported
+ * everywhere this app runs, prefix included — the unprefixed `line-clamp` is not
+ * yet universal. `overflow-wrap` handles a single word longer than the column.
+ */
 .wt-tl-title strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.35;
   color: var(--ink-900);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /*
- * THE ACTIONS SIT INLINE WITH THE NAME, which is production's arrangement — not
- * pushed to a far edge. In a 420px column there is no far edge worth reaching for,
- * and beside the name is where they read as belonging to that step.
+ * THE ACTIONS GET THEIR OWN COLUMN, pinned right and aligned to the FIRST line of
+ * the name.
+ *
+ * THEY USED TO TRAIL THE TEXT, which is production's arrangement and which worked
+ * while every name was short. Once names wrap, trailing text puts Edit and Delete
+ * at a different height on every row — some beside line one, some beside line two
+ * — and a column of controls that moves as you scan it is the opposite of
+ * scannable. `margin-left: auto` fixes them to the right edge; `flex-shrink: 0`
+ * stops a long name squeezing them.
  */
+.wt-tl-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  /* PUSHED RIGHT, and top-aligned so a two-line name does not drag the icons
+     down with its second line. */
+  margin-left: auto;
+  padding-top: 8px;
+  align-self: flex-start;
+}
+
 .wt-tl-act {
   display: inline-grid;
   place-items: center;

@@ -2457,6 +2457,40 @@ export interface Workflow {
    */
   linkedClassrooms: Record<string, unknown>;
 
+  /* ========================================================================
+   * WHERE THIS WORKFLOW BELONGS — this app's own fields.
+   *
+   * PRODUCTION'S WORKFLOW DOCUMENT NAMES NOTHING. Not the classroom, not the
+   * programme, not the learning unit: `linkedClassrooms` is an empty map in all
+   * 324 documents that carry it, and the only route to a workflow is the
+   * classroom's own `programmes[id].workflowIds[]`. Open one in the console and
+   * there is no way to tell what it is for.
+   *
+   * SO THEY ARE WRITTEN HERE, on instruction, and they pay for themselves three
+   * times over: the console becomes readable, a trashed workflow can be put back
+   * (see WorkflowTrashOrigin, which existed only because of this gap), and the
+   * classroom-units card can total a unit's step durations without walking the
+   * classroom first.
+   *
+   * DENORMALISED, WHICH MEANS IT CAN GO STALE. A classroom renamed after this was
+   * written still reads by its old name here. That is the trade every
+   * denormalised copy makes, and production makes it constantly — its own
+   * `workflowIds` entries carry `learningUnitCode` and `learningUnitName` for
+   * exactly this reason. The IDS are the authority; the names are a convenience
+   * for whoever is reading the document.
+   * ======================================================================== */
+
+  classroomId: string;
+  /** 'Grade 8 D', from classLabel. Denormalised — see above. */
+  classroomName: string;
+
+  programmeId: string;
+  programmeName: string;
+
+  learningUnitId: string;
+  learningUnitCode: string;
+  learningUnitName: string;
+
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
 }
@@ -2544,7 +2578,16 @@ export interface TrashedWorkflow extends Workflow {
  */
 export type WorkflowDraft = Pick<
   Workflow,
-  'templateId' | 'templateName' | 'workflowSteps'
+  | 'templateId'
+  | 'templateName'
+  | 'workflowSteps'
+  | 'classroomId'
+  | 'classroomName'
+  | 'programmeId'
+  | 'programmeName'
+  | 'learningUnitId'
+  | 'learningUnitCode'
+  | 'learningUnitName'
 >;
 
 /**

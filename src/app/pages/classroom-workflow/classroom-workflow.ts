@@ -32,6 +32,7 @@ import {
   Workflow,
   WorkflowContent,
   WorkflowStep,
+  WorkflowDraft,
   WorkflowTemplate,
   Assignment,
   FormQuestion,
@@ -73,7 +74,6 @@ import {
   UploadTarget
 } from '../../services/assignment-upload.service';
 import {
-  AnsweredFormQuestion,
   FormSubmissionService,
   FormSubmissionTarget
 } from '../../services/form-submission.service';
@@ -840,16 +840,14 @@ export class ClassroomWorkflow implements OnInit {
     });
 
     /*
-     * AND THE SAME FOR A FORM. Separate from the effect above rather than folded
-     * into it, because the two track different signals: an upload's stored path
-     * changes with the open SLOT, a form's answers with the open ASSIGNMENT. One
-     * effect reading both would re-read a form's submission every time a reader
-     * clicked between upload tiles.
+     * CLEARS THE FORM'S LAST RESULT when a different assignment opens, so one
+     * step's "Form Submitted Successfully" does not greet a reader arriving at
+     * another. Nothing is READ here: the form never prefills, so there is no
+     * stored submission to fetch.
      */
     effect(() => {
-      this.openAssignment();
+      void this.openAssignment();
 
-      void this.readStoredForm();
       this.formNote.set('');
       this.formFailed.set(false);
     });
@@ -1249,33 +1247,6 @@ export class ClassroomWorkflow implements OnInit {
   readonly popup = signal('');
   readonly popupNote = signal('');
 
-  /** Answers already recorded, so the form opens showing them. */
-  readonly storedFormAnswers = signal<AnsweredFormQuestion[] | null>(null);
-
-  /**
-   * Reads back a previous submission for the open form.
-   *
-   * PRODUCTION DOES THE SAME and it matters more here than it looks: a form has
-   * NO version history — the block is commented out in its own source — so
-   * resubmitting overwrites. Opening an empty form over answers that already
-   * exist invites exactly that.
-   */
-  private async readStoredForm(): Promise<void> {
-    const target = this.formTarget();
-
-    this.storedFormAnswers.set(null);
-
-    if (!target) {
-      return;
-    }
-
-    try {
-      this.storedFormAnswers.set(await this.forms.storedAnswers(target));
-    } catch {
-      this.storedFormAnswers.set(null);
-    }
-  }
-
   /** `null` where a form submission cannot be addressed yet. */
   private formTarget(): FormSubmissionTarget | null {
     const assignment = this.openAssignment();
@@ -1320,19 +1291,12 @@ export class ClassroomWorkflow implements OnInit {
       /* PRODUCTION'S OWN WORDING, in the popup rather than inline. */
       this.popup.set('Feedback submitted');
       this.popupNote.set(
-        'Your answers are saved. The form has been cleared — submitting it again replaces what was just stored.'
+        'Your answers are saved. The form has been cleared, ready for the next one.'
       );
       this.formNote.set('Form Submitted Successfully');
 
-      /*
-       * THE FORM IS EMPTIED, on instruction.
-       *
-       * THE STORED COPY IS CLEARED IN THE SAME BREATH, and that pairing is the
-       * whole trick: the form prefills from `storedFormAnswers`, so setting it to
-       * what was just submitted — which is what this used to do — would refill
-       * every field the instant the counter emptied them.
-       */
-      this.storedFormAnswers.set(null);
+      /* THE FORM IS EMPTIED, on instruction. It never prefills, so there is no
+         stored copy to clear alongside — see AssignmentForm. */
       this.formClearedAt.update(count => count + 1);
     } catch (error) {
       this.formFailed.set(true);
@@ -1667,11 +1631,7 @@ export class ClassroomWorkflow implements OnInit {
     this.steps.set(steps);
     this.reportDropped(droppedSteps, droppedContent);
 
-    const draft = {
-      templateId: this.templateId(),
-      templateName: this.templateName(),
-      workflowSteps: steps
-    };
+    const draft = { ...this.context(), workflowSteps: steps };
 
     try {
       const existing = this.workflow();
@@ -1766,6 +1726,42 @@ export class ClassroomWorkflow implements OnInit {
       classroomId: this.classroomId(),
       programmeId: this.programmeId(),
       learningUnitId: this.unitId()
+    };
+  }
+
+  /**
+   * WHAT THIS WORKFLOW IS FOR, written onto the document itself.
+   *
+   * Production's workflow names none of this — see the model's note — so a
+   * document in the console gives no clue which classroom, programme or unit it
+   * belongs to. These fields are this app's own and are rewritten on every save,
+   * so a renamed classroom catches up the next time somebody saves.
+   *
+   * THE TEMPLATE ID IS MINTED FOR A HAND-BUILT WORKFLOW, which is the other half:
+   * steps added by hand came from no template, so both template fields were
+   * blank. `custom-{workflowId}` says what it is and cannot be mistaken for a
+   * WorkflowTemplates document id, which a bare copy of the workflow's own id
+   * would be. Production leaves both empty in 9 of its 398.
+   */
+  private context(): Omit<WorkflowDraft, 'workflowSteps'> {
+    const classroom = this.classroom();
+    const programme = classroom?.programmes?.[this.programmeId()];
+    const unit = this.unit();
+    const stored = this.workflow();
+    const applied = this.templateId();
+
+    return {
+      templateId: applied || `custom-${stored?.docId ?? this.unitId()}`,
+      templateName: this.templateName() || 'Custom workflow',
+
+      classroomId: this.classroomId(),
+      classroomName: classroom ? classLabel(classroom) : '',
+      programmeId: this.programmeId(),
+      programmeName: programme?.displayName || programme?.programmeName || '',
+      learningUnitId: this.unitId(),
+      learningUnitCode: unit?.learningUnitCode ?? '',
+      learningUnitName:
+        unit?.learningUnitDisplayName || unit?.learningUnitName || this.unitName()
     };
   }
 

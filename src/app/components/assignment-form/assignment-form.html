@@ -47,7 +47,7 @@
                   [attr.aria-label]="star + ' of 5'"
                   (click)="set(qIndex, star)"
                 >
-                  <app-icon name="star" [size]="26" />
+                  <app-icon name="star" [size]="26" [filled]="true" />
                 </button>
               }
 
@@ -155,7 +155,8 @@
       <!-- SAID PLAINLY, because it is a real consequence and not a detail:
            production keeps no version history for a form — the block exists in
            its source and is commented out — so a second submission overwrites the
-           first with nothing kept. -->
+           first with nothing kept. Submissions are unlimited; only the latest
+           survives. -->
       @if (submissionNote() && !submissionFailed()) {
         <p class="af-note af-centred">
           Submitting again replaces these answers.

@@ -145,10 +145,12 @@
 }
 
 /*
- * FILLED STARS. The shared icon draws every glyph with `fill="none"` and a
- * stroke, which is right for the rest of the set and wrong here — an outlined
- * star reads as "not chosen" whichever state it is in. A CSS rule beats the
- * presentation attribute, so the path is filled from currentColor.
+ * FILLED STARS, via the icon's own `filled` input rather than a rule here.
+ *
+ * THIS WAS A CSS RULE AND IT DID NOTHING. `.af-star app-icon svg path { fill:
+ * currentColor }` cannot match: emulated encapsulation stamps the ICON
+ * component's attribute on that path, not this component's, so the stars
+ * rendered hollow on screen while the stylesheet looked right.
  */
 .af-star {
   display: grid;
@@ -159,10 +161,6 @@
   color: var(--ink-300);
   cursor: pointer;
   transition: color 0.12s var(--ease), transform 0.12s var(--ease);
-}
-
-.af-star app-icon svg path {
-  fill: currentColor;
 }
 
 .af-star:hover:not(:disabled) {
@@ -256,4 +254,14 @@
   .af-card {
     padding: 20px 18px 24px;
   }
+}
+
+/* The submissions-left line, once there are none. Amber rather than red: the
+   form is spent, not broken. */
+.af-note.is-spent {
+  padding: 9px 14px;
+  border-radius: var(--radius-md);
+  background: var(--tint-amber);
+  font-weight: 600;
+  color: var(--on-amber);
 }

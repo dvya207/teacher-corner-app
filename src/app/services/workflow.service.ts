@@ -473,6 +473,16 @@ export function normaliseWorkflow(
     isLocalHost: data['isLocalHost'] === true,
     linkedClassrooms:
       (data['linkedClassrooms'] as Record<string, unknown>) ?? {},
+
+    /* THIS APP'S OWN CONTEXT FIELDS, defaulted so a document written before they
+       existed reads as blanks rather than as undefined. */
+    classroomId: (data['classroomId'] as string) ?? '',
+    classroomName: (data['classroomName'] as string) ?? '',
+    programmeId: (data['programmeId'] as string) ?? '',
+    programmeName: (data['programmeName'] as string) ?? '',
+    learningUnitId: (data['learningUnitId'] as string) ?? '',
+    learningUnitCode: (data['learningUnitCode'] as string) ?? '',
+    learningUnitName: (data['learningUnitName'] as string) ?? '',
     workflowSteps: template.workflowSteps,
     createdAt: (data['createdAt'] as Workflow['createdAt']) ?? null,
     updatedAt: (data['updatedAt'] as Workflow['updatedAt']) ?? null
