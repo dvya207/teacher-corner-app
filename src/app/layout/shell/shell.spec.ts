@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 
 import {
   AllottedInstitution,
@@ -93,7 +93,7 @@ async function mount(): Promise<{ fixture: ComponentFixture<Shell>; el: HTMLElem
 
 describe('Shell — sidebar navigation', () => {
 
-  it('lists the five admin pages in order, Set Up Wizard first and Learning Units last', async () => {
+  it('lists the seven admin pages in order, Set Up Wizard first', async () => {
     const { fixture } = await mount();
 
     expect(fixture.componentInstance.adminNav.map(item => item.label)).toEqual([
@@ -101,7 +101,14 @@ describe('Shell — sidebar navigation', () => {
       'Institutions',
       'Classrooms',
       'Programme',
-      'Learning Units'
+      'Learning Units',
+      // Assignments comes AFTER Learning Units, as production's sidebar has it:
+      // the things a classroom is set come after the things it is built from.
+      'Assignments',
+      // Workflow Templates last, which is also where production's sidebar puts
+      // it: a blueprint is upstream of everything above, but it is the page
+      // reached least often.
+      'Workflow Templates'
     ]);
   });
 
@@ -209,7 +216,18 @@ describe('Shell — sidebar navigation', () => {
  */
 describe('Shell — the Institutions tree', () => {
 
+  /**
+   * Mirrors the real service's SHARED signal.
+   *
+   * The shell reads `dashboard.allotment()` rather than holding its own copy —
+   * the sidebar tree and the dashboard cards must not drift apart — so a stub
+   * that only offered myAllotment() left the tree permanently empty.
+   */
   class StubDashboardService {
+    readonly allotment = signal<TeacherAllotment>({ institutions: [], classroomCount: 0 });
+    readonly allotmentLoading = signal(true);
+  readonly allotmentError = signal('');
+
     constructor(private institutions: AllottedInstitution[]) {}
 
     async myAllotment(): Promise<TeacherAllotment> {
@@ -217,6 +235,11 @@ describe('Shell — the Institutions tree', () => {
         institutions: this.institutions,
         classroomCount: this.institutions.reduce((n, i) => n + i.classrooms.length, 0)
       };
+    }
+
+    async refresh(): Promise<void> {
+      this.allotment.set(await this.myAllotment());
+      this.allotmentLoading.set(false);
     }
   }
 
@@ -232,6 +255,41 @@ describe('Shell — the Institutions tree', () => {
       type: 'CLASSROOM',
       ...overrides
     } as unknown as TeacherClassroom;
+  }
+
+  /**
+   * Mounts the shell with the router already sitting on one classroom.
+   *
+   * The reveal reads the URL rather than being told by the page, so a test has
+   * to put the router there — Router.url is stubbed, because provideRouter([])
+   * has no route for this path and navigating would 404.
+   */
+  async function mountTreeAt(
+    institutions: AllottedInstitution[],
+    url: string
+  ) {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [Shell],
+      providers: [
+        provideRouter([]),
+        { provide: AuthService, useValue: new StubAuthService() },
+        { provide: NotificationService, useValue: new StubNotificationService() },
+        { provide: DashboardService, useValue: new StubDashboardService(institutions) }
+      ]
+    }).compileComponents();
+
+    Object.defineProperty(TestBed.inject(Router), 'url', {
+      get: () => url,
+      configurable: true
+    });
+
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    return fixture;
   }
 
   async function mountTree(institutions: AllottedInstitution[]) {
@@ -367,5 +425,49 @@ describe('Shell — the Institutions tree', () => {
     expect(component.primaryNav.map(item => item.label)).toEqual(['Dashboard']);
     expect(fixture.nativeElement.textContent).toContain('Admin');
     expect(fixture.nativeElement.textContent).toContain('Classrooms');
+  });
+
+  /* ----------------------------------------------------------------------
+     Revealing the class the URL is about
+     ----------------------------------------------------------------------
+     Arriving from a dashboard card left the group collapsed, so the sidebar gave
+     no indication of where you were and the class was two clicks from being
+     visible. The reveal is an effect rather than a navigation handler because
+     the URL and the allotment arrive in either order. */
+
+  it('opens the group and the school holding the class in the URL', async () => {
+    const fixture = await mountTreeAt(
+      TWO_SCHOOLS,
+      '/institutions/classroom/c?programmeId=p1'
+    );
+    const component = fixture.componentInstance;
+
+    expect(component.institutionsOpen()).toBe(true);
+    // 'c' belongs to Airaa Academy, the SECOND school — not simply the first.
+    expect(component.openSchool()).toBe('inst-2');
+    expect(fixture.nativeElement.querySelectorAll('.nav-class').length).toBe(1);
+  });
+
+  it('opens the first school when the class is one of its own', async () => {
+    const fixture = await mountTreeAt(TWO_SCHOOLS, '/institutions/classroom/b');
+
+    expect(fixture.componentInstance.openSchool()).toBe('inst-1');
+  });
+
+  /* A stale or foreign id must not open something arbitrary. */
+  it('opens nothing for a class it does not know', async () => {
+    const fixture = await mountTreeAt(TWO_SCHOOLS, '/institutions/classroom/nope');
+    const component = fixture.componentInstance;
+
+    expect(component.openSchool()).toBeNull();
+    expect(component.institutionsOpen()).toBe(false);
+  });
+
+  it('leaves the tree closed on a route with no classroom', async () => {
+    const fixture = await mountTreeAt(TWO_SCHOOLS, '/dashboard');
+    const component = fixture.componentInstance;
+
+    expect(component.institutionsOpen()).toBe(false);
+    expect(component.openSchool()).toBeNull();
   });
 });

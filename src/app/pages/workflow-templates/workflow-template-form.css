@@ -1,0 +1,260 @@
+/* ==========================================================================
+   Create / Edit Workflow Template — a FULL PAGE with a rail, and a step dialog
+   over it.
+
+   A PAGE, NOT A MODAL, which is what production has and why the `modal-*` chrome
+   the other dialogs in this app share is not here: the rail and the step list sit
+   side by side, a template is built over several minutes, and a dialog that size
+   is a page wearing a costume. The step editor over it IS a dialog, and carries
+   its own `step-*` chrome rather than the shared one, because it opens over this
+   page rather than over the shell.
+   ========================================================================== */
+
+.req {
+  color: var(--danger);
+}
+
+/* A label for a control that is not a single input — the rich-text editor and
+   the option lists. `.field > label` would be wrong: there is no `for` target. */
+.field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.wt-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--page-bg);
+}
+
+.wt-page-head {
+  display: flex;
+  align-items: center;
+  padding: 18px 24px;
+}
+
+/* Production's own filled Back button, at the top left. */
+.wt-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-500);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--white);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.wt-back:hover {
+  background: var(--accent-600);
+}
+
+.wt-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin: 0 28px 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+/*
+ * ONE COLUMN, NOT TWO, which is what production has.
+ *
+ * There was a steps panel to the right of the rail. Production has no right panel
+ * at all — its steps are a numbered timeline directly under the form, and the
+ * space beside it is where the step dialog opens. The two-column version also left
+ * a wide empty half on every template that had no steps yet.
+ *
+ * `flex: 1` IS STILL LOAD-BEARING: the card is a flex column, so without it this
+ * takes only its content's height, and the rail's panel and its border stopped
+ * halfway down a full-height card.
+ */
+.wt-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   The rail
+   -------------------------------------------------------------------------- */
+
+/*
+ * THE RAIL IS THE PAGE NOW. Capped rather than full-width: these are short
+ * controls and a 1400px-wide select is not a better select. No right border and no
+ * tinted background, because there is nothing beside it to divide from — the panel
+ * treatment was there to separate two columns.
+ */
+.wt-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 420px;
+  padding: 24px 28px;
+  overflow-y: auto;
+}
+
+.wt-rail .field {
+  margin-bottom: 0;
+}
+
+.wt-rail label,
+.wt-rail .field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.wt-rail input,
+.wt-rail select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink-800);
+}
+
+.wt-rail input:focus,
+.wt-rail select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/*
+ * AN UNCHOSEN SELECT IS COLOURED LIKE ANY OTHER: full-strength ink, the same
+ * weight of colour as its own label.
+ *
+ * TWO EARLIER TREATMENTS WERE BOTH WRONG, and the reason each failed is worth
+ * keeping. RED — production's own — meant a form nobody had touched opened
+ * showing four red fields, which reads as four mistakes already made rather than
+ * four choices still to make. Then MUTED GREY, which reads as four fields that
+ * are disabled: greyed text is how every control in this app says "you cannot
+ * use me", so it said the opposite of "your turn".
+ *
+ * Nothing here now, deliberately. The amber note under the rail names what is
+ * outstanding in words, which is the one channel that cannot be misread as a
+ * state the control is in.
+ */
+
+/* Two by two, as production lays the four out. */
+.wt-rail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* The derived name, so the reader sees what is about to be created. */
+.wt-derived {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--tint-blue);
+  font-size: 12px;
+  color: var(--accent-600);
+}
+
+.wt-derived strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.wt-blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--tint-amber);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--on-amber);
+}
+
+.wt-blocked app-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--warning);
+}
+
+.wt-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--danger);
+}
+
+/*
+ * DIRECTLY UNDER THE FIELDS, not pinned to the bottom of the rail.
+ *
+ * `margin-top: auto` was harmless while the rail was only as tall as its content.
+ * Once the rail ran the full height of the card it pushed the button four hundred
+ * pixels below the last field, which reads as a control belonging to something
+ * else — and this button is the one that acts on the fields above it.
+ */
+.wt-save {
+  margin-top: 4px;
+  justify-content: center;
+}
+
+/*
+ * ADD MORE WORKFLOW STEP — production's dashed, tinted, full-width band.
+ *
+ * A DASHED BORDER rather than a solid button, and it is doing work: the step rows
+ * above it are solid-bordered cards, so a fifth solid box would read as another
+ * step rather than as the thing that makes one.
+ */
+.wt-add-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  margin-top: 12px;
+  border: 2px dashed var(--accent-400);
+  border-radius: var(--radius-lg);
+  background: var(--tint-blue);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-600);
+  cursor: pointer;
+}
+
+.wt-add-more:hover {
+  border-color: var(--accent-500);
+}
+
+/* --------------------------------------------------------------------------
+   The step dialog
+
+   A SECOND LAYER over the form, which is already a modal — production stacks
+   them the same way. z-index above the form's own.
+   -------------------------------------------------------------------------- */

@@ -20,8 +20,7 @@ import {
   Programme,
   Teacher,
   TeacherClassroom,
-  TeacherDraft,
-  TeacherProgramme
+  TeacherDraft
 } from '../../models/teaching.model';
 import { Timestamp } from 'firebase/firestore';
 
@@ -29,7 +28,6 @@ import { InstitutionService } from '../../services/institution.service';
 import { ProgrammeService } from '../../services/programme.service';
 import { TeacherService } from '../../services/teacher.service';
 import { TeacherEntry } from '../../data/teacher-options';
-import { classroomTitle } from '../../data/classroom-options';
 import { ClassroomService, toProgrammeMap } from '../../services/classroom.service';
 import { AddInstitutionInline } from '../classrooms/add-institution-inline';
 import { AddTeachers } from './add-teachers';

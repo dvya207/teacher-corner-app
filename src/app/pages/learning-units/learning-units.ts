@@ -17,6 +17,7 @@ import {
   TrashedLearningUnit
 } from '../../models/teaching.model';
 import { LearningUnitService } from '../../services/learning-unit.service';
+import { ResourceLinkService } from '../../services/resource-link.service';
 import {
   LearningUnitResourceService,
   ResourceSlotEdit
@@ -71,6 +72,7 @@ export class LearningUnits implements OnInit {
 
   private service = inject(LearningUnitService);
   private resourceService = inject(LearningUnitResourceService);
+  private links = inject(ResourceLinkService);
 
   readonly units = signal<LearningUnit[]>([]);
   readonly loading = signal(true);
@@ -156,11 +158,97 @@ export class LearningUnits implements OnInit {
     try {
       this.units.set(await this.service.list());
       this.error.set('');
+
+      // AFTER the units are on screen. Each image is one Storage round trip, and
+      // a card must not wait on a picture to render its code and name. Floating,
+      // so a slow or refused bucket cannot hold up the list.
+      void this.resolveThumbnails();
     } catch (error) {
       this.error.set(this.service.describeError(error, 'Could not load learning units.'));
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /* ======================================================================
+     CARD IMAGES
+
+     Production's learning-unit cards carry the unit's own uploaded image as the
+     banner, with the gradient showing only where there is none. This page drew
+     the gradient and nothing else, so an uploaded image never appeared on it.
+
+     THE SAME MECHANISM AS THE CLASSROOM CARDS, deliberately: `imagePath` holds a
+     Storage PATH, not a URL, because a download URL carries a revocable token
+     and must be minted on demand. So the cards render first and the images
+     arrive after, keyed by docId.
+     ====================================================================== */
+
+  /** docId -> a minted download URL. Absent until resolved, or if it failed. */
+  readonly imageUrls = signal<Record<string, string>>({});
+
+  /**
+   * Paths that failed to LOAD in the browser, so the card can fall back.
+   *
+   * urlFor succeeding only means Storage minted a URL; the image can still 404 or
+   * be blocked afterwards. Without this the banner shows a broken-image glyph,
+   * which reads as a bug where the code placeholder reads as "no picture yet".
+   */
+  readonly brokenImages = signal<Record<string, boolean>>({});
+
+  /**
+   * `learningUnitPreviewImage` first, `learningUnitImage` as the fallback.
+   *
+   * Production's resize step writes the preview; this app does not, so most units
+   * resolve to the full-size original — which is why the banner must crop rather
+   * than scale, see .card-banner-img in the stylesheet.
+   */
+  private imagePathFor(unit: LearningUnit): string {
+    return unit.learningUnitPreviewImage || unit.learningUnitImage || '';
+  }
+
+  /**
+   * Exchanges each unit's stored path for a download URL, in parallel.
+   *
+   * Failures are simply ABSENT from the map. A unit with no image, a path that no
+   * longer exists and a bucket this app may not read are the same thing to a
+   * card: there is nothing to show, so it shows the code over the gradient.
+   */
+  private async resolveThumbnails(): Promise<void> {
+    const withPaths = this.units().filter(unit => this.imagePathFor(unit) !== '');
+
+    this.brokenImages.set({});
+
+    if (withPaths.length === 0) {
+      this.imageUrls.set({});
+      return;
+    }
+
+    const resolved = await Promise.all(
+      withPaths.map(async unit => ({
+        docId: unit.docId,
+        url: await this.links.urlFor(this.imagePathFor(unit))
+      }))
+    );
+
+    const urls: Record<string, string> = {};
+
+    for (const entry of resolved) {
+      if (entry.url) {
+        urls[entry.docId] = entry.url;
+      }
+    }
+
+    this.imageUrls.set(urls);
+  }
+
+  /** The banner image to draw, or '' for the gradient-and-code placeholder. */
+  bannerImage(docId: string): string {
+    return this.brokenImages()[docId] ? '' : (this.imageUrls()[docId] ?? '');
+  }
+
+  /** An image that resolved but would not load. Falls back for good. */
+  onImageError(docId: string): void {
+    this.brokenImages.update(current => ({ ...current, [docId]: true }));
   }
 
   // ---- Stats -------------------------------------------------------------

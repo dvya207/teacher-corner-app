@@ -4,16 +4,39 @@ import { getDocs } from 'firebase/firestore';
 import {
   CONFIGURATION_DOCS,
   CodedOption,
+  ConfiguredAssignmentDefaults,
   ConfiguredCountry,
+  ConfiguredAssignmentType,
   ConfiguredDomainRow,
   ConfiguredMaturity,
+  ConfiguredFormQuestionType,
   ConfiguredResourceSchema,
   ConfiguredSchoolType,
   ConfiguredSubjectType,
+  ConfiguredWorkflowType,
   PincodeRule,
   ValuedOption
 } from '../core/configuration';
 import { configurationCollection } from '../core/firestore-paths';
+import {
+  ASSIGNMENT_DEFAULTS,
+  ASSIGNMENT_STATUSES,
+  ASSIGNMENT_TYPE_OPTIONS,
+  CLOSED_STATUS_VALUES,
+  FORM_QUESTION_TYPES,
+  LIVE_STATUS_VALUES,
+  UPLOAD_FILE_TYPES
+} from '../data/assignment-options';
+import {
+  ASSIGNMENT_TYPES,
+  AssignmentType,
+  PEDAGOGY_TYPES,
+  QUIZ_AUTH_TYPES,
+  QUIZ_QUESTION_TYPES,
+  UPLOAD_ACCEPTED_EXTENSIONS,
+  UPLOAD_SIZE_CAPS,
+  UPLOAD_SIZE_CAP_DEFAULT
+} from '../models/teaching.model';
 import { CLASSROOM_TYPES, GRADES, SECTIONS } from '../data/classroom-options';
 import { COUNTRIES, DEFAULT_COUNTRY } from '../data/countries';
 import { BOARDS, GENDER_TYPES, MEDIUMS, SCHOOL_TYPES } from '../data/institution-options';
@@ -41,6 +64,7 @@ import {
   orderedMaturities
 } from '../data/learning-unit-taxonomy';
 import { LEARNING_UNIT_RESOURCE_SCHEMA } from '../data/learning-unit-resource-schema';
+import { WORKFLOW_TYPES } from '../data/workflow-template-options';
 import {
   TACS_SEARCH_CONFIGURATION,
   TacsSearchSubject
@@ -140,6 +164,126 @@ export class ConfigurationService {
   // ---- Teachers -----------------------------------------------------------
   readonly teacherRoles = signal<readonly string[]>(TEACHER_ROLES);
 
+  // ---- Assignments --------------------------------------------------------
+
+  /**
+   * The five kinds production offers, from Configuration/AssignmentTypes.
+   *
+   * READ IN FULL, and filtered where it is used rather than here. The document
+   * has GAME and TEXTBLOCK; this app creates neither, and the restriction lives
+   * in ASSIGNMENT_TYPES in the model. Holding the whole list means a row already
+   * stored as GAME can be LABELLED 'Game' instead of rendered as a raw
+   * SCREAMING_SNAKE string, without that type becoming creatable.
+   */
+  readonly assignmentTypes =
+    signal<readonly ConfiguredAssignmentType[]>(ASSIGNMENT_TYPE_OPTIONS);
+
+  /**
+   * Field types for a FORM assignment's questions.
+   *
+   * Same document as the list above — production keeps both in
+   * Configuration/AssignmentTypes — which is why the two entries in
+   * CONFIGURATION_DOCS share an id and differ only in the key.
+   */
+  readonly formQuestionTypes =
+    signal<readonly ConfiguredFormQuestionType[]>(FORM_QUESTION_TYPES);
+
+  /**
+   * The upload types a file slot can ask for.
+   *
+   * Stored as a MAP in Firestore and read into a list here — see
+   * applyUploadFormats for why that needs its own reader.
+   */
+  readonly uploadFileTypes = signal<readonly CodedOption[]>(UPLOAD_FILE_TYPES);
+
+  /** The five quiz question types, label from the document and icon from code. */
+  readonly quizQuestionTypes =
+    signal<readonly { type: string; label: string; icon: string }[]>(QUIZ_QUESTION_TYPES);
+
+  /**
+   * WHICH kinds the Create menu offers.
+   *
+   * Defaults to the three the app implements. See applyCreatableTypes for why the
+   * configured value is filtered rather than trusted.
+   */
+  readonly creatableAssignmentTypes =
+    signal<readonly AssignmentType[]>(ASSIGNMENT_TYPES.map(entry => entry.type));
+
+  readonly quizPedagogyTypes = signal<readonly string[]>(PEDAGOGY_TYPES);
+  readonly quizAuthTypes = signal<readonly string[]>(QUIZ_AUTH_TYPES);
+
+  /** What the Status select offers. */
+  readonly assignmentStatuses = signal<readonly string[]>(ASSIGNMENT_STATUSES);
+
+  /** Which stored values the badge paints as live, and as closed. */
+  readonly liveStatusValues = signal<readonly string[]>(LIVE_STATUS_VALUES);
+  readonly closedStatusValues = signal<readonly string[]>(CLOSED_STATUS_VALUES);
+
+  /** The megabyte ceiling per upload type, and the fallback for the rest. */
+  readonly uploadSizeCaps = signal<Readonly<Record<string, number>>>(UPLOAD_SIZE_CAPS);
+
+  /**
+   * Which extensions each upload type accepts, keyed lowercase.
+   *
+   * SEEDED, because this app's own document has `formatNames` and `sizeCaps` but
+   * not `formats`. An empty whitelist refuses every file, so the fallback is what
+   * makes an upload work today; the reader below prefers the document the moment
+   * it carries the key.
+   */
+  readonly uploadExtensions =
+    signal<Readonly<Record<string, readonly string[]>>>(UPLOAD_ACCEPTED_EXTENSIONS);
+
+  /**
+   * Every Configuration document as read, for the one lookup that is data-driven.
+   *
+   * EMPTY UNTIL `load()` RUNS, which `dynamicOptions` reports as "no options"
+   * rather than as an error — the same honest answer as a document that exists and
+   * names nothing.
+   */
+  private readonly documents = signal<ConfigurationDocuments>(new Map());
+
+  /**
+   * The options a `dropDownDynamic` form question offers.
+   *
+   * TWO SEGMENTS FROM THE QUESTION'S OWN VALUE: the Configuration document, then
+   * the field inside it. 'RYSI_Categories,subjects' means document
+   * `RYSI_Categories`, field `subjects`.
+   *
+   * `display` IS THE LABEL, which is production's own mapping —
+   * `Object.values(docRef.get(field)).map(o => o.display)`. So the field holds a
+   * MAP of objects, not a list of strings, and reading it as a list would render
+   * '[object Object]' in every option.
+   *
+   * A PLAIN LIST OF STRINGS IS ALSO ACCEPTED, because this app's own Configuration
+   * documents hold several of those and refusing them would make a working
+   * document look empty. Anything with neither a `display` nor a usable string is
+   * dropped rather than coerced.
+   */
+  dynamicOptions(documentId: string, field: string): string[] {
+    const value = this.documents().get(documentId)?.[field];
+
+    if (!value || typeof value !== 'object') {
+      return [];
+    }
+
+    return Object.values(value as Record<string, unknown>)
+      .map(entry => {
+        if (typeof entry === 'string') {
+          return entry;
+        }
+
+        const display = (entry as { display?: unknown })?.display;
+
+        return typeof display === 'string' ? display : '';
+      })
+      .filter(entry => entry.trim() !== '');
+  }
+  readonly uploadSizeCapDefault = signal<number>(UPLOAD_SIZE_CAP_DEFAULT);
+
+  /** The scalars a new assignment opens with. */
+  readonly assignmentDefaults =
+    signal<Readonly<ConfiguredAssignmentDefaults>>(ASSIGNMENT_DEFAULTS);
+
   // ---- Learning units -----------------------------------------------------
   /**
    * The 44-row taxonomy, seeded with the identical 44 rows held in source.
@@ -201,6 +345,15 @@ export class ConfigurationService {
 
   /** Difficulty levels, as strings. */
   readonly learningUnitDifficulty = signal<readonly string[]>(DIFFICULTY_LEVELS);
+
+  /**
+   * The two workflow types a template can be, { code, label }.
+   *
+   * Seeded from WORKFLOW_TYPES, which was read off production's own
+   * Configuration/WorkflowTypes — so the app renders the same two whether the
+   * document is present, absent or refused.
+   */
+  readonly workflowTypes = signal<readonly CodedOption[]>(WORKFLOW_TYPES);
 
   /** The five subjects, { code, name }. Includes Health, which has no domain rows. */
   readonly subjectTypes = signal<readonly ConfiguredSubjectType[]>(LEARNING_UNIT_SUBJECT_TYPES);
@@ -276,6 +429,17 @@ export class ConfigurationService {
     try {
       const byId = await this.readDocuments();
 
+      /*
+       * THE RAW DOCUMENTS ARE KEPT, and this is the one reader that needs them.
+       *
+       * Everything else on this service maps a known document and key onto a typed
+       * signal, which is the right shape when the key is known at build time. A
+       * form question's `dropDownDynamic` names its document and field IN ITS OWN
+       * STORED VALUE — 'RYSI_Categories,subjects' — so which document to read is
+       * data, not code, and no typed signal can stand in for it.
+       */
+      this.documents.set(byId);
+
       this.applyList(byId, 'countryCodes', this.countries);
       this.applyList(byId, 'boards', this.boards);
       this.applyList(byId, 'languages', this.languages);
@@ -291,6 +455,20 @@ export class ConfigurationService {
       this.applyList(byId, 'programmeAges', this.programmeAges);
       this.applyList(byId, 'programmeGrades', this.programmeGrades);
       this.applyList(byId, 'teacherRoles', this.teacherRoles);
+      this.applyList(byId, 'assignmentTypes', this.assignmentTypes);
+      this.applyList(byId, 'formQuestionTypes', this.formQuestionTypes);
+      this.applyList(byId, 'quizPedagogyTypes', this.quizPedagogyTypes);
+      this.applyList(byId, 'quizAuthTypes', this.quizAuthTypes);
+      this.applyList(byId, 'assignmentStatuses', this.assignmentStatuses);
+      this.applyList(byId, 'assignmentLiveStatuses', this.liveStatusValues);
+      this.applyList(byId, 'assignmentClosedStatuses', this.closedStatusValues);
+      this.applyUploadFormats(byId);
+      this.applyUploadSizeCaps(byId);
+      this.applyUploadExtensions(byId);
+      this.applyQuizQuestionTypes(byId);
+      this.applyCreatableTypes(byId);
+      this.applyAssignmentDefaults(byId);
+      this.applyWorkflowTypes(byId);
 
       // NEITHER of these is applyList: one row spells a field differently, and the
       // other is a map rather than an array. See each reader.
@@ -317,6 +495,228 @@ export class ConfigurationService {
           'option lists, so every dropdown still works.',
         error
       );
+    }
+  }
+
+  /**
+   * Reads acceptedUploadFormats.formatNames, which is a MAP.
+   *
+   * A SEPARATE READER RATHER THAN applyList, for the same reason applyMaturities
+   * is one: applyList requires an array and this document stores an object keyed
+   * by code. Its blind cast would hand every consumer an object where a list was
+   * expected, and the Upload File Type select would render nothing at all — the
+   * kind of empty dropdown that gets blamed on the data.
+   *
+   * The document's own iteration order is kept rather than sorted. It is the order
+   * whoever edits the document chose, and re-sorting alphabetically would put
+   * 'Excel' above 'Image' for no reason anyone asked for.
+   */
+  /**
+   * Reads acceptedUploadFormats.sizeCaps, a MAP of code to megabytes.
+   *
+   * `DEFAULT` IS PULLED OUT rather than left in the map. It is not an upload type,
+   * so leaving it there would make `uploadSizeCap('DEFAULT')` answer 40 for a type
+   * that does not exist, and a future dropdown built from these keys would offer
+   * 'DEFAULT' as something to upload.
+   *
+   * Non-numeric and non-positive values are dropped rather than coerced: a cap of
+   * 0 would refuse every file, and NaN compares false against everything, so both
+   * silently break the field they govern.
+   */
+  private applyUploadSizeCaps(documents: ConfigurationDocuments): void {
+    const { id, key } = CONFIGURATION_DOCS.uploadSizeCaps;
+    const value = documents.get(id)?.[key];
+
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return;
+    }
+
+    const caps: Record<string, number> = {};
+
+    for (const [code, raw] of Object.entries(value as Record<string, unknown>)) {
+      const size = Number(raw);
+
+      if (!Number.isFinite(size) || size <= 0) {
+        continue;
+      }
+
+      if (code.toUpperCase() === 'DEFAULT') {
+        this.uploadSizeCapDefault.set(size);
+        continue;
+      }
+
+      caps[code.toUpperCase()] = size;
+    }
+
+    if (Object.keys(caps).length > 0) {
+      this.uploadSizeCaps.set(caps);
+    }
+  }
+
+  /**
+   * Reads acceptedUploadFormats.formats — extension lists, keyed lowercase.
+   *
+   * KEPT LOWERCASE, not folded to match `sizeCaps` above. Production writes this
+   * map with lowercase keys and looks it up with
+   * `uploadFileType.toLowerCase()`, and its own `formats` document is the one this
+   * app will eventually read; normalising to uppercase here would mean the
+   * document and the fallback disagreed about their own key case.
+   *
+   * A DOT IS ADDED WHERE THE DOCUMENT OMITS ONE, so 'pdf' and '.pdf' both work.
+   * Production's list is dotted throughout, but a document edited by hand is the
+   * likeliest place for that to slip, and an extension without its dot silently
+   * matches nothing.
+   *
+   * AN EMPTY LIST IS DROPPED rather than stored. A type mapped to no extensions
+   * refuses every file for that type, which reads as "uploads are broken" rather
+   * than as a configuration mistake.
+   */
+  private applyUploadExtensions(documents: ConfigurationDocuments): void {
+    const { id, key } = CONFIGURATION_DOCS.uploadExtensions;
+    const value = documents.get(id)?.[key];
+
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return;
+    }
+
+    const formats: Record<string, readonly string[]> = {};
+
+    for (const [type, raw] of Object.entries(value as Record<string, unknown>)) {
+      if (!Array.isArray(raw)) {
+        continue;
+      }
+
+      const extensions = raw
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map(entry => entry.trim().toLowerCase())
+        .filter(entry => entry !== '')
+        .map(entry => (entry.startsWith('.') ? entry : `.${entry}`));
+
+      if (extensions.length > 0) {
+        formats[type.toLowerCase()] = Object.freeze(extensions);
+      }
+    }
+
+    if (Object.keys(formats).length > 0) {
+      this.uploadExtensions.set(Object.freeze(formats));
+    }
+  }
+
+  /**
+   * Reads AssignmentTypes.questionTypesQuiz and PUTS THE ICON BACK.
+   *
+   * The document carries `{ type, label }`; the icon names an SVG the icon
+   * component knows and belongs in code. Each configured row is matched to the
+   * built-in row for its type to recover the icon, and a type the code has never
+   * seen gets a generic one rather than an empty space.
+   */
+  private applyQuizQuestionTypes(documents: ConfigurationDocuments): void {
+    const { id, key } = CONFIGURATION_DOCS.quizQuestionTypes;
+    const value = documents.get(id)?.[key];
+
+    if (!Array.isArray(value) || value.length === 0) {
+      return;
+    }
+
+    const icons = new Map(QUIZ_QUESTION_TYPES.map(entry => [entry.type, entry.icon]));
+
+    const merged = value
+      .map(entry => (entry ?? {}) as Record<string, unknown>)
+      .filter(entry => typeof entry['type'] === 'string' && entry['type'] !== '')
+      .map(entry => {
+        const type = String(entry['type']);
+
+        return {
+          type,
+          label: String(entry['label'] ?? type),
+          icon: icons.get(type) ?? 'list'
+        };
+      });
+
+    if (merged.length > 0) {
+      this.quizQuestionTypes.set(merged);
+    }
+  }
+
+  /**
+   * Reads AssignmentTypes.creatableTypes, AND FILTERS IT AGAINST WHAT EXISTS.
+   *
+   * THE ONE CONFIGURED VALUE THAT IS NOT TAKEN AT ITS WORD, because this key is a
+   * policy rather than a vocabulary: it says which kinds the Create menu offers,
+   * and an editor adding 'TEXTBLOCK' does not bring a text-block editor into
+   * being. Trusting it would put an entry in the menu that opens nothing.
+   *
+   * So the document may NARROW the three the app implements and cannot widen
+   * them. Turning a type off is a real thing to want; turning one on is a release.
+   */
+  private applyCreatableTypes(documents: ConfigurationDocuments): void {
+    const { id, key } = CONFIGURATION_DOCS.creatableAssignmentTypes;
+    const value = documents.get(id)?.[key];
+
+    if (!Array.isArray(value) || value.length === 0) {
+      return;
+    }
+
+    const implemented = new Set<string>(ASSIGNMENT_TYPES.map(entry => entry.type));
+    const wanted = value
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map(entry => entry.toUpperCase())
+      .filter(entry => implemented.has(entry)) as AssignmentType[];
+
+    if (wanted.length > 0) {
+      this.creatableAssignmentTypes.set(wanted);
+    }
+  }
+
+  /**
+   * Reads AssignmentDefaults.defaults, FIELD BY FIELD.
+   *
+   * Not `set(value)`: a document setting only `formInstructions` would otherwise
+   * blank the other two, and a partial document is the normal way somebody edits
+   * one. Each field is taken only when it is present and of the right type.
+   */
+  private applyAssignmentDefaults(documents: ConfigurationDocuments): void {
+    const { id, key } = CONFIGURATION_DOCS.assignmentDefaults;
+    const value = documents.get(id)?.[key];
+
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return;
+    }
+
+    const source = value as Record<string, unknown>;
+    const next: ConfiguredAssignmentDefaults = { ...this.assignmentDefaults() };
+
+    if (typeof source['formInstructions'] === 'string') {
+      next.formInstructions = source['formInstructions'];
+    }
+
+    const uploads = Number(source['slotMaxUploads']);
+
+    if (Number.isFinite(uploads) && uploads >= 1) {
+      next.slotMaxUploads = Math.floor(uploads);
+    }
+
+    if (typeof source['quizMediaFolder'] === 'string' && source['quizMediaFolder'] !== '') {
+      next.quizMediaFolder = source['quizMediaFolder'];
+    }
+
+    this.assignmentDefaults.set(next);
+  }
+
+  private applyUploadFormats(documents: ConfigurationDocuments): void {
+    const { id, key } = CONFIGURATION_DOCS.uploadFormats;
+    const value = documents.get(id)?.[key];
+
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return;
+    }
+
+    const options = Object.entries(value as Record<string, unknown>)
+      .filter(([code, label]) => code !== '' && typeof label === 'string' && label !== '')
+      .map(([code, label]) => ({ code, label: String(label) }));
+
+    if (options.length > 0) {
+      this.uploadFileTypes.set(options);
     }
   }
 
@@ -405,6 +805,45 @@ export class ConfigurationService {
    *
    * SORTED ON THE WAY IN, so every reader gets rank order for free.
    */
+  /**
+   * Copies the workflow types across, TRANSLATING `displayName` to `label`.
+   *
+   * A SEPARATE READER RATHER THAN applyList, for the same reason applyDomains is
+   * one: the document's rows are `{ code, displayName }` and this app's CodedOption
+   * is `{ code, label }`. applyList's blind cast would set the signal to rows whose
+   * `label` is undefined, and the Workflow Type select would render two blank
+   * options — a bug that looks like bad data rather than a bad read.
+   *
+   * A ROW WITHOUT A CODE IS DROPPED. The code is what gets stored on the template
+   * and what its list page labels by, so a row missing it can only add a blank
+   * option that writes an empty `type`.
+   *
+   * A ROW WITHOUT A displayName KEEPS ITS CODE as the label. 'STEM-CLUB' in the
+   * dropdown is ugly; a blank option is worse, and the code is at least true.
+   *
+   * NOTHING IS APPLIED IF EVERY ROW IS DROPPED, so a malformed document leaves the
+   * seeded two in place rather than emptying the select.
+   */
+  private applyWorkflowTypes(documents: ConfigurationDocuments): void {
+    const { id, key } = CONFIGURATION_DOCS.workflowTypes;
+    const value = documents.get(id)?.[key];
+
+    if (!Array.isArray(value)) {
+      return;
+    }
+
+    const types = (value as ConfiguredWorkflowType[])
+      .filter(entry => typeof entry?.code === 'string' && entry.code !== '')
+      .map<CodedOption>(entry => ({
+        code: entry.code as string,
+        label: entry.displayName || (entry.code as string)
+      }));
+
+    if (types.length > 0) {
+      this.workflowTypes.set(types);
+    }
+  }
+
   private applyMaturities(documents: ConfigurationDocuments): void {
     const { id, key } = CONFIGURATION_DOCS.learningUnitMaturity;
     const value = documents.get(id)?.[key];

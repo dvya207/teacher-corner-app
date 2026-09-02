@@ -1,0 +1,461 @@
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="modal-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="heading()"
+    (click)="$event.stopPropagation()"
+  >
+
+    <header class="modal-head">
+      <span class="qw-icon"><app-icon name="upload-circle" [size]="19" /></span>
+
+      <div class="qw-titles">
+        <h2>{{ heading() }}</h2>
+        <p class="modal-sub">Ask students to upload one or more files, slot by slot.</p>
+      </div>
+
+      <!-- A number per step, a tick once passed — production's own stepper. -->
+      <ol class="qw-steps">
+        @for (item of steps; track item.index) {
+          <li
+            class="qw-step"
+            [class.is-current]="step() === item.index"
+            [class.is-done]="isDone(item.index)"
+            [title]="item.label"
+          >
+            @if (isDone(item.index)) {
+              <app-icon name="check" [size]="13" />
+            } @else {
+              {{ item.index }}
+            }
+          </li>
+        }
+      </ol>
+
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">
+        <app-icon name="close" [size]="18" />
+      </button>
+    </header>
+
+    <div class="modal-body">
+
+      @if (error()) {
+        <div class="modal-error" role="alert">{{ error() }}</div>
+      }
+
+      <!-- ================================================================
+           STEP 1 — Basic info
+           ================================================================ -->
+      @if (step() === 1) {
+        <div class="qw-grid">
+          <div class="field">
+            <label for="uw-name">Assignment Name <span class="req">*</span></label>
+            <input
+              id="uw-name"
+              type="text"
+              autocomplete="off"
+              [value]="displayName()"
+              (input)="displayName.set(valueOf($event))"
+            />
+          </div>
+
+          <div class="field">
+            <label for="uw-subs">Number of Allowed Submissions <span class="req">*</span></label>
+            <input
+              id="uw-subs"
+              type="number"
+              min="1"
+              [value]="numberOfAllowedSubmissions()"
+              (input)="numberOfAllowedSubmissions.set(+valueOf($event) || 1)"
+            />
+          </div>
+
+          <!-- Disabled and shown, not hidden: the value IS stored, so hiding it
+               would mean writing a field the reader never saw. -->
+          <div class="field">
+            <label for="uw-creator">Creator Name <span class="req">*</span></label>
+            <input id="uw-creator" type="text" [value]="creator()" disabled />
+          </div>
+
+          <div class="field">
+            <label for="uw-author">Author Name <span class="req">*</span></label>
+            <input
+              id="uw-author"
+              type="text"
+              autocomplete="off"
+              [value]="author()"
+              (input)="author.set(valueOf($event))"
+            />
+          </div>
+
+          <div class="field">
+            <label for="uw-status">Status <span class="req">*</span></label>
+            <select id="uw-status" (change)="status.set(valueOf($event))">
+              <option value="" [selected]="status() === ''">Select the status</option>
+              @for (option of statuses(); track option) {
+                <option [value]="option" [selected]="option === status()">{{ option }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <fieldset class="qw-duration">
+          <legend>Total Duration</legend>
+
+          <div class="field">
+            <label for="uw-h">Hours</label>
+            <input id="uw-h" type="number" min="0" [value]="totalDurationInHours()"
+                   (input)="totalDurationInHours.set(+valueOf($event) || 0)" />
+          </div>
+
+          <div class="field">
+            <label for="uw-m">Minutes</label>
+            <input id="uw-m" type="number" min="0" max="59" [value]="totalDurationInMinutes()"
+                   (input)="totalDurationInMinutes.set(+valueOf($event) || 0)" />
+          </div>
+
+          <div class="field">
+            <label for="uw-s">Seconds</label>
+            <input id="uw-s" type="number" min="0" max="59" [value]="totalDurationInSeconds()"
+                   (input)="totalDurationInSeconds.set(+valueOf($event) || 0)" />
+          </div>
+        </fieldset>
+      }
+
+      <!-- ================================================================
+           STEP 2 — Upload slots
+           ================================================================ -->
+      @if (step() === 2) {
+
+        <!-- THE STRIP AND THE `+` ARE SIBLINGS, not nested: production puts the
+             add button OUTSIDE the scrolling panel so it stays put however many
+             slots there are. -->
+        <div class="uw-step2">
+
+          <div class="uw-panel">
+
+            <!-- A STEPPER, not a row of pills: the active slot shows its number
+                 in a filled circle and every other shows a pencil, which is how
+                 production distinguishes "here" from "go here". -->
+            <ol class="uw-tabs" role="tablist" aria-label="Upload slots">
+              @for (slot of slots(); track $index) {
+                <li class="uw-tab-item">
+                  <button
+                    type="button"
+                    class="uw-tab"
+                    role="tab"
+                    [class.is-active]="activeSlot() === $index"
+                    [class.is-incomplete]="isIncomplete(slot)"
+                    [attr.aria-selected]="activeSlot() === $index"
+                    (click)="selectSlot($index)"
+                  >
+                    <span class="uw-tab-num">
+                      @if (activeSlot() === $index) {
+                        {{ $index + 1 }}
+                      } @else {
+                        <app-icon name="edit" [size]="13" />
+                      }
+                    </span>
+                    <span class="uw-tab-name">{{ slotCaption(slot, $index) }}</span>
+                  </button>
+                </li>
+              }
+            </ol>
+
+            <!-- `let slotIndex = $index` IS LOAD-BEARING. Angular's @for has no
+                 `$parent`, so inside the nested loop over the dependency options
+                 `$index` is the OPTION's index, not the slot's. Reading it there
+                 wrote every dependency onto slot 0 — the checkbox appeared to
+                 work, the strip showed the right slot, and the saved document
+                 had it on the wrong one. -->
+            @for (slot of slots(); track $index; let slotIndex = $index) {
+              @if (activeSlot() === slotIndex) {
+                <div class="uw-slot">
+
+                  <!-- EVERY ROW IS LABEL-LEFT, CONTROL-RIGHT, which is
+                       production's 2-of-12 / 8-of-12 split rather than the
+                       stacked labels this dialog had. -->
+                  <div class="uw-row">
+                    <label class="uw-label" [attr.for]="'uw-title-' + slotIndex">Title <span class="req">*</span></label>
+                    <div class="uw-control">
+                      <input
+                        [id]="'uw-title-' + slotIndex"
+                        type="text"
+                        autocomplete="off"
+                        [value]="slot.title"
+                        (input)="setSlotTitle(slotIndex, valueOf($event))"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="uw-row">
+                    <label class="uw-label" [attr.for]="'uw-type-' + slotIndex">Upload File Type <span class="req">*</span></label>
+                    <div class="uw-control">
+                      <select
+                        [id]="'uw-type-' + slotIndex"
+                        [class.is-unset]="slot.uploadFileType === ''"
+                        (change)="setSlotFileType(slotIndex, valueOf($event))"
+                      >
+                        <option value="" [selected]="slot.uploadFileType === ''">
+                          Select Upload File Type
+                        </option>
+                        @for (option of fileTypes(); track option.code) {
+                          <option
+                            [value]="option.code"
+                            [selected]="option.code === slot.uploadFileType"
+                          >{{ option.label }}</option>
+                        }
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- A SHORT TOOLBAR, which is production's own choice for this
+                       field: its Quill is configured with bold/italic/underline/
+                       strike and clean, and nothing else. -->
+                  <div class="uw-row is-tall">
+                    <span class="uw-label">Instructions</span>
+                    <div class="uw-control">
+                      <app-rich-text
+                        [value]="slot.instructions"
+                        [compact]="true"
+                        [allowMedia]="false"
+                        [minHeight]="110"
+                        placeholder="Enter instructions for this assignment"
+                        (changed)="setSlotInstructions(slotIndex, $event)"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="uw-row is-tall">
+                    <span class="uw-label">Duration</span>
+                    <div class="uw-control uw-duration">
+                      <div class="field">
+                        <label [attr.for]="'uw-sh-' + slotIndex">Hours</label>
+                        <input [id]="'uw-sh-' + slotIndex" type="number" min="0" max="23"
+                               placeholder="0"
+                               [value]="slot.durationInHours"
+                               (input)="setSlotHours(slotIndex, valueOf($event))" />
+                      </div>
+
+                      <div class="field">
+                        <label [attr.for]="'uw-sm-' + slotIndex">Minutes</label>
+                        <input [id]="'uw-sm-' + slotIndex" type="number" min="0" max="59"
+                               placeholder="0"
+                               [value]="slot.durationInMinutes"
+                               (input)="setSlotMinutes(slotIndex, valueOf($event))" />
+                      </div>
+
+                      <div class="field">
+                        <label [attr.for]="'uw-ss-' + slotIndex">Seconds</label>
+                        <input [id]="'uw-ss-' + slotIndex" type="number" min="0" max="59"
+                               placeholder="0"
+                               [value]="slot.durationInSeconds"
+                               (input)="setSlotSeconds(slotIndex, valueOf($event))" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="uw-row">
+                    <label class="uw-label" [attr.for]="'uw-size-' + slotIndex">Max Size in mb <span class="req">*</span></label>
+                    <div class="uw-control">
+                      <input [id]="'uw-size-' + slotIndex" type="number" min="1"
+                             [attr.max]="sizeCap(slot)"
+                             [value]="slot.maxFileSize"
+                             (input)="setSlotMaxSize(slotIndex, valueOf($event))" />
+                      <!-- The cap depends on the type, so it is worth saying which
+                           one is in force rather than only refusing a larger number. -->
+                      <span class="uw-hint">Up to {{ sizeCap(slot) }} mb for this type</span>
+                    </div>
+                  </div>
+
+                  <div class="uw-row">
+                    <label class="uw-label" [attr.for]="'uw-count-' + slotIndex">Number of allowed uploads</label>
+                    <div class="uw-control">
+                      <input [id]="'uw-count-' + slotIndex" type="number" min="1"
+                             [value]="slot.maxNoOfUploads"
+                             (input)="setSlotMaxUploads(slotIndex, valueOf($event))" />
+                    </div>
+                  </div>
+
+                  <!-- PAST THE FIRST SLOT ONLY: nothing precedes the first, so it
+                       has nothing to wait for. -->
+                  @if (slotIndex > 0) {
+                    <div class="uw-row is-tall">
+                      <span class="uw-label">Dependent on step numbers</span>
+                      <div class="uw-control uw-deps">
+                        @for (option of dependencyOptions(slotIndex); track option.value) {
+                          <label class="uw-dep">
+                            <input
+                              type="checkbox"
+                              [checked]="dependsOn(slot, option.value)"
+                              (change)="toggleDependency(slotIndex, option.value, checkedOf($event))"
+                            />
+                            {{ option.label }}
+                          </label>
+                        }
+                      </div>
+                    </div>
+                  }
+
+                  @if (canRemove(slotIndex)) {
+                    <div class="uw-slot-foot">
+                      <button type="button" class="btn btn-ghost is-danger" (click)="removeSlot(slotIndex)">
+                        <app-icon name="trash" [size]="15" />
+                        Remove
+                      </button>
+                    </div>
+                  }
+                </div>
+              }
+            }
+          </div>
+
+          <button
+            type="button"
+            class="uw-add"
+            title="Add New Step"
+            aria-label="Add a new upload step"
+            (click)="addSlot()"
+          >
+            <app-icon name="plus-circle" [size]="26" />
+          </button>
+        </div>
+      }
+
+      <!-- ================================================================
+           STEP 3 — Review
+           ================================================================ -->
+      @if (step() === 3) {
+
+        <div class="uw-review">
+
+          <!-- The same recap production shows: labels in one column, values in
+               another, and no Status. -->
+          <div class="uw-recap">
+            <div class="uw-recap-labels">
+              <p>Assignment Name</p>
+              <p>Creator</p>
+              <p>Author</p>
+            </div>
+            <div class="uw-recap-values">
+              <p>{{ displayName() }}</p>
+              <p>{{ creator() }}</p>
+              <p>{{ author() }}</p>
+            </div>
+          </div>
+
+          @for (slot of slots(); track $index) {
+            <div class="uw-review-slot">
+              <!-- Titled only when there is more than one, as production does:
+                   with a single slot the heading would repeat the assignment. -->
+              @if (slots().length > 1) {
+                <p class="uw-review-title">{{ slotCaption(slot, $index) }}</p>
+              }
+
+              <table class="uw-review-table">
+                <tbody>
+                  <tr>
+                    <th scope="row">Instructions</th>
+                    <td>{{ plainText(slot.instructions) }}</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Assignment</th>
+                    <td>
+                      <!-- A PILL, NOT A BUTTON, and that is what production has
+                           too: a plain div reading "Upload", with no handler
+                           behind it. It names what the student will be asked to
+                           do. Rendering it as a button here would promise a
+                           click that does nothing. -->
+                      <span class="uw-pill">Upload</span>
+                      <span class="uw-pill-note">{{ fileTypeLabel(slot.uploadFileType) }}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Limits</th>
+                    <td>
+                      {{ slot.maxFileSize }} mb ·
+                      {{ slot.maxNoOfUploads }} upload(s) ·
+                      {{ slot.durationInHours }}h
+                      {{ slot.durationInMinutes }}m
+                      {{ slot.durationInSeconds }}s
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+
+        <!-- SAVE SITS HERE, not in the footer, which is where production's review
+             step puts it — its footer holds only Back. -->
+        <div class="uw-save-row">
+          <button
+            type="button"
+            class="btn btn-primary btn-save"
+            [disabled]="saving()"
+            (click)="save()"
+          >
+            {{ saving() ? 'Saving…' : saveLabel() }}
+            <app-icon name="arrow-right" [size]="15" />
+          </button>
+        </div>
+      }
+
+    </div>
+
+    <!-- WHY NEXT IS REFUSING. Step two shows one slot at a time, so an unfinished
+         third slot disabled the button while a complete slot filled the screen —
+         a dead control with nothing on screen connecting it to a cause. Clicking
+         this opens the slot it names. -->
+    @if (blockedReason()) {
+      <button type="button" class="uw-blocked" (click)="goToBlocking()">
+        <app-icon name="minus" [size]="14" />
+        <span>
+          {{ blockedReason() }}
+          @if (alsoIncomplete() > 0) {
+            <em>{{ alsoIncomplete() }} more slot(s) also unfinished.</em>
+          }
+        </span>
+      </button>
+    }
+
+    <!-- The SAME error, again, immediately above the footer: a save fails from the
+         last step with the body scrolled down, which put the message off-screen
+         next to the button that had just appeared to do nothing. `aria-hidden`
+         because a screen reader announced the copy at the top of the body. -->
+    @if (error()) {
+      <p class="qw-foot-error" aria-hidden="true">{{ error() }}</p>
+    }
+
+    <footer class="modal-foot">
+      @if (step() > 1) {
+        <button type="button" class="btn btn-ghost" (click)="back()">
+          <app-icon name="chevron-left" [size]="15" />
+          Back
+        </button>
+      } @else {
+        <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
+      }
+
+      <span class="qw-foot-gap"></span>
+
+      <!-- No Save here: the review step carries its own, above. -->
+      @if (step() < steps.length) {
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="continueBlocked()"
+          (click)="next()"
+        >
+          Next
+          <app-icon name="arrow-right" [size]="15" />
+        </button>
+      }
+    </footer>
+
+  </div>
+</div>

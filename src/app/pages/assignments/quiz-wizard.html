@@ -1,0 +1,866 @@
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="modal-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="heading()"
+    (click)="$event.stopPropagation()"
+  >
+
+    <header class="modal-head">
+      <span class="qw-icon"><app-icon name="clipboard" [size]="19" /></span>
+
+      <div class="qw-titles">
+        <h2>{{ heading() }}</h2>
+        <p class="modal-sub">Build a quiz with optional case-study, questions, and review.</p>
+      </div>
+
+      <!-- A number per step, a tick once passed — production's own stepper. -->
+      <ol class="qw-steps">
+        @for (item of steps; track item.index) {
+          <li
+            class="qw-step"
+            [class.is-current]="step() === item.index"
+            [class.is-done]="isDone(item.index)"
+            [title]="item.label"
+          >
+            @if (isDone(item.index)) {
+              <app-icon name="check" [size]="13" />
+            } @else {
+              {{ item.index }}
+            }
+          </li>
+        }
+      </ol>
+
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">
+        <app-icon name="close" [size]="18" />
+      </button>
+    </header>
+
+    <div class="modal-body">
+
+      @if (error()) {
+        <div class="modal-error" role="alert">{{ error() }}</div>
+      }
+
+      <!-- ================================================================
+           STEP 1 — Basic info
+           ================================================================ -->
+      @if (step() === 1) {
+        <div class="qw-grid">
+          <div class="field">
+            <label for="qw-title">Title <span class="req">*</span></label>
+            <input
+              id="qw-title"
+              type="text"
+              autocomplete="off"
+              [value]="displayName()"
+              (input)="displayName.set(valueOf($event))"
+            />
+          </div>
+
+          <div class="field">
+            <label for="qw-subs">Number of Allowed Submissions</label>
+            <input
+              id="qw-subs"
+              type="number"
+              min="1"
+              [value]="numberOfAllowedSubmissions()"
+              (input)="numberOfAllowedSubmissions.set(+valueOf($event) || 1)"
+            />
+          </div>
+
+          <!-- Disabled and shown, not hidden: the value IS stored, so hiding it
+               would mean writing a field the reader never saw. -->
+          <div class="field">
+            <label for="qw-creator">Creator Name</label>
+            <input id="qw-creator" type="text" [value]="creator()" disabled />
+          </div>
+
+          <div class="field">
+            <label for="qw-author">Author Name <span class="req">*</span></label>
+            <input
+              id="qw-author"
+              type="text"
+              autocomplete="off"
+              [value]="author()"
+              (input)="author.set(valueOf($event))"
+            />
+          </div>
+
+          <div class="field">
+            <label for="qw-auth">Authentication Type <span class="req">*</span></label>
+            <select id="qw-auth" (change)="authenticationType.set(valueOf($event))">
+              <option value="" [selected]="authenticationType() === ''">Select</option>
+              @for (option of authTypes(); track option) {
+                <option [value]="option" [selected]="option === authenticationType()">
+                  {{ option === 'login' ? 'Login' : 'Anonymous' }}
+                </option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="qw-status">Status <span class="req">*</span></label>
+            <select id="qw-status" (change)="status.set(valueOf($event))">
+              <option value="" [selected]="status() === ''">Select the status</option>
+              @for (option of statuses(); track option) {
+                <option [value]="option" [selected]="option === status()">{{ option }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <fieldset class="qw-duration">
+          <legend>Total Duration</legend>
+
+          <div class="field">
+            <label for="qw-h">Hours</label>
+            <input id="qw-h" type="number" min="0" [value]="totalDurationInHours()"
+                   (input)="totalDurationInHours.set(+valueOf($event) || 0)" />
+          </div>
+
+          <div class="field">
+            <label for="qw-m">Minutes</label>
+            <input id="qw-m" type="number" min="0" max="59" [value]="totalDurationInMinutes()"
+                   (input)="totalDurationInMinutes.set(+valueOf($event) || 0)" />
+          </div>
+
+          <div class="field">
+            <label for="qw-s">Seconds</label>
+            <input id="qw-s" type="number" min="0" max="59" [value]="totalDurationInSeconds()"
+                   (input)="totalDurationInSeconds.set(+valueOf($event) || 0)" />
+          </div>
+        </fieldset>
+
+        <!-- SELECTS, not checkboxes: production renders both as True/False
+             dropdowns, and the stored value is a boolean either way. -->
+        <div class="qw-grid">
+          <div class="field">
+            <label for="qw-exit">Allow Exit and Re-Entry</label>
+            <select id="qw-exit" (change)="allowExitAndReEntry.set(boolFrom(valueOf($event)))">
+              <option value="false" [selected]="!allowExitAndReEntry()">False</option>
+              <option value="true" [selected]="allowExitAndReEntry()">True</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="qw-answers">Display Correct Answers</label>
+            <select id="qw-answers" (change)="displayCorrectAnswers.set(boolFrom(valueOf($event)))">
+              <option value="false" [selected]="!displayCorrectAnswers()">False</option>
+              <option value="true" [selected]="displayCorrectAnswers()">True</option>
+            </select>
+          </div>
+        </div>
+      }
+
+      <!-- ================================================================
+           STEP 2 — Background / Case Study. Optional, and skippable.
+           ================================================================ -->
+      @if (step() === 2) {
+        <section class="qw-panel">
+          <h3>Background / Case Study</h3>
+
+          <div class="field">
+            <label for="qw-cs-title">Case Study Title</label>
+            <input
+              id="qw-cs-title"
+              type="text"
+              autocomplete="off"
+              placeholder="Enter case study title"
+              [value]="caseStudyTitle()"
+              (input)="caseStudyTitle.set(valueOf($event))"
+            />
+          </div>
+
+          <div class="field">
+            <span class="field-label">Background Description</span>
+
+            <!-- Production's own wording, now that the two buttons work. The one
+                 difference is stated rather than glossed: a PDF is inserted as a
+                 link, where production embeds it with its own delete control. -->
+            <!-- The text is WRAPPED IN A SPAN. `.qw-note` is a flex row, so every
+                 inline child becomes a flex item — with the <strong>s bare, the
+                 sentence broke into six items and rendered its words out of
+                 order. Two items only: the icon, and the sentence. -->
+            <p class="qw-note">
+              <app-icon name="clipboard" [size]="14" />
+              <span>
+                Use the <strong>Image</strong> or <strong>PDF</strong> buttons in the
+                toolbar to insert media inline. A PDF is inserted as a link you can
+                select and delete like any other content.
+              </span>
+            </p>
+
+            <app-rich-text
+              [value]="caseStudyDescription()"
+              [minHeight]="220"
+              placeholder="Enter the case study context"
+              (changed)="caseStudyDescription.set($event)"
+            />
+          </div>
+        </section>
+      }
+
+      <!-- ================================================================
+           STEP 3 — Questions
+           ================================================================ -->
+      @if (step() === 3) {
+<div class="qw-add-host">
+          <button
+            type="button"
+            class="qw-add"
+            aria-haspopup="menu"
+            [attr.aria-expanded]="typeMenuAt() === 'top'"
+            (click)="toggleTypeMenu('top')"
+          >
+            Add New Question
+            <app-icon name="plus-circle" [size]="17" />
+          </button>
+
+          @if (typeMenuAt() === 'top') {
+            <div class="qw-type-menu" role="menu">
+              @for (entry of questionTypes(); track entry.type) {
+                <button
+                  type="button"
+                  class="qw-type-item"
+                  role="menuitem"
+                  (click)="addQuestion(entry.type)"
+                >
+                  <app-icon [name]="$any(entry.icon)" [size]="16" />
+                  {{ entry.label }}
+                </button>
+              }
+            </div>
+          }
+        </div>
+
+        @if (questions().length === 0) {
+          <p class="qw-empty">No questions yet. Add one to continue.</p>
+        }
+
+        @for (question of questions(); track $index; let qIndex = $index) {
+          <article class="qw-question">
+            <header class="qw-q-head">
+              <strong>QUESTION : {{ qIndex + 1 }} ({{ labelFor(question.questionType) }})</strong>
+              <button
+                type="button"
+                class="qw-q-del"
+                aria-label="Delete question"
+                title="Delete question"
+                (click)="removeQuestion(qIndex)"
+              >
+                <app-icon name="trash" [size]="15" />
+              </button>
+            </header>
+
+            <div class="field">
+              <span class="field-label">Title <span class="req">*</span></span>
+              <app-rich-text
+                [value]="question.questionTitle"
+                [minHeight]="120"
+                placeholder="Enter the question"
+                (changed)="setQuestionTitle(qIndex, $event)"
+              />
+            </div>
+
+            <!-- FOUR columns for a TEXT or DESCRIPTIVE question, three otherwise.
+                 Production puts Max. Length on this row rather than beside the
+                 Answer, and the answer gets the full width below. -->
+            <div class="qw-q-grid" [class.is-four]="hasAnswer(question)">
+              <div class="field">
+                <label [for]="'qw-ped-' + qIndex">Pedagogy Type <span class="req">*</span></label>
+                <select
+                  [id]="'qw-ped-' + qIndex"
+                  (change)="setQuestionText(qIndex, 'pedagogyType', valueOf($event))"
+                >
+                  @for (option of pedagogyTypes(); track option) {
+                    <option [value]="option" [selected]="option === question.pedagogyType">
+                      {{ option }}
+                    </option>
+                  }
+                </select>
+              </div>
+
+              <!-- Read-only: the type was chosen from the menu, and changing it
+                   here would leave the wrong payload fields behind. -->
+              <div class="field">
+                <label [for]="'qw-qt-' + qIndex">Question Type</label>
+                <input [id]="'qw-qt-' + qIndex" type="text" [value]="question.questionType" disabled />
+              </div>
+
+              <div class="field">
+                <label [for]="'qw-marks-' + qIndex">Marks</label>
+                <input
+                  [id]="'qw-marks-' + qIndex"
+                  type="number"
+                  min="0"
+                  [value]="question.marks"
+                  (input)="setQuestionField(qIndex, 'marks', valueOf($event))"
+                />
+              </div>
+
+              @if (hasAnswer(question)) {
+                <div class="field">
+                  <label [for]="'qw-max-' + qIndex">Max. Length <span class="req">*</span></label>
+                  <input
+                    [id]="'qw-max-' + qIndex"
+                    type="number"
+                    min="1"
+                    [value]="question.maxCharLength"
+                    (input)="setQuestionField(qIndex, 'maxCharLength', valueOf($event))"
+                  />
+                </div>
+              }
+            </div>
+
+            <fieldset class="qw-duration is-inline">
+              <legend>Duration</legend>
+
+              <div class="field">
+                <label [for]="'qw-qh-' + qIndex">Hours</label>
+                <input [id]="'qw-qh-' + qIndex" type="number" min="0" [value]="question.durationInHours"
+                       (input)="setQuestionDuration(qIndex, 'durationInHours', valueOf($event))" />
+              </div>
+
+              <div class="field">
+                <label [for]="'qw-qm-' + qIndex">Minutes</label>
+                <input [id]="'qw-qm-' + qIndex" type="number" min="0" max="59" [value]="question.durationInMinutes"
+                       (input)="setQuestionDuration(qIndex, 'durationInMinutes', valueOf($event))" />
+              </div>
+
+              <div class="field">
+                <label [for]="'qw-qs-' + qIndex">Seconds</label>
+                <input [id]="'qw-qs-' + qIndex" type="number" min="0" max="59" [value]="question.durationInSeconds"
+                       (input)="setQuestionDuration(qIndex, 'durationInSeconds', valueOf($event))" />
+              </div>
+            </fieldset>
+
+            <!-- Add Resources (Optional) is deliberately absent — excluded on
+                 instruction, and the field is no longer written at all. -->
+
+            <!-- ---- MCQ options ---- -->
+            @if (hasOptions(question)) {
+              <section class="qw-options">
+                <header class="qw-options-head">
+                  <strong>OPTIONS</strong>
+                  <span class="qw-hint">(Tick the correct options)</span>
+
+                  <button
+                    type="button"
+                    class="qw-mini"
+                    aria-label="Add option"
+                    title="Add option"
+                    (click)="addOption(qIndex)"
+                  >
+                    <app-icon name="plus" [size]="14" />
+                  </button>
+
+                  <label class="qw-toggle">
+                    <input
+                      type="checkbox"
+                      [checked]="!isSingleAnswer(question)"
+                      (change)="toggleMultipleCorrect(qIndex)"
+                    />
+                    Multiple Correct Options
+                  </label>
+                </header>
+
+                @for (option of question.options; track $index; let optionIndex = $index) {
+                  <div class="qw-option">
+                    <span class="qw-option-no">{{ optionIndex + 1 }}</span>
+
+                    <!-- A radio under single-answer, a checkbox under multiple —
+                         the control has to say which rule applies. -->
+                    <input
+                      class="qw-correct"
+                      [type]="isSingleAnswer(question) ? 'radio' : 'checkbox'"
+                      [name]="'correct-' + qIndex"
+                      [checked]="option.isCorrect"
+                      [attr.aria-label]="'Option ' + (optionIndex + 1) + ' is correct'"
+                      (change)="markCorrect(qIndex, optionIndex)"
+                    />
+
+                    <select
+                      class="qw-option-type"
+                      [attr.aria-label]="'Option ' + (optionIndex + 1) + ' type'"
+                      (change)="setOptionType(qIndex, optionIndex, valueOf($event))"
+                    >
+                      <option value="TEXT" [selected]="option.optionType === 'TEXT'">Text</option>
+                      <option value="IMAGE" [selected]="option.optionType === 'IMAGE'">Image</option>
+                    </select>
+
+                    @if (option.optionType === 'IMAGE') {
+                      <input
+                        class="qw-option-value"
+                        type="text"
+                        placeholder="Storage path of the image"
+                        [value]="option.imagePath"
+                        [attr.aria-label]="'Option ' + (optionIndex + 1) + ' image path'"
+                        (input)="setOptionImage(qIndex, optionIndex, valueOf($event))"
+                      />
+                    } @else {
+                      <input
+                        class="qw-option-value"
+                        type="text"
+                        placeholder="Option text"
+                        [value]="option.name"
+                        [attr.aria-label]="'Option ' + (optionIndex + 1) + ' text'"
+                        (input)="setOptionText(qIndex, optionIndex, valueOf($event))"
+                      />
+                    }
+
+                    <button
+                      type="button"
+                      class="qw-mini is-danger"
+                      aria-label="Remove option"
+                      title="Remove option"
+                      (click)="removeOption(qIndex, optionIndex)"
+                    >
+                      <app-icon name="close" [size]="13" />
+                    </button>
+                  </div>
+                }
+              </section>
+            }
+
+            <!-- ---- TEXT / DESCRIPTIVE ----
+                 A TEXTAREA at full width, as production has it: a model answer for
+                 a descriptive question runs to a paragraph, and a single-line input
+                 hides all but the start of it. -->
+            @if (hasAnswer(question)) {
+              <div class="field">
+                <label [for]="'qw-ans-' + qIndex">Answer <span class="req">*</span></label>
+                <textarea
+                  [id]="'qw-ans-' + qIndex"
+                  class="qw-answer"
+                  rows="3"
+                  placeholder="What a correct response looks like"
+                  [value]="question.answer"
+                  (input)="setQuestionText(qIndex, 'answer', valueOf($event))"
+                ></textarea>
+              </div>
+            }
+
+            <!-- ---- Blanks ---- -->
+            @if (hasBlanks(question)) {
+              <section class="qw-options">
+                <header class="qw-options-head">
+                  <strong>BLANKS</strong>
+                  <span class="qw-hint">
+                    @if (question.questionType === 'RICH_BLANKS') {
+                      (write ___(a)___ in the title for each)
+                    } @else {
+                      (write &lt;&lt;blank&gt;&gt; in the title for each)
+                    }
+                  </span>
+
+                  <button
+                    type="button"
+                    class="qw-mini"
+                    aria-label="Add blank"
+                    title="Add blank"
+                    (click)="addBlank(qIndex)"
+                  >
+                    <app-icon name="plus" [size]="14" />
+                  </button>
+                </header>
+
+                @for (key of blankLabels(question); track key) {
+                  <div class="qw-blank">
+                    <header class="qw-blank-head">
+                      <code>{{ key }}</code>
+
+                      <button
+                        type="button"
+                        class="qw-mini"
+                        aria-label="Add choice"
+                        title="Add choice"
+                        (click)="addBlankOption(qIndex, key)"
+                      >
+                        <app-icon name="plus" [size]="13" />
+                      </button>
+
+                      <button
+                        type="button"
+                        class="qw-mini is-danger"
+                        aria-label="Remove blank"
+                        title="Remove blank"
+                        (click)="removeBlank(qIndex, key)"
+                      >
+                        <app-icon name="close" [size]="13" />
+                      </button>
+                    </header>
+
+                    @for (option of question.blanks?.[key]; track $index; let choiceIndex = $index) {
+                      <div class="qw-option">
+                        <!-- ONE right answer per blank: a blank with two cannot be
+                             answered, so these are always radios. -->
+                        <input
+                          class="qw-correct"
+                          type="radio"
+                          [name]="'blank-' + qIndex + '-' + key"
+                          [checked]="option.isCorrect"
+                          [attr.aria-label]="'Choice ' + (choiceIndex + 1) + ' is correct'"
+                          (change)="markBlankCorrect(qIndex, key, choiceIndex)"
+                        />
+
+                        <input
+                          class="qw-option-value"
+                          type="text"
+                          placeholder="Choice"
+                          [value]="option.name"
+                          [attr.aria-label]="'Choice ' + (choiceIndex + 1)"
+                          (input)="setBlankOptionText(qIndex, key, choiceIndex, valueOf($event))"
+                        />
+
+                        <button
+                          type="button"
+                          class="qw-mini is-danger"
+                          aria-label="Remove choice"
+                          title="Remove choice"
+                          (click)="removeBlankOption(qIndex, key, choiceIndex)"
+                        >
+                          <app-icon name="close" [size]="13" />
+                        </button>
+                      </div>
+                    }
+                  </div>
+                }
+              </section>
+            }
+
+            <!-- ---- Sub-questions ---- -->
+            <section class="qw-subparts">
+              <header class="qw-options-head">
+                <strong>SUB-QUESTIONS (a, b, c…)</strong>
+
+                <label class="qw-toggle">
+                  <input
+                    type="checkbox"
+                    [checked]="question.hasSubParts === true"
+                    (change)="toggleSubParts(qIndex)"
+                  />
+                  Enable Sub-questions
+                </label>
+              </header>
+
+              @if (question.hasSubParts) {
+                <!-- Each part carries its OWN marks, its own Multiple Correct
+                     rule and its own options — production's shape, and what the
+                     stored `subParts` entries hold. -->
+                @for (part of question.subParts; track $index; let partIndex = $index) {
+                  <div class="qw-subpart-card">
+                    <div class="qw-subpart">
+                      <span class="qw-subpart-label">{{ part.label }}</span>
+
+                      <input
+                        class="qw-option-value"
+                        type="text"
+                        placeholder="Sub-question"
+                        [value]="part.subPartTitle"
+                        [attr.aria-label]="'Sub-question ' + part.label"
+                        (input)="setSubPartField(qIndex, partIndex, 'subPartTitle', valueOf($event))"
+                      />
+
+                      <input
+                        class="qw-subpart-marks"
+                        type="number"
+                        min="0"
+                        [value]="part.marks"
+                        [attr.aria-label]="'Marks for sub-question ' + part.label"
+                        (input)="setSubPartField(qIndex, partIndex, 'marks', valueOf($event))"
+                      />
+
+                      <button
+                        type="button"
+                        class="qw-mini is-danger"
+                        aria-label="Remove sub-question"
+                        title="Remove sub-question"
+                        (click)="removeSubPart(qIndex, partIndex)"
+                      >
+                        <app-icon name="close" [size]="13" />
+                      </button>
+                    </div>
+
+                    <div class="qw-subpart-options">
+                      <header class="qw-options-head">
+                        <strong>OPTIONS</strong>
+
+                        <button
+                          type="button"
+                          class="qw-mini"
+                          aria-label="Add option"
+                          title="Add option"
+                          (click)="addSubPartOption(qIndex, partIndex)"
+                        >
+                          <app-icon name="plus" [size]="13" />
+                        </button>
+
+                        <label class="qw-toggle">
+                          <input
+                            type="checkbox"
+                            [checked]="part.oneCorrectOption === false"
+                            (change)="toggleSubPartMultiple(qIndex, partIndex)"
+                          />
+                          Multiple Correct Options
+                        </label>
+                      </header>
+
+                      @for (option of part.options; track $index; let optIndex = $index) {
+                        <div class="qw-option">
+                          <span class="qw-option-no">{{ optIndex + 1 }}</span>
+
+                          <input
+                            class="qw-correct"
+                            [type]="part.oneCorrectOption === false ? 'checkbox' : 'radio'"
+                            [name]="'sub-' + qIndex + '-' + partIndex"
+                            [checked]="option.isCorrect"
+                            [attr.aria-label]="'Option ' + (optIndex + 1) + ' is correct'"
+                            (change)="markSubPartCorrect(qIndex, partIndex, optIndex)"
+                          />
+
+                          <input
+                            class="qw-option-value"
+                            type="text"
+                            placeholder="Enter option"
+                            [value]="option.name"
+                            [attr.aria-label]="'Sub-option ' + (optIndex + 1)"
+                            (input)="setSubPartOptionText(qIndex, partIndex, optIndex, valueOf($event))"
+                          />
+
+                          <button
+                            type="button"
+                            class="qw-mini is-danger"
+                            aria-label="Remove option"
+                            title="Remove option"
+                            (click)="removeSubPartOption(qIndex, partIndex, optIndex)"
+                          >
+                            <app-icon name="close" [size]="13" />
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+
+                <div class="qw-subpart-foot">
+                  <button type="button" class="qw-mini-text" (click)="addSubPart(qIndex)">
+                    <app-icon name="plus" [size]="13" />
+                    Add sub-question
+                  </button>
+
+                  <!-- Production prints this under the list, and it is worth having:
+                       the parts' marks and the question's own are separate numbers
+                       and it is easy to set one and forget the other. -->
+                  <span class="qw-subpart-total">
+                    Total Sub-Parts Marks: <strong>{{ subPartMarks(question) }}</strong>
+                  </span>
+                </div>
+              }
+            </section>
+          </article>
+        }
+
+        <!-- The SECOND button, with its OWN menu opening UPWARD.
+             It used to share one flag with the button above, so clicking it opened
+             a menu at the top of a scrolled list — invisible, and the button read
+             as dead. Production anchors the menu to whichever button was pressed
+             and drops this one up, because a menu falling from the last control in
+             a scrolling dialog opens past the end of it. -->
+        @if (questions().length > 0) {
+          <div class="qw-add-host is-bottom">
+            <button
+              type="button"
+              class="qw-add is-secondary"
+              aria-haspopup="menu"
+              [attr.aria-expanded]="typeMenuAt() === 'bottom'"
+              (click)="toggleTypeMenu('bottom')"
+            >
+              Add New Question
+              <app-icon name="plus-circle" [size]="17" />
+            </button>
+
+            @if (typeMenuAt() === 'bottom') {
+              <div class="qw-type-menu is-up" role="menu">
+                @for (entry of questionTypes(); track entry.type) {
+                  <button
+                    type="button"
+                    class="qw-type-item"
+                    role="menuitem"
+                    (click)="addQuestion(entry.type)"
+                  >
+                    <app-icon [name]="$any(entry.icon)" [size]="16" />
+                    {{ entry.label }}
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        }
+      }
+
+      <!-- ================================================================
+           STEP 4 — Review
+           ================================================================ -->
+      @if (step() === 4) {
+        <dl class="qw-review">
+          <dt>Quiz Title</dt><dd>{{ displayName() }}</dd>
+          <dt>Creator</dt><dd>{{ creator() }}</dd>
+          <dt>Author</dt><dd>{{ author() }}</dd>
+          <dt>Authentication Type</dt><dd>{{ authenticationType() }}</dd>
+          <dt>Status</dt><dd>{{ status() }}</dd>
+          <dt>Number Of Allowed Submissions</dt><dd>{{ numberOfAllowedSubmissions() }}</dd>
+          <dt>Duration</dt><dd>{{ durationLabel() }}</dd>
+          <dt>Allow Exit And ReEntry</dt><dd>{{ allowExitAndReEntry() }}</dd>
+          <dt>Display Correct Answers</dt><dd>{{ displayCorrectAnswers() }}</dd>
+          <dt>Total Marks</dt><dd>{{ totalMarks() }}</dd>
+        </dl>
+
+        @if (caseStudyTitle() || caseStudyDescription()) {
+          <section class="qw-panel">
+            <h3>Background / Case Study</h3>
+            @if (caseStudyTitle()) {
+              <p class="qw-review-title">{{ caseStudyTitle() }}</p>
+            }
+            <!-- Plain text, not the HTML: a review is for checking, and rendering
+                 the markup here would let a stray heading restyle the summary. -->
+            <p class="qw-review-body">{{ plainText(caseStudyDescription()) }}</p>
+          </section>
+        }
+
+        @for (question of questions(); track $index) {
+          <section class="qw-panel">
+            <h3>Question {{ $index + 1 }}</h3>
+            <p class="qw-review-title">{{ plainText(question.questionTitle) }}</p>
+
+            <dl class="qw-review is-compact">
+              <dt>Question Type</dt><dd>{{ question.questionType }}</dd>
+              <dt>Pedagogy Type</dt><dd>{{ question.pedagogyType }}</dd>
+              <dt>Marks</dt><dd>{{ question.marks }}</dd>
+
+              @if (hasOptions(question)) {
+                <dt>Options</dt>
+                <dd>
+                  <ul class="qw-review-options">
+                    @for (option of question.options; track $index) {
+                      <li [class.is-correct]="option.isCorrect">
+                        {{ option.optionType === 'IMAGE' ? option.imagePath : option.name }}
+                        @if (option.isCorrect) { <span class="qw-tick">correct</span> }
+                      </li>
+                    }
+                  </ul>
+
+                  <!-- NO CORRECT ANSWER SET is worth saying here: four options with
+                       no tick look the same as four you have not looked at, and a
+                       quiz saved this way cannot be marked when it is run. -->
+                  @if (missingCorrectOption(question)) {
+                    <p class="qw-review-warn">
+                      No correct answer is set, so this question cannot be marked.
+                    </p>
+                  }
+                </dd>
+              }
+
+              @if (hasAnswer(question)) {
+                <dt>Answer</dt><dd>{{ question.answer || '—' }}</dd>
+              }
+
+              <!-- GROUPED PER BLANK, with the correct choice ticked — production's
+                   own review shows 'optionsBlank1' over its numbered choices. A
+                   comma-joined list of key names told the reader nothing about
+                   whether the answers were right. -->
+              @if (hasBlanks(question)) {
+                <dt>Options</dt>
+                <dd>
+                  @if (blankLabels(question).length === 0) {
+                    —
+                  }
+                  @for (key of blankLabels(question); track key) {
+                    <div class="qw-review-blank">
+                      <span class="qw-review-blank-key">{{ key }}</span>
+                      @for (choice of question.blanks?.[key]; track $index) {
+                        <p [class.is-correct]="choice.isCorrect">
+                          {{ $index + 1 }} : {{ choice.name || '—' }}
+                          @if (choice.isCorrect) {
+                            <app-icon name="check-circle" [size]="13" />
+                          }
+                        </p>
+                      }
+                    </div>
+                  }
+                </dd>
+              }
+
+              @if (question.hasSubParts) {
+                <dt>Sub-questions</dt>
+                <dd>
+                  {{ question.subParts?.length }}
+                  <span class="qw-review-muted">
+                    ({{ subPartMarks(question) }} marks in total)
+                  </span>
+                </dd>
+              }
+            </dl>
+          </section>
+        }
+      }
+
+    </div>
+
+    <!-- The SAME error, again, immediately above the footer.
+         The copy at the top of the body is where an error conventionally goes, but
+         a save fails from step 4 with the body scrolled to the bottom — so the
+         message was off-screen next to the button that had just appeared to do
+         nothing. `aria-hidden` on this one: a screen reader already announced the
+         first, and hearing it twice is worse than not seeing it once. -->
+    @if (error()) {
+      <p class="qw-foot-error" aria-hidden="true">{{ error() }}</p>
+    }
+
+    <footer class="modal-foot">
+      @if (step() > 1) {
+        <button type="button" class="btn btn-ghost" (click)="back()">
+          <app-icon name="chevron-left" [size]="15" />
+          Back
+        </button>
+      } @else {
+        <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
+      }
+
+      <span class="qw-foot-gap"></span>
+
+      <!-- Step 2's own Skip, which is what makes the case study optional. -->
+      @if (step() === 2) {
+        <button type="button" class="btn btn-ghost" (click)="skipBackground()">Skip</button>
+      }
+
+      @if (step() < steps.length) {
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="continueBlocked()"
+          (click)="next()"
+        >
+          Next
+          <app-icon name="arrow-right" [size]="15" />
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="btn btn-primary btn-save"
+          [disabled]="saving()"
+          (click)="save()"
+        >
+          {{ saving() ? 'Saving…' : saveLabel() }}
+          <app-icon name="arrow-right" [size]="15" />
+        </button>
+      }
+    </footer>
+
+  </div>
+</div>

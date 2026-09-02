@@ -312,20 +312,31 @@ describe('ClassroomUnits', () => {
     expect(component.visibleUnits().map(row => row.docId)).toEqual(['b']);
   });
 
-  it('filters by language', async () => {
-    catalogue = [unit('a', { isoCode: 'EN' }), unit('b', { isoCode: 'HI' })];
+  /* BY TYPE, as production's dropdown is — MuT, Group Activity, FLN, Micro
+     Improvement Programme, TACTivity — not by language. */
+  it('filters by learning unit type', async () => {
+    catalogue = [unit('a', { type: 'TACtivity' }), unit('b', { type: 'MuT' })];
     await mount();
 
-    component.language.set('HI');
+    component.unitType.set('MuT');
 
     expect(component.visibleUnits().map(row => row.docId)).toEqual(['b']);
   });
 
-  it('offers only the languages the listed units are in', async () => {
-    catalogue = [unit('a', { isoCode: 'EN' }), unit('b', { isoCode: 'HI' })];
+  it('shows every unit when the type filter is All', async () => {
+    catalogue = [unit('a', { type: 'TACtivity' }), unit('b', { type: 'MuT' })];
     await mount();
 
-    expect(component.languageOptions()).toEqual(['EN', 'HI']);
+    component.unitType.set('');
+
+    expect(component.visibleUnits().length).toBe(2);
+  });
+
+  it('carries the type onto the card, for the thumbnail badge', async () => {
+    catalogue = [unit('a', { type: 'TACtivity' }), unit('b', { type: 'MuT' })];
+    await mount();
+
+    expect(component.units().map(row => row.type).sort()).toEqual(['MuT', 'TACtivity']);
   });
 
   it('reads the student count off the classroom', async () => {

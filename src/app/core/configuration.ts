@@ -64,6 +64,147 @@ export const CONFIGURATION_DOCS = {
   customerSchool:     { id: 'CustomerSchool',     key: 'options' },
   teacherRoles:       { id: 'TeacherRoles',       key: 'roles' },
 
+  /*
+   * ASSIGNMENTS — both lists live in ONE document, which is why they share an id.
+   *
+   *   Configuration/AssignmentTypes.assignmentsTypes   the five kinds
+   *   Configuration/AssignmentTypes.questionTypesForm  a form's field types
+   *
+   * That is production's own layout, read from the live document. Note
+   * `assignmentsTypes` with the plural 's' in the middle — its own spelling, kept
+   * because the key is what the read is looking up, not something this app chose.
+   */
+  assignmentTypes:    { id: 'AssignmentTypes',     key: 'assignmentsTypes' },
+  formQuestionTypes:  { id: 'AssignmentTypes',     key: 'questionTypesForm' },
+
+  /*
+   * FOUR MORE LISTS IN THE SAME DOCUMENT, and these four are NOT production's.
+   *
+   * Production hardcodes every one of them in its own components — `statusList`,
+   * the quiz question types, the pedagogy pair, the authentication pair — so
+   * there is no document to mirror. They are here because they are option lists
+   * a non-developer might reasonably need to change, which is the same argument
+   * that moved the other twenty-odd out of the code.
+   *
+   * They sit in `AssignmentTypes` rather than in four new documents because that
+   * is the convention the collection already follows: `AssignmentTypes` holds the
+   * assignment kinds AND a form's field types, and `subjects` holds two unrelated
+   * arrays. One document per feature, several keys inside it.
+   */
+
+  /**
+   * The five quiz question types.
+   *
+   * `{ type, label }` only. THE ICON STAYS IN CODE: it names an SVG in the icon
+   * component, so a value here would be a string nothing could render unless it
+   * happened to match — and an editor changing 'edit' to 'pencil' would produce a
+   * blank space with no way to tell why. The reader merges the configured label
+   * with the icon the code knows for that type.
+   */
+  quizQuestionTypes:  { id: 'AssignmentTypes',     key: 'questionTypesQuiz' },
+
+  /**
+   * WHICH of the five kinds this app can CREATE — the restriction itself.
+   *
+   * `assignmentsTypes` above lists all five so a stored GAME row can be labelled
+   * 'Game'; this says which the Create menu offers. It was a hardcoded three-entry
+   * constant, and it is the one entry here whose value is a policy rather than a
+   * vocabulary: adding 'TEXTBLOCK' to this array does NOT make a text-block
+   * editor exist. Guarded in the reader for exactly that reason.
+   */
+  creatableAssignmentTypes: { id: 'AssignmentTypes', key: 'creatableTypes' },
+
+  /** FA and SA — formative and summative, per quiz question. */
+  quizPedagogyTypes:  { id: 'AssignmentTypes',     key: 'pedagogyTypes' },
+
+  /** Whether a quiz requires a login or accepts anonymous attempts. */
+  quizAuthTypes:      { id: 'AssignmentTypes',     key: 'authenticationTypes' },
+
+  /*
+   * What a student may be asked to upload.
+   *
+   * A MAP, NOT AN ARRAY — `{ PDF: 'PDF', IMAGE: 'Image', … }` — which is why it
+   * gets its own reader rather than going through applyList. The KEY is what a
+   * slot stores in `uploadFileType` ('IMAGE'); the value is what the select shows.
+   */
+  /**
+   * The two kinds of workflow a template can be, READ OFF PRODUCTION'S OWN
+   * document: Configuration/WorkflowTypes.workflowTypes.
+   *
+   * ONE OF THE FEW ENTRIES HERE THAT MIRRORS A DOCUMENT PRODUCTION ACTUALLY HAS.
+   * Most of this file's assignment and workflow entries exist because production
+   * hardcodes the list in a component and there was nothing to mirror; this one is
+   * the opposite — the document is real, so the id and key are its own.
+   *
+   * `displayName`, NOT `label`, which is why it gets its own reader rather than
+   * going through applyList. Its rows are `{ code, displayName }` and this app's
+   * CodedOption is `{ code, label }`; applyList's blind cast would hand every
+   * consumer a row whose `label` is undefined, which renders an empty option in
+   * the Workflow Type select rather than failing — the same trap `subdomainName`
+   * set for applyDomains.
+   *
+   * THE HYPHEN IN 'STEM-CLUB' IS PART OF THE CODE and matters: production stores
+   * it hyphenated on every template, so a tidied 'STEMCLUB' would write documents
+   * its own list page could not label.
+   */
+  workflowTypes:      { id: 'WorkflowTypes',       key: 'workflowTypes' },
+
+  uploadFormats:      { id: 'acceptedUploadFormats', key: 'formatNames' },
+
+  /**
+   * The megabyte ceiling per upload type, keyed by the SAME codes as
+   * `formatNames` above, plus a `DEFAULT` for the types not named.
+   *
+   * A MAP, like formatNames, and in the same document because it is the same
+   * subject: what a student may upload, and how big it may be. Production
+   * expresses these as three ternaries inside a template binding
+   * (`VIDEO ? 200 : IMAGE ? 20 : 40`), which is the least editable place a number
+   * like that could live.
+   */
+  uploadSizeCaps:     { id: 'acceptedUploadFormats', key: 'sizeCaps' },
+
+  /**
+   * The EXTENSIONS each upload type accepts, keyed LOWERCASE.
+   *
+   * The third key in the same document, and the one this app's own copy does not
+   * have yet — production's `formats` map is what its player validates a chosen
+   * file against. Seeded from UPLOAD_ACCEPTED_EXTENSIONS so an upload works before
+   * the document grows the key, and read from the document once it does.
+   *
+   * LOWERCASE KEYS AGAINST UPPERCASE VALUES, which is production's: a slot stores
+   * `uploadFileType: 'IMAGE'` and the lookup is
+   * `formats[uploadFileType.toLowerCase()]`. Matched rather than tidied.
+   */
+  uploadExtensions:   { id: 'acceptedUploadFormats', key: 'formats' },
+
+  /*
+   * THE ASSIGNMENT STATUS VOCABULARY — its own document, because it is used in
+   * two unrelated ways and only one of them is a dropdown.
+   *
+   *   statuses      what the Status select OFFERS      ['LIVE', 'DEVELOPMENT']
+   *   liveValues    which stored values COUNT as live  ['active', 'live']
+   *   closedValues  which count as closed              ['closed', 'archived']
+   *
+   * The second and third are not the first. The collection holds statuses this
+   * app never writes — 'active', 'archived' — because production wrote them, so
+   * the badge has to colour values the dropdown does not offer. Merging the three
+   * into one list would either offer 'archived' for creation or paint a stored
+   * 'archived' row as a draft.
+   */
+  assignmentStatuses:       { id: 'AssignmentStatuses', key: 'statuses' },
+  assignmentLiveStatuses:   { id: 'AssignmentStatuses', key: 'liveValues' },
+  assignmentClosedStatuses: { id: 'AssignmentStatuses', key: 'closedValues' },
+
+  /**
+   * The values a new assignment opens with.
+   *
+   * A MAP of unrelated scalars rather than a list, which is why it is its own
+   * document and its own reader: a prefilled sentence, a slot's upload count and
+   * a Storage folder have nothing in common except that all three were literals
+   * buried in the model.
+   */
+  assignmentDefaults: { id: 'AssignmentDefaults', key: 'defaults' },
+
   /**
    * The learning-unit taxonomy — production's document id and key, unchanged.
    *
@@ -197,6 +338,19 @@ export const CONFIGURATION_DOCS = {
 
 export type ConfigurationName = keyof typeof CONFIGURATION_DOCS;
 
+/**
+ * One row of Configuration/WorkflowTypes.workflowTypes, AS THE DOCUMENT HOLDS IT.
+ *
+ * Named for the document rather than for what this app wants, because that is
+ * what it is: the translation to CodedOption happens in the reader, and a shape
+ * that pretended to be a CodedOption here would hide the very mismatch it exists
+ * to describe.
+ */
+export interface ConfiguredWorkflowType {
+  code?: string;
+  displayName?: string;
+}
+
 /* ==========================================================================
    Payload shapes.
 
@@ -221,6 +375,64 @@ export interface CodedOption {
 export interface ValuedOption {
   value: string;
   label: string;
+}
+
+/**
+ * One entry of Configuration/AssignmentTypes.assignmentsTypes.
+ *
+ * PRODUCTION'S FIELD NAMES, which are neither of the two shapes above: this one
+ * pairs `type` with `displayName`, where CodedOption uses code/name and
+ * ValuedOption uses value/label. Kept as found rather than mapped on read,
+ * because the read is a straight array copy and a translation layer for two
+ * fields would be a place for the names to drift.
+ */
+export interface ConfiguredAssignmentType {
+  /** 'QUIZ' | 'UPLOAD' | 'GAME' | 'FORM' | 'TEXTBLOCK'. */
+  type: string;
+  displayName: string;
+}
+
+/**
+ * One entry of Configuration/AssignmentTypes.questionTypesForm.
+ *
+ * A THIRD PAIR OF NAMES — `key` and `display` — in the same document as the one
+ * above, which uses `type` and `displayName`. Production's, not a typo here.
+ *
+ * The keys are lowerCamel ('textBox', 'dropDownDynamic') where a quiz question's
+ * type is SCREAMING_SNAKE ('FILL_IN_THE_BLANKS'). The two vocabularies are
+ * genuinely different and neither is normalised.
+ */
+/**
+ * A quiz question type as the document carries it.
+ *
+ * NO ICON, deliberately — see CONFIGURATION_DOCS.quizQuestionTypes. The service
+ * merges this with the icon the code holds for that type.
+ */
+export interface ConfiguredQuizQuestionType {
+  type: string;
+  label: string;
+}
+
+/**
+ * The scalars a new assignment opens with.
+ *
+ * EVERY FIELD OPTIONAL. A document that sets only `formInstructions` must leave
+ * the other two at their built-in values rather than blanking them, because a
+ * partial document is the normal way somebody edits one.
+ */
+export interface ConfiguredAssignmentDefaults {
+  /** The sentence a new form's Instructions field opens with. */
+  formInstructions?: string;
+  /** How many uploads a new file slot allows. */
+  slotMaxUploads?: number;
+  /** The Cloud Storage folder inline quiz media is written to. */
+  quizMediaFolder?: string;
+}
+
+export interface ConfiguredFormQuestionType {
+  /** 'none' | 'text' | 'textBox' | 'dropDown' | 'starRating' | … */
+  key: string;
+  display: string;
 }
 
 /** typeofSchools. `short` is what the institutions table abbreviates to. */

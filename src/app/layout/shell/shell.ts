@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import {
@@ -20,6 +20,7 @@ import {
   TeacherClassroom
 } from '../../models/teaching.model';
 import { AuthService } from '../../services/auth.service';
+import { PageContextService } from '../../services/page-context.service';
 import { DashboardService } from '../../services/dashboard.service';
 import { ConfigurationService } from '../../services/configuration.service';
 
@@ -74,7 +75,14 @@ export class Shell {
 
   private dashboard = inject(DashboardService);
 
-  readonly allotment = signal<AllottedInstitution[]>([]);
+  /**
+   * READS THE SHARED SIGNAL, rather than holding its own copy.
+   *
+   * The sidebar and the dashboard render the same allotment; two snapshots drift
+   * apart the moment one is refreshed and the other is not, which is exactly what
+   * deleting a classroom used to do.
+   */
+  readonly allotment = computed(() => this.dashboard.allotment().institutions);
 
   /** Whether the Institutions group itself is open. Closed until asked for. */
   readonly institutionsOpen = signal(false);
@@ -88,15 +96,48 @@ export class Shell {
    */
   readonly openSchool = signal<string | null>(null);
 
-  private async loadAllotment(): Promise<void> {
-    try {
-      this.allotment.set((await this.dashboard.myAllotment()).institutions);
-    } catch {
-      // The group renders empty. A sidebar that cannot list schools must not
-      // stop the rest of the sidebar rendering.
-      this.allotment.set([]);
+  /**
+   * The classroom the current URL is about, or ''.
+   *
+   * Kept so the tree can REVEAL it — see the effect below. Read from the URL
+   * rather than handed over by the page, because the shell is a layout route and
+   * must not depend on what is rendered inside it.
+   */
+  private readonly routeClassroomId = signal('');
+
+  /**
+   * OPENS THE TREE ONTO THE CLASS BEING VIEWED.
+   *
+   * WHY THIS EXISTS. Arriving from a dashboard card, or from a shared link, left
+   * the Institutions group collapsed — so the sidebar gave no indication of where
+   * you were and the class was two clicks from being visible, let alone clickable.
+   *
+   * AN EFFECT RATHER THAN A NAVIGATION HANDLER, because the two things it needs
+   * arrive in either order: the URL changes immediately, and the allotment lands
+   * after a read. Whichever is last triggers this, so a hard refresh straight
+   * onto a class still opens the tree once the schools appear.
+   *
+   * It only ever OPENS. Collapsing on navigation away would fight a user who had
+   * deliberately opened a different school.
+   */
+  private readonly revealCurrentClass = effect(() => {
+    const classroomId = this.routeClassroomId();
+
+    if (!classroomId) {
+      return;
     }
-  }
+
+    const school = this.allotment().find(entry =>
+      entry.classrooms.some(classroom => classroom.classroomId === classroomId)
+    );
+
+    if (!school) {
+      return;
+    }
+
+    this.institutionsOpen.set(true);
+    this.openSchool.set(this.schoolKey(school));
+  });
 
   schoolKey(institution: AllottedInstitution): string {
     return institution.institutionId || institution.institutionName;
@@ -170,7 +211,17 @@ export class Shell {
     { label: 'Institutions',   path: '/institutions',   icon: 'building' },
     { label: 'Classrooms',     path: '/classrooms',     icon: 'classroom' },
     { label: 'Programme',      path: '/programme',      icon: 'programme' },
-    { label: 'Learning Units', path: '/learning-units', icon: 'chart' }
+    { label: 'Learning Units', path: '/learning-units', icon: 'chart' },
+    /* AFTER Learning Units, which is where production's sidebar puts it too —
+       the things a classroom is set come after the things it is built from.
+
+       THE ICONS ARE PRODUCTION'S OWN, entry for entry: Learning Units is
+       heroicons chart-square-bar ('chart' here), Assignments is academic-cap and
+       Workflow Templates is the plain clipboard. Assignments used the ticked
+       clipboard and Workflow Templates a grip of dots, neither of which appears
+       in its sidebar. */
+    { label: 'Assignments',    path: '/assignments',    icon: 'academic-cap' },
+    { label: 'Workflow Templates', path: '/workflow-templates', icon: 'clipboard-plain' }
   ];
 
   readonly collapsed = signal(false);
@@ -213,10 +264,23 @@ export class Shell {
    * renders as "Institutions" without a slug-to-label lookup living in the
    * template.
    */
-  readonly pageTitle = signal('Dashboard');
+  private readonly routeTitle = signal('Dashboard');
+  private readonly routeCrumbRoot = signal('ThinkTac');
 
-  /** First breadcrumb segment. 'ThinkTac' unless a route overrides it. */
-  readonly crumbRoot = signal('ThinkTac');
+  private pageContext = inject(PageContextService);
+
+  /*
+   * WHAT A PAGE SAYS WINS over what its route says.
+   *
+   * Route data names the SCREEN; a page about one record can name the record.
+   * See PageContextService — the route remains the fallback, so every page that
+   * says nothing behaves exactly as it did.
+   */
+  readonly pageTitle = computed(() => this.pageContext.title() || this.routeTitle());
+  readonly crumbRoot = computed(
+    () => this.pageContext.crumbRoot() || this.routeCrumbRoot()
+  );
+  readonly crumbTrail = computed(() => this.pageContext.crumbTrail());
 
   /** Topbar search placeholder, so it can name what the page actually searches. */
   readonly searchPlaceholder = signal('Search...');
@@ -246,7 +310,11 @@ export class Shell {
     // Same reasoning for the sidebar's Institutions tree: the shell is a layout
     // route and outlives every page, so reading the teacher's allotment here is
     // once per session rather than once per navigation.
-    void this.loadAllotment();
+    void this.dashboard.refresh();
+
+    // A hard refresh straight onto a class: the URL is already correct here, and
+    // the effect above opens the tree once the allotment lands.
+    this.readClassroomFromUrl();
 
     this.router.events
       .pipe(
@@ -255,6 +323,7 @@ export class Shell {
       )
       .subscribe(() => {
         this.applyRouteData();
+        this.readClassroomFromUrl();
 
         // A navigation from inside the drawer has to close it, or the new page
         // renders underneath the overlay it was launched from.
@@ -284,11 +353,34 @@ export class Shell {
   }
 
   /** Pulls every topbar value the active route declares, in one pass. */
+  /**
+   * Pulls the classroom id out of /institutions/classroom/:id.
+   *
+   * Matched on the router's URL rather than by walking the activated route: the
+   * shell runs this from its own constructor too, before the child route has a
+   * snapshot assigned — the same hazard deepestData() documents.
+   */
+  private readClassroomFromUrl(): void {
+    const match = /\/institutions\/classroom\/([^/?#]+)/.exec(this.router.url);
+
+    this.routeClassroomId.set(match ? decodeURIComponent(match[1]) : '');
+  }
+
   private applyRouteData(): void {
     const data = this.deepestData();
 
-    this.pageTitle.set(data['title'] ?? 'Dashboard');
-    this.crumbRoot.set(data['crumbRoot'] ?? 'ThinkTac');
+    /*
+     * CLEARED FIRST, then applied.
+     *
+     * A page that named itself through PageContextService is already destroyed
+     * by the time this runs, so it cannot clean up after itself — and a crumb
+     * still naming the previous record is worse than a generic one. The page
+     * sets its own crumb again on init.
+     */
+    this.pageContext.clear();
+
+    this.routeTitle.set(data['title'] ?? 'Dashboard');
+    this.routeCrumbRoot.set(data['crumbRoot'] ?? 'ThinkTac');
     this.searchPlaceholder.set(data['search'] ?? 'Search...');
   }
 
@@ -409,4 +501,6 @@ export class Shell {
 
     await this.router.navigate(['/sign-out']);
   }
+
+
 }

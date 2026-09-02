@@ -455,18 +455,36 @@
   font-weight: 600;
 }
 
+/* ---- Open ---------------------------------------------------------------
+   PRODUCTION'S .tcc-footer / .tcc-view, which are a footer row set to
+   `justify-content: flex-end` around the label. It renders as "Open →" against
+   the RIGHT edge of the card; this was left-aligned.
+
+   `align-self: flex-end` rather than production's extra wrapper div: the card is
+   already a flex column, so the link can push itself over without a footer
+   element that would exist only to hold one alignment. `margin-top: auto` keeps
+   it pinned to the bottom, which is what production's own `margin-top: auto`
+   does on the footer. */
 .class-open {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  align-self: flex-end;
+  /* 3px, production's value. 6px read as a gap rather than as an arrow attached
+     to the word. */
+  gap: 3px;
   margin-top: auto;
   color: var(--white);
   font-size: 12.5px;
   font-weight: 600;
+  /* Production dims the label and brings it up on hover, instead of
+     underlining. The arrow is part of the label, and an underline runs under the
+     icon too, which looks like a rule rather than a link. */
+  opacity: 0.8;
+  transition: opacity 0.15s var(--ease);
 }
 
 .class-open:hover {
-  text-decoration: underline;
+  opacity: 1;
 }
 
 /* ---- Nothing allotted ---------------------------------------------------- */

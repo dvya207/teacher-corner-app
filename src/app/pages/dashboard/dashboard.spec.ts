@@ -53,7 +53,30 @@ class StubAuthService {
  * their shape.
  */
 class StubDashboardService {
+  /**
+   * The SHARED signal, as the real service has.
+   *
+   * The dashboard and the sidebar read one allotment so they cannot drift apart,
+   * and `refresh()` is what anything changing it calls. A stub offering only
+   * myAllotment() left both surfaces empty.
+   */
+  readonly allotment = signal<TeacherAllotment>({ institutions: [], classroomCount: 0 });
+  readonly allotmentLoading = signal(true);
+  readonly allotmentError = signal('');
+
   constructor(private result: DashboardCounts | Error) {}
+
+  async refresh(): Promise<void> {
+    try {
+      this.allotment.set(await this.myAllotment());
+      this.allotmentError.set('');
+    } catch (error) {
+      // Mirrors the real service: refresh never throws, it records.
+      this.allotmentError.set((error as Error).message);
+    } finally {
+      this.allotmentLoading.set(false);
+    }
+  }
 
   async myAllotment(): Promise<TeacherAllotment> {
     if (this.result instanceof Error) throw this.result;

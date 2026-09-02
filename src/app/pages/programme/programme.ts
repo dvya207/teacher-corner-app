@@ -1,6 +1,10 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 
+import {
+  PickableAssignment,
+  toPickableAssignments
+} from '../../components/assignment-picker/assignment-picker';
 import { Icon } from '../../components/icon/icon';
 import {
   isActiveStatus,
@@ -23,6 +27,7 @@ import {
   LearningUnitService,
   toPickableUnits
 } from '../../services/learning-unit.service';
+import { AssignmentService } from '../../services/assignment.service';
 import { ProgrammeService } from '../../services/programme.service';
 import { AddProgramme } from './add-programme';
 import { EditProgramme } from './edit-programme';
@@ -51,6 +56,7 @@ export class ProgrammePage implements OnInit {
   private institutionService = inject(InstitutionService);
   private classroomService = inject(ClassroomService);
   private learningUnitService = inject(LearningUnitService);
+  private assignmentService = inject(AssignmentService);
 
   readonly programmes = signal<Programme[]>([]);
   readonly loading = signal(true);
@@ -67,6 +73,15 @@ export class ProgrammePage implements OnInit {
    * displays rather than the raw catalogue.
    */
   readonly pickableUnits = signal<PickableUnit[]>([]);
+
+  /**
+   * The assignments the wizard's step 4 offers.
+   *
+   * NARROWED HERE, like the units above: the picker renders a title and a type,
+   * and handing it whole quiz documents with their `questionsData` would ship
+   * every question into a dropdown that shows neither.
+   */
+  readonly pickableAssignments = signal<PickableAssignment[]>([]);
 
   /**
    * The teacher's classrooms, loaded for ONE reason: deleting a programme has to
@@ -119,12 +134,14 @@ export class ProgrammePage implements OnInit {
   async load(): Promise<void> {
     this.loading.set(true);
 
-    const [programmes, institutions, classrooms, units] = await Promise.allSettled([
-      this.service.list(),
-      this.institutionService.list(),
-      this.classroomService.list(),
-      this.learningUnitService.list()
-    ]);
+    const [programmes, institutions, classrooms, units, assignments] =
+      await Promise.allSettled([
+        this.service.list(),
+        this.institutionService.list(),
+        this.classroomService.list(),
+        this.learningUnitService.list(),
+        this.assignmentService.list()
+      ]);
 
     if (programmes.status === 'fulfilled') {
       this.programmes.set(programmes.value);
@@ -140,6 +157,12 @@ export class ProgrammePage implements OnInit {
     // empty and saying so, rather than blanking the table this page is for.
     this.pickableUnits.set(
       units.status === 'fulfilled' ? toPickableUnits(units.value) : []
+    );
+
+    // The same degradation: a failed read leaves step 4's Available column empty
+    // and saying so. An assignments outage must not blank the programmes table.
+    this.pickableAssignments.set(
+      assignments.status === 'fulfilled' ? toPickableAssignments(assignments.value) : []
     );
 
     this.loading.set(false);
@@ -274,6 +297,7 @@ export class ProgrammePage implements OnInit {
     this.modalError.set('');
     this.showAdd.set(true);
     void this.refreshPickableUnits();
+    void this.refreshPickableAssignments();
   }
 
   private async refreshPickableUnits(): Promise<void> {
@@ -281,6 +305,18 @@ export class ProgrammePage implements OnInit {
       this.pickableUnits.set(toPickableUnits(await this.learningUnitService.list()));
     } catch {
       // Keeps whatever was loaded before. See the note above.
+    }
+  }
+
+  /** The same refresh, for the same reason: an assignment made after this page
+      loaded would otherwise be missing from step 4 with nothing to explain it. */
+  private async refreshPickableAssignments(): Promise<void> {
+    try {
+      this.pickableAssignments.set(
+        toPickableAssignments(await this.assignmentService.list())
+      );
+    } catch {
+      // Keeps whatever was loaded before.
     }
   }
 
@@ -331,7 +367,11 @@ export class ProgrammePage implements OnInit {
    * click away.
    */
   openEdit(programme: Programme): void {
+    // Both catalogues, for the same reason the create path refreshes them: one
+    // made Live after this page loaded would otherwise be missing from its tab
+    // with nothing to explain it.
     void this.refreshPickableUnits();
+    void this.refreshPickableAssignments();
     this.modalError.set('');
     this.editing.set(programme);
   }
@@ -342,7 +382,12 @@ export class ProgrammePage implements OnInit {
   }
 
   /**
-   * Saves the Basic Info edits.
+   * Saves an edit from ANY of the three tabs.
+   *
+   * NOT JUST BASIC INFO, which is what this used to say. Every tab patches into
+   * the same `Partial<Programme>`, so this one path also writes
+   * `learningUnitsIds` from the units tab and `assignmentIds` from the
+   * assignments tab.
    *
    * The row is patched from the SAME object that was written, not from a
    * re-read: update() strips the identity fields it will not send, so patching

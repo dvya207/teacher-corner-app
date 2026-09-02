@@ -1,5 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 
+import {
+  ASSIGNMENT_TYPE_OPTIONS,
+  FORM_QUESTION_TYPES
+} from '../data/assignment-options';
+
 import { GRADES, SECTIONS } from '../data/classroom-options';
 import { BOARDS } from '../data/institution-options';
 import {
@@ -371,6 +376,359 @@ describe('ConfigurationService', () => {
       expect(service.learningUnitDomains()).toHaveLength(44);
       expect(service.learningUnitMaturities()).toHaveLength(4);
       expect(service.programmeStatuses()).toHaveLength(2);
+    });
+  });
+
+  /* ---- Workflow templates --------------------------------------------------
+     THE ONE READER WHOSE DOCUMENT IS PRODUCTION'S OWN and whose row shape
+     DISAGREES with this app's. Configuration/WorkflowTypes holds
+     `{ code, displayName }`; a CodedOption is `{ code, label }`. That mismatch is
+     the whole reason applyWorkflowTypes exists rather than a line of applyList,
+     and a future tidy-up that "simplifies" it back would set every label to
+     undefined and render blank options rather than failing. */
+
+  describe('workflow types', () => {
+
+    it('starts on the shipped two', () => {
+      expect(service.workflowTypes().map(entry => entry.code))
+        .toEqual(['CLASSROOM', 'STEM-CLUB']);
+    });
+
+    /** displayName -> label. The point of the reader. */
+    it('translate the document\'s displayName into a label', async () => {
+      documents.set('WorkflowTypes', {
+        workflowTypes: [
+          { code: 'CLASSROOM', displayName: 'Classroom Workflow' },
+          { code: 'STEM-CLUB', displayName: 'STEM Club Workflow' }
+        ]
+      });
+
+      await service.load();
+
+      expect(service.workflowTypes()).toEqual([
+        { code: 'CLASSROOM', label: 'Classroom Workflow' },
+        { code: 'STEM-CLUB', label: 'STEM Club Workflow' }
+      ]);
+    });
+
+    /** A NEW TYPE IS PICKED UP, which is what putting the list in a document buys. */
+    it('take a third type from the document', async () => {
+      documents.set('WorkflowTypes', {
+        workflowTypes: [
+          { code: 'CLASSROOM', displayName: 'Classroom' },
+          { code: 'STEM-CLUB', displayName: 'Stem Club' },
+          { code: 'HOME-LAB', displayName: 'Home Lab' }
+        ]
+      });
+
+      await service.load();
+
+      expect(service.workflowTypes().map(entry => entry.code))
+        .toEqual(['CLASSROOM', 'STEM-CLUB', 'HOME-LAB']);
+    });
+
+    /**
+     * A ROW WITH NO CODE IS DROPPED. The code is what gets stored on the template,
+     * so a row missing it can only add a blank option that writes an empty `type`.
+     */
+    it('drop a row with no code', async () => {
+      documents.set('WorkflowTypes', {
+        workflowTypes: [
+          { code: 'CLASSROOM', displayName: 'Classroom' },
+          { displayName: 'Nameless' },
+          { code: '', displayName: 'Blank' }
+        ]
+      });
+
+      await service.load();
+
+      expect(service.workflowTypes()).toEqual([
+        { code: 'CLASSROOM', label: 'Classroom' }
+      ]);
+    });
+
+    /** A ROW WITH NO displayName KEEPS ITS CODE — ugly beats blank. */
+    it('fall back to the code when a row has no displayName', async () => {
+      documents.set('WorkflowTypes', {
+        workflowTypes: [{ code: 'STEM-CLUB' }]
+      });
+
+      await service.load();
+
+      expect(service.workflowTypes()).toEqual([
+        { code: 'STEM-CLUB', label: 'STEM-CLUB' }
+      ]);
+    });
+
+    /** A MALFORMED DOCUMENT MUST NOT EMPTY THE SELECT. */
+    it('keep the shipped two when every row is unusable', async () => {
+      documents.set('WorkflowTypes', { workflowTypes: [{ displayName: 'No code' }] });
+
+      await service.load();
+
+      expect(service.workflowTypes()).toHaveLength(2);
+    });
+
+    it('keep the shipped two when the key is not an array', async () => {
+      documents.set('WorkflowTypes', { workflowTypes: 'CLASSROOM' });
+
+      await service.load();
+
+      expect(service.workflowTypes()).toHaveLength(2);
+    });
+
+    it('survive a refused read', async () => {
+      shouldThrow = true;
+
+      await service.load();
+
+      expect(service.workflowTypes()).toHaveLength(2);
+    });
+  });
+
+  /* ---- Assignments ---------------------------------------------------------
+     TWO LISTS IN ONE DOCUMENT, which is the shape production keeps them in:
+     Configuration/AssignmentTypes carries `assignmentsTypes` and
+     `questionTypesForm` side by side. That is why the two entries in
+     CONFIGURATION_DOCS share an id, and it is the thing a refactor would most
+     easily break — splitting them into two documents would leave one list
+     silently on its fallback. */
+
+  describe('assignment vocabularies', () => {
+
+    it('starts on the shipped lists', () => {
+      expect(service.assignmentTypes()).toEqual(ASSIGNMENT_TYPE_OPTIONS);
+      expect(service.formQuestionTypes()).toEqual(FORM_QUESTION_TYPES);
+    });
+
+    /** All FIVE, including the two this app does not create. The restriction is
+     *  ASSIGNMENT_TYPES in the model, not this list. */
+    it('ships all five kinds production offers', () => {
+      expect(ASSIGNMENT_TYPE_OPTIONS.map(entry => entry.type))
+        .toEqual(['QUIZ', 'UPLOAD', 'GAME', 'FORM', 'TEXTBLOCK']);
+    });
+
+    it('ships the form field types in production\'s order', () => {
+      expect(FORM_QUESTION_TYPES.map(entry => entry.key)).toEqual([
+        'none', 'text', 'textBox', 'dropDown',
+        'starRating', 'dropDownDynamic', 'dropDownDependent'
+      ]);
+    });
+
+    /** The keys are lowerCamel where a quiz question's type is SCREAMING_SNAKE.
+     *  Two different vocabularies, neither normalised. */
+    it('keeps the form keys lowerCamel', () => {
+      expect(FORM_QUESTION_TYPES.every(entry => !entry.key.includes('_'))).toBe(true);
+      expect(FORM_QUESTION_TYPES.find(entry => entry.key === 'textBox')?.display)
+        .toBe('Text Box');
+    });
+
+    /* ---- The four lists production hardcodes ----------------------------- */
+
+    it('starts on the shipped values for the four production hardcodes', () => {
+      expect(service.assignmentStatuses()).toEqual(['LIVE', 'DEVELOPMENT']);
+      expect(service.quizPedagogyTypes()).toEqual(['FA', 'SA']);
+      expect(service.quizAuthTypes()).toEqual(['login', 'anonymous']);
+      expect(service.quizQuestionTypes().map(entry => entry.type)).toEqual([
+        'MCQ', 'FILL_IN_THE_BLANKS', 'TEXT', 'RICH_BLANKS', 'DESCRIPTIVE'
+      ]);
+    });
+
+    it('reads the status list and both colouring lists', async () => {
+      documents.set('AssignmentStatuses', {
+        statuses: ['LIVE', 'DEVELOPMENT', 'REVIEW'],
+        liveValues: ['live', 'active', 'open'],
+        closedValues: ['closed']
+      });
+
+      await service.load();
+
+      expect(service.assignmentStatuses()).toEqual(['LIVE', 'DEVELOPMENT', 'REVIEW']);
+      expect(service.liveStatusValues()).toEqual(['live', 'active', 'open']);
+      expect(service.closedStatusValues()).toEqual(['closed']);
+    });
+
+    /**
+     * THE ICON COMES BACK FROM CODE. The document carries type and label only,
+     * because an icon names an SVG the icon component knows — a configured value
+     * would render as nothing if it did not happen to match.
+     */
+    it('merges the configured quiz label with the icon the code holds', async () => {
+      documents.set('AssignmentTypes', {
+        questionTypesQuiz: [
+          { type: 'DESCRIPTIVE', label: 'Descriptive' },
+          { type: 'MCQ', label: 'Multiple Choice' }
+        ]
+      });
+
+      await service.load();
+
+      expect(service.quizQuestionTypes()).toEqual([
+        { type: 'DESCRIPTIVE', label: 'Descriptive', icon: 'edit' },
+        { type: 'MCQ', label: 'Multiple Choice', icon: 'list' }
+      ]);
+    });
+
+    /** A type the code has never seen gets a generic icon, not a blank space. */
+    it('gives an unknown quiz type a fallback icon', async () => {
+      documents.set('AssignmentTypes', {
+        questionTypesQuiz: [{ type: 'MATCH_THE_PAIRS', label: 'Match the Pairs' }]
+      });
+
+      await service.load();
+
+      expect(service.quizQuestionTypes()[0].icon).toBe('list');
+    });
+
+    /**
+     * THE ONE CONFIGURED VALUE NOT TAKEN AT ITS WORD.
+     *
+     * `creatableTypes` is a policy, not a vocabulary: adding TEXTBLOCK does not
+     * bring a text-block editor into being, so the document may NARROW the three
+     * the app implements and never widen them. Trusting it would put an entry in
+     * the Create menu that opens nothing.
+     */
+    it('lets the document narrow the creatable types', async () => {
+      documents.set('AssignmentTypes', { creatableTypes: ['QUIZ', 'FORM'] });
+
+      await service.load();
+
+      expect(service.creatableAssignmentTypes()).toEqual(['QUIZ', 'FORM']);
+    });
+
+    it('refuses to widen the creatable types past what has an editor', async () => {
+      documents.set('AssignmentTypes', {
+        creatableTypes: ['QUIZ', 'UPLOAD', 'FORM', 'TEXTBLOCK', 'GAME']
+      });
+
+      await service.load();
+
+      expect(service.creatableAssignmentTypes()).toEqual(['QUIZ', 'UPLOAD', 'FORM']);
+    });
+
+    it('keeps the shipped set when the document names nothing implemented', async () => {
+      documents.set('AssignmentTypes', { creatableTypes: ['GAME', 'TEXTBLOCK'] });
+
+      await service.load();
+
+      expect(service.creatableAssignmentTypes()).toEqual(['QUIZ', 'UPLOAD', 'FORM']);
+    });
+
+    /* ---- The upload size caps ------------------------------------------- */
+
+    it('starts on the shipped caps', () => {
+      expect(service.uploadSizeCaps()).toEqual({ VIDEO: 200, IMAGE: 20 });
+      expect(service.uploadSizeCapDefault()).toBe(40);
+    });
+
+    /** DEFAULT is pulled out of the map: it is not an upload type. */
+    it('reads the caps and lifts DEFAULT out of the map', async () => {
+      documents.set('acceptedUploadFormats', {
+        sizeCaps: { VIDEO: 500, IMAGE: 25, PDF: 15, DEFAULT: 60 }
+      });
+
+      await service.load();
+
+      expect(service.uploadSizeCaps()).toEqual({ VIDEO: 500, IMAGE: 25, PDF: 15 });
+      expect(service.uploadSizeCapDefault()).toBe(60);
+    });
+
+    /** A cap of 0 refuses every file and NaN compares false against everything. */
+    it('drops a cap that is not a positive number', async () => {
+      documents.set('acceptedUploadFormats', {
+        sizeCaps: { VIDEO: 0, IMAGE: 'big', PDF: -5, WORD: 30 }
+      });
+
+      await service.load();
+
+      expect(service.uploadSizeCaps()).toEqual({ WORD: 30 });
+    });
+
+    it('uppercases the cap keys, so a lowercase document still matches', async () => {
+      documents.set('acceptedUploadFormats', { sizeCaps: { video: 120 } });
+
+      await service.load();
+
+      expect(service.uploadSizeCaps()).toEqual({ VIDEO: 120 });
+    });
+
+    /* ---- The defaults --------------------------------------------------- */
+
+    it('starts on the shipped defaults', () => {
+      expect(service.assignmentDefaults()).toEqual({
+        formInstructions: 'Please answer all the questions in the fields provided below',
+        slotMaxUploads: 1,
+        quizMediaFolder: 'quizzer_resources'
+      });
+    });
+
+    /**
+     * FIELD BY FIELD. A document setting only one must leave the others alone —
+     * a partial document is the normal way somebody edits one, and `set(value)`
+     * would blank the rest.
+     */
+    it('takes only the default fields the document sets', async () => {
+      documents.set('AssignmentDefaults', {
+        defaults: { formInstructions: 'Answer every question below.' }
+      });
+
+      await service.load();
+
+      expect(service.assignmentDefaults().formInstructions)
+        .toBe('Answer every question below.');
+      expect(service.assignmentDefaults().slotMaxUploads).toBe(1);
+      expect(service.assignmentDefaults().quizMediaFolder).toBe('quizzer_resources');
+    });
+
+    it('ignores a default of the wrong type', async () => {
+      documents.set('AssignmentDefaults', {
+        defaults: { formInstructions: 42, slotMaxUploads: 'three', quizMediaFolder: '' }
+      });
+
+      await service.load();
+
+      expect(service.assignmentDefaults()).toEqual({
+        formInstructions: 'Please answer all the questions in the fields provided below',
+        slotMaxUploads: 1,
+        quizMediaFolder: 'quizzer_resources'
+      });
+    });
+
+    /** Every new reader must survive a refused read with its fallback intact. */
+    it('keeps every assignment fallback when the read is refused', async () => {
+      shouldThrow = true;
+
+      await service.load();
+
+      expect(service.assignmentStatuses()).toEqual(['LIVE', 'DEVELOPMENT']);
+      expect(service.creatableAssignmentTypes()).toEqual(['QUIZ', 'UPLOAD', 'FORM']);
+      expect(service.uploadSizeCapDefault()).toBe(40);
+      expect(service.assignmentDefaults().slotMaxUploads).toBe(1);
+      expect(service.quizQuestionTypes().length).toBe(5);
+    });
+
+    it('reads both lists out of the one document', async () => {
+      documents.set('AssignmentTypes', {
+        assignmentsTypes: [{ type: 'QUIZ', displayName: 'Quizzer' }],
+        questionTypesForm: [{ key: 'text', display: 'One Line' }]
+      });
+
+      await service.load();
+
+      expect(service.assignmentTypes()).toEqual([{ type: 'QUIZ', displayName: 'Quizzer' }]);
+      expect(service.formQuestionTypes()).toEqual([{ key: 'text', display: 'One Line' }]);
+    });
+
+    /** One key present and the other absent must not blank the absent one. */
+    it('keeps the fallback for whichever key is missing', async () => {
+      documents.set('AssignmentTypes', {
+        assignmentsTypes: [{ type: 'FORM', displayName: 'Form' }]
+      });
+
+      await service.load();
+
+      expect(service.assignmentTypes().length).toBe(1);
+      expect(service.formQuestionTypes()).toEqual(FORM_QUESTION_TYPES);
     });
   });
 });

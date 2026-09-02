@@ -1,0 +1,808 @@
+/* ==========================================================================
+   Assignments — page head, stat cards, filter toolbar, table, trash
+
+   The fifth table built to these rules, after institutions.css, classrooms.css,
+   programme.css and learning-units.css. Identical where the behaviour is
+   identical, on purpose: five admin tables that differ for no reason are five
+   things to learn instead of one.
+
+   Only what this page does DIFFERENTLY is commented; the rest is the shared
+   recipe those four already carry.
+   ========================================================================== */
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.page-head-copy h1 {
+  font-size: 27px;
+  color: var(--ink-900);
+}
+
+.page-head-copy p {
+  margin-top: 5px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.page-head-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.add-btn,
+.trash-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 20px;
+  border-radius: var(--radius-md);
+  font-size: 14.5px;
+  font-weight: 600;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              transform 0.12s var(--ease);
+}
+
+.add-btn {
+  background: var(--accent-600);
+  color: var(--white);
+  box-shadow: var(--shadow-btn);
+}
+
+.add-btn:hover {
+  background: var(--accent-800);
+}
+
+.add-btn:active,
+.trash-btn:active {
+  transform: translateY(1px);
+}
+
+.trash-btn {
+  border: 1px solid var(--tint-red);
+  background: var(--white);
+  color: var(--on-red);
+}
+
+.trash-btn:hover {
+  background: var(--tint-red);
+  border-color: var(--on-red);
+}
+
+/* ---- The Create menu -----------------------------------------------------
+   A popover under the button, which is how production offers the six types and
+   this offers three. Absolutely positioned against this wrapper rather than the
+   viewport, so it follows the button when the head wraps on a narrow window. */
+
+.create-host {
+  position: relative;
+}
+
+.create-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  /* Right-aligned: the button sits at the right of the head, and a left-aligned
+     menu would hang off the page edge. */
+  right: 0;
+  z-index: 40;
+  min-width: 210px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.create-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-700);
+  text-align: left;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.create-item:hover {
+  background: var(--tint-blue);
+  color: var(--accent-600);
+}
+
+/* ---- Stat cards ---------------------------------------------------------- */
+
+.stat-cards {
+  display: grid;
+  /* FOUR, where the other pages have three: Total plus one per type. */
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.sc-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+}
+
+/* Blue for the total, then one tint per type — and the SAME tint the type badge
+   uses below, so a card and a row badge for the same type read as the same thing.
+   Blue is always the total here, as on the other four pages, which is why the
+   per-type hues are not production's exactly: its Quizzes card is blue, and that
+   colour is spoken for. See the --tint-violet note in styles.css. */
+.sc-total  { background: var(--tint-blue);  color: var(--on-blue); }
+.sc-quiz   { background: var(--tint-violet); color: var(--on-violet); }
+.sc-upload { background: var(--tint-green); color: var(--on-green); }
+.sc-form   { background: var(--tint-amber); color: var(--on-amber); }
+
+.sc-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.sc-copy strong {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.sc-copy > span {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---- Load failure and toast --------------------------------------------- */
+
+.load-error {
+  margin-bottom: 18px;
+  padding: 13px 16px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--on-red);
+}
+
+.load-error strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--tint-green);
+  border-radius: var(--radius-md);
+  background: var(--tint-green);
+  font-size: 13.5px;
+  color: var(--on-green);
+}
+
+.toast-icon {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.toast-close {
+  margin-left: auto;
+  color: var(--on-green);
+}
+
+/* ---- Table panel -------------------------------------------------------- */
+
+.table-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+}
+
+.filter-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--white);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.pill:hover {
+  border-color: var(--accent-400);
+  color: var(--accent-600);
+}
+
+.pill.is-active {
+  background: var(--tint-blue);
+  border-color: var(--accent-500);
+  color: var(--accent-500);
+  font-weight: 600;
+}
+
+.pill-count {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--ink-100);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  color: var(--ink-500);
+}
+
+.pill.is-active .pill-count {
+  background: color-mix(in srgb, var(--accent-500) 30%, var(--white));
+  color: var(--accent-800);
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.loaded-count {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.hide-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease);
+}
+
+.hide-btn:hover {
+  background: var(--ink-050);
+}
+
+/* ---- Table -------------------------------------------------------------- */
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.asgn-table {
+  width: 100%;
+  /* SIX columns, so this is the narrowest of the five tables and does not need
+     the 1280px floor the learning-unit table carries. */
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.asgn-table th {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--ink-050);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--ink-400);
+  white-space: nowrap;
+}
+
+.asgn-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+  color: var(--ink-700);
+  vertical-align: middle;
+}
+
+.asgn-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.asgn-table tbody tr:hover {
+  background: var(--ink-050);
+}
+
+/* Dimmed and inert while its own row is mid-write, so a second click cannot
+   start a second transaction against the same document. */
+.asgn-table tbody tr.is-busy {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Title over a shortened id — production's first column. */
+.asgn-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 240px;
+}
+
+.asgn-title strong {
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.asgn-id {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-400);
+}
+
+.asgn-creator,
+.asgn-date {
+  white-space: nowrap;
+}
+
+/*
+ * LEFT-ALIGNED, under a left-aligned header — which is how the reference has it,
+ * and this column was right-aligned. With the icons pushed to the far right of a
+ * wide table they sat a long way from the header naming them, and further still
+ * from the row's own content.
+ */
+.asgn-actions-head,
+.asgn-actions {
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* REPORT sits between the date and the actions, as the reference has it: one
+   button that reads from the assignment rather than changing it. */
+.asgn-report-head,
+.asgn-report {
+  text-align: left;
+  white-space: nowrap;
+}
+
+/*
+ * BLUE ON A TINTED SQUARE ON HOVER, which is the reference's own treatment for
+ * this one button. The row's other two icons stay neutral until hovered and the
+ * delete goes red; this going accent-blue marks it as the reading action among
+ * the writing ones.
+ */
+.icon-act.is-report:hover:not(:disabled) {
+  background: var(--tint-blue);
+  color: var(--accent-600);
+}
+
+/* Empty and loading states share one cell style: both are one centred sentence
+   across the whole table rather than a shape pretending to be rows. */
+.asgn-state {
+  padding: 36px 20px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.asgn-state strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ink-900);
+}
+
+/* ---- Type badge --------------------------------------------------------
+   One tint per type, matching that type's stat card, so the two read as the same
+   thing. Production colours these too — .quiz / .upload / .form on its own
+   span — and the three it uses beyond these are simply absent here. */
+
+.type-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.type-badge.is-quiz   { background: var(--tint-violet); color: var(--on-violet); }
+.type-badge.is-upload { background: var(--tint-green);  color: var(--on-green); }
+.type-badge.is-form   { background: var(--tint-amber);  color: var(--on-amber); }
+
+/* ---- Status badge ------------------------------------------------------
+   A DOT plus the stored word, as production's is. Three kinds and not two: a
+   status the form never offers still has to render as something, and 'draft' is
+   the honest bucket for it. */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.status-badge.is-live   { background: var(--tint-green); color: var(--on-green); }
+.status-badge.is-draft  { background: var(--tint-amber); color: var(--on-amber); }
+.status-badge.is-closed { background: var(--ink-100);    color: var(--ink-500); }
+
+/* ---- Row actions --------------------------------------------------------
+   BARE ICONS, no border and no fill — the reference shows a pencil and a bin as
+   two plain grey marks. These were bordered white buttons, which read as two
+   competing calls to action on every row of a fifty-row table.
+
+   The bin is the SAME GREY as the pencil at rest and only turns red on hover:
+   colouring it red permanently makes every row look like it is warning about
+   something.
+
+   `.row-btn` below is kept for the trash drawer's Restore, which carries a label
+   and should stay a button. */
+
+.icon-act {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+/* 8px between them, measured off the reference's ~20px gap less the two buttons'
+   own padding. */
+.icon-act + .icon-act {
+  margin-left: 8px;
+}
+
+.icon-act:hover:not(:disabled) {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.icon-act.is-danger:hover:not(:disabled) {
+  background: var(--tint-red);
+  color: var(--on-red);
+}
+
+.icon-act:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.row-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.row-btn:hover:not(:disabled) {
+  background: var(--ink-050);
+  color: var(--ink-900);
+}
+
+.row-btn.is-danger {
+  color: var(--on-red);
+}
+
+.row-btn.is-danger:hover:not(:disabled) {
+  background: var(--tint-red);
+  border-color: var(--on-red);
+}
+
+.row-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Trash --------------------------------------------------------------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  /* BELOW the create form's 60, so opening the form over the trash — which the
+     Create button can do — lands the form on top rather than behind. */
+  z-index: 55;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+}
+
+/* --------------------------------------------------------------------------
+   Trash — the full-page overlay.
+
+   COPIED FROM institutions.css, which is where this pattern was built and where
+   three other tables' trashes already copy it from. Component styles are scoped,
+   so the fifth table cannot see the first one's rules; the copy is a known
+   duplication and the same one the other pages carry.
+
+   What was here before styled a centre-screen card with a Restore button and no
+   table. It is gone rather than kept alongside: `.trash-head` and `.trash-body`
+   exist in both, so leaving the old rules would have them fight the new ones.
+   -------------------------------------------------------------------------- */
+
+.truncate {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-actions {
+  width: 92px;
+  white-space: nowrap;
+}
+
+.trash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  padding: 22px 26px 26px;
+  background: var(--page-bg);
+}
+
+.trash-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+}
+
+.trash-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 24px;
+  color: var(--ink-900);
+}
+
+.trash-count {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  background: var(--tint-red);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--on-red);
+}
+
+.trash-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.empty-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 18px;
+  border: 1px solid var(--tint-red);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-red);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.empty-btn:hover:not(:disabled) {
+  background: var(--tint-red);
+  border-color: var(--on-red);
+}
+
+/* Armed state. The label already says what will happen; the fill makes it
+   unmistakable that this click is the destructive one. */
+.empty-btn.is-confirming {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--white);
+}
+
+.empty-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trash-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.trash-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.trash-body {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: auto;
+}
+
+.trash-table {
+  min-width: 780px;
+}
+
+.deleted-date {
+  color: var(--ink-400);
+  white-space: nowrap;
+}
+
+/* Boxed action buttons, as in the reference — outlined squares rather than the
+   bare icons used in the main table. */
+.row-btn.is-boxed {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+}
+
+.trash-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 340px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.trash-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: var(--ink-100);
+  color: var(--ink-400);
+}
+
+.trash-empty h3 {
+  font-size: 18px;
+  color: var(--ink-900);
+}
+
+.trash-empty p {
+  max-width: 340px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+/* Trash loading / error, matching the main table's state treatment. */
+.trash-state {
+  padding: 48px 20px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.trash-state.is-error {
+  color: var(--on-red);
+}
+
+/*
+ * The title column, which the other tables call col-name. Assignments show the
+ * document id under the title, so the cell stacks rather than truncating.
+ *
+ * `td.col-title`, NOT `.col-title`: the header cell carries the same class, and
+ * `display: flex` on a `<th>` drops it out of the table layout — which showed up
+ * as the header's grey band stopping short, leaving a white notch above the first
+ * column.
+ */
+.trash-table td.col-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 380px;
+}
+
+.trash-table td.col-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-900);
+}
+
+/* A row mid-action is dimmed rather than replaced, so the table does not jump. */
+.trash-table tr.is-busy {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ---- Narrow ------------------------------------------------------------- */
+
+@media (max-width: 1080px) {
+  .stat-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .stat-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .page-head-actions {
+    width: 100%;
+  }
+}

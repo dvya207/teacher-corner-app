@@ -1,0 +1,1150 @@
+/* ==========================================================================
+   The classroom workflow stepper — a rail of steps and a content pane.
+
+   TWO COLUMNS HERE, unlike the workflow-template form which is one. The
+   difference is real: the form BUILDS a blueprint and has nothing to show beside
+   it, while this page WALKS a workflow and the whole point of the right-hand side
+   is the content of the step you are standing on.
+   ========================================================================== */
+
+.cw-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.cw-state {
+  margin: 0;
+  padding: 48px 28px;
+  font-size: 14px;
+  color: var(--ink-500);
+}
+
+.cw-state.is-error {
+  color: var(--danger);
+}
+
+.cw-body {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+  align-items: start;
+}
+
+/* --------------------------------------------------------------------------
+   The rail
+   -------------------------------------------------------------------------- */
+
+.cw-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 24px;
+  border-right: 1px solid var(--border);
+}
+
+.cw-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-700);
+  text-decoration: none;
+}
+
+.cw-back:hover {
+  color: var(--accent-600);
+}
+
+/* The current step's name, as production badges it. */
+.cw-step-pill {
+  align-self: flex-start;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  background: var(--tint-blue);
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--accent-600);
+}
+
+.cw-step-note {
+  margin: -6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-500);
+}
+
+.cw-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 12.5px;
+  color: var(--on-red);
+}
+
+.cw-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+/*
+ * THE UNSAVED-CHANGES NOTE, amber rather than red: work in progress is not an
+ * error, it is a state the reader needs to know they are in.
+ */
+.cw-dirty {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: var(--radius-md);
+  background: var(--tint-amber);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--on-amber);
+}
+
+/*
+ * SAVED IS QUIETER THAN UNSAVED. The button keeps its place either way — a
+ * control that appears and disappears is one you have to hunt for — but it stops
+ * shouting once there is nothing to do.
+ */
+.cw-save {
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: var(--radius-md);
+  /*
+   * PRODUCTION'S OWN VIOLET, #330268, sampled off its button rather than matched
+   * to the nearest token: this was --brand-900 (#272b66), the SIDEBAR's navy, and
+   * the two are different colours that both read as "dark purple" at a glance.
+   * Dark rather than the accent blue either way, which is what sets it apart from
+   * the pale template controls under it.
+   */
+  background: var(--save-violet);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--white);
+  cursor: pointer;
+}
+
+.cw-save:hover:not(:disabled) {
+  background: var(--save-violet-dark);
+}
+
+/*
+ * SAVED IS STILL A LIVE BUTTON, in the same purple.
+ *
+ * It used to go grey once there was nothing to save, and grey read as broken:
+ * the same complaint the dim dropdown labels drew. The button is still pressable
+ * in that state — saving again is harmless — so dressing it as disabled was
+ * telling the reader something untrue. The difference between "there are changes"
+ * and "there are none" is carried by the LABEL and the marker dot instead, which
+ * is where a difference of meaning belongs rather than in a wash of grey.
+ *
+ * IS-DIRTY GETS THE RING, so the one state that needs acting on is the one that
+ * catches the eye.
+ */
+.cw-save.is-dirty {
+  box-shadow: 0 0 0 3px var(--tint-violet);
+}
+
+.cw-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/*
+ * ADD NEW WORKFLOW STEP — production's dashed, tinted band.
+ *
+ * DASHED rather than solid, and it is doing work: the step rows above it are a
+ * numbered ladder, so a solid button would read as another rung.
+ */
+.cw-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  border: 2px dashed var(--accent-400);
+  border-radius: var(--radius-lg);
+  background: var(--tint-blue);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-600);
+  cursor: pointer;
+}
+
+.cw-add:hover {
+  border-color: var(--accent-500);
+}
+
+/* Inside the empty state, where it needs its own breathing room. */
+.cw-add.is-inline {
+  width: auto;
+  margin-top: 10px;
+  padding: 0 18px;
+}
+
+/* --------------------------------------------------------------------------
+   Select New Template
+   -------------------------------------------------------------------------- */
+
+.cw-template {
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+/*
+ * THE TOGGLE. A real checkbox behind a drawn track, so it is keyboard-operable
+ * and announces its own state without any ARIA.
+ *
+ * THE LABEL IS A FLEX ROW and the input is visually hidden rather than
+ * `display: none` — a hidden input is not focusable, which would take the control
+ * off the keyboard entirely.
+ */
+.cw-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--label);
+  cursor: pointer;
+}
+
+.cw-toggle-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cw-toggle-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 38px;
+  height: 21px;
+  border-radius: var(--radius-full);
+  background: var(--ink-300);
+  transition: background 0.15s var(--ease);
+}
+
+.cw-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: var(--radius-full);
+  background: var(--white);
+  transition: transform 0.15s var(--ease);
+}
+
+.cw-toggle-input:checked + .cw-toggle-track {
+  background: var(--accent-500);
+}
+
+.cw-toggle-input:checked + .cw-toggle-track::after {
+  transform: translateX(17px);
+}
+
+.cw-toggle-input:focus-visible + .cw-toggle-track {
+  box-shadow: var(--focus-ring);
+}
+
+.cw-template .field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.cw-template select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink-800);
+}
+
+.cw-template select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/* --------------------------------------------------------------------------
+   The content pane
+   -------------------------------------------------------------------------- */
+
+.cw-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 460px;
+  padding: 22px 28px;
+}
+
+.cw-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+/*
+ * A PILL PER CONTENT BLOCK, which is what production's tab strip is. The labels
+ * are content NAMES from the step — 'TACtivity Video', 'Guide', 'Material List' —
+ * not a fixed set, so the row has to wrap rather than assume three.
+ */
+/*
+ * ONLY THE ACTIVE TAB IS A PILL. The others are plain text, which is what
+ * production draws — 'TACtivity Video' filled blue beside 'Guide' and 'Material
+ * List' as bare labels. Pilling all of them made the strip read as a row of
+ * equal buttons rather than as one selection among several.
+ */
+.cw-tab {
+  padding: 9px 18px;
+  border-radius: var(--radius-full);
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-500);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.cw-tab:hover:not(.is-active) {
+  color: var(--ink-900);
+}
+
+.cw-tab.is-active {
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+.cw-pane {
+  flex: 1;
+}
+
+/* --------------------------------------------------------------------------
+   THE TILES — one per upload slot
+
+   PRODUCTION'S ROW OF PALE BLUE CARDS, each an icon in a filled circle above a
+   label. They are what the detail card below belongs to, which is why they read
+   as cards rather than as another row of tabs: the tab strip picks the CONTENT
+   BLOCK, these pick the slot within it.
+   -------------------------------------------------------------------------- */
+
+.cw-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.cw-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 200px;
+  padding: 18px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--ink-100);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+
+.cw-tile.is-active {
+  background: var(--tint-blue);
+}
+
+.cw-tile-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-full);
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+.cw-tile-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent-600);
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   THE DETAIL CARD — Due Date, Instructions, Assignment
+   -------------------------------------------------------------------------- */
+
+.cw-detail {
+  padding: 8px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.cw-rows {
+  margin: 0;
+}
+
+/*
+ * A THIRD-WIDTH LABEL COLUMN, which is production's `w-1/3` on the header cell.
+ * Grid rather than a table because there is no tabular data here — three labelled
+ * facts — and grid keeps the labels aligned without claiming rows and columns.
+ */
+.cw-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 2fr;
+  gap: 20px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--ink-100);
+}
+
+.cw-row:last-child {
+  border-bottom: none;
+}
+
+.cw-row dt {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--accent-600);
+}
+
+.cw-row dd {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-700);
+}
+
+.cw-none {
+  font-size: 13px;
+  color: var(--ink-500);
+}
+
+.cw-row dd .cw-none {
+  display: block;
+  margin-top: 6px;
+}
+
+.cw-assignment {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cw-type {
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  background: var(--tint-blue);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent-600);
+}
+
+/* --------------------------------------------------------------------------
+   THE RESOURCE ITSELF — an embed, an image, a video or a link
+   -------------------------------------------------------------------------- */
+
+/*
+ * A 16:9 BOX the iframe fills, rather than fixed pixels. `aspect-ratio` keeps the
+ * player the right shape at any column width, which matters here because the pane
+ * shares the page with a rail that does not shrink.
+ */
+.cw-embed {
+  max-width: 640px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--ink-900);
+}
+
+.cw-embed iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/*
+ * A PDF RENDERED INLINE, at a readable height. The browser's own viewer supplies
+ * the scrolling and the page controls, so this only has to give it a box — and a
+ * tall one, because a guide is read here rather than glanced at.
+ */
+.cw-doc {
+  max-width: 860px;
+  height: 620px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--ink-100);
+}
+
+.cw-doc iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.cw-image,
+.cw-video {
+  display: block;
+  max-width: 100%;
+  max-height: 380px;
+  border-radius: var(--radius-md);
+}
+
+.cw-video {
+  width: 640px;
+  background: var(--ink-900);
+}
+
+.cw-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-600);
+  text-decoration: none;
+}
+
+.cw-open:hover {
+  border-color: var(--accent-500);
+  background: var(--tint-blue);
+}
+
+/* The Office-file branch: the link, then why it is a link. */
+.cw-office {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.cw-office p {
+  max-width: 420px;
+  margin: 0;
+  line-height: 1.55;
+}
+
+/* Where the file came from, and which slot it filled. */
+.cw-origin {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-500);
+}
+
+.cw-slot {
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-100);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--ink-700);
+}
+
+/* A quiz background's own title, above its description. */
+.cw-bg-title {
+  margin: 0 0 6px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink-900);
+}
+
+/* Rich text from the upload slot's editor. */
+.cw-html {
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.cw-html :first-child {
+  margin-top: 0;
+}
+
+.cw-html :last-child {
+  margin-bottom: 0;
+}
+
+/* --------------------------------------------------------------------------
+   THE QUIZ CARD — production's own: name, teacher, duration, Start Quiz
+
+   IT REPLACED A LIST OF THE QUESTIONS. That list put the whole quiz on screen
+   with the correct answers marked — which is the one thing a teacher must not do
+   in front of a class. The card is what production shows, and the questions are
+   behind Start Quiz where they belong.
+   -------------------------------------------------------------------------- */
+
+/*
+ * CENTRED IN THE PANE, which is where production puts it — `margin: auto` on a
+ * fixed-width block rather than centring the text inside it. The card reads as a
+ * thing to pick up rather than as the start of a left-hand column.
+ *
+ * FIXED HEIGHT, as production's `h-80` gives it, so the Start button sits at the
+ * bottom whether the card carries a last-run line or not — a button that moves up
+ * and down as the copy above it changes is a button you have to look for.
+ */
+.cw-quiz-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  max-width: 340px;
+  min-height: 260px;
+  margin: 28px auto 0;
+  padding: 26px 24px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.cw-quiz-card h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--ink-900);
+}
+
+.cw-quiz-line {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-500);
+}
+
+/* The value in accent, as production colours both lines. */
+.cw-quiz-line span {
+  font-weight: 600;
+  color: var(--accent-600);
+}
+
+/*
+ * THE BUTTON SITS ON ITS OWN DIVIDED ROW at the foot of the card, centred —
+ * production's card is split the same way, with a rule between the details and the
+ * action. `margin-top: auto` is what pins it down whatever the copy above does.
+ */
+.cw-quiz-start {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  justify-content: center;
+  gap: 8px;
+  margin: auto -24px 0;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-800);
+  cursor: pointer;
+}
+
+.cw-quiz-start:hover {
+  background: var(--tint-blue);
+  color: var(--accent-600);
+}
+
+/* --------------------------------------------------------------------------
+   THE ASSIGNMENT'S OWN CONTENT — a form's fields
+
+   THE QUIZ NO LONGER LISTS ITS QUESTIONS HERE; see the card above.
+
+   READ ONLY. Production's equivalent is a player that records an attempt; this
+   app records no submissions, so what is shown is what the class is about to be
+   asked rather than a thing to answer.
+   -------------------------------------------------------------------------- */
+
+.cw-questions {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cw-question {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.cw-q-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.cw-q-no {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  background: var(--tint-blue);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent-600);
+}
+
+.cw-q-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-900);
+}
+
+.cw-q-title :first-child {
+  margin-top: 0;
+}
+
+.cw-q-title :last-child {
+  margin-bottom: 0;
+}
+
+/* A question title can carry an image from the wizard's editor. */
+.cw-q-title img {
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+}
+
+.cw-q-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 0 38px;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.cw-options {
+  margin: 12px 0 0 38px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cw-options li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-050);
+  font-size: 13px;
+  color: var(--ink-700);
+}
+
+/*
+ * THE CORRECT OPTION IS MARKED, in green. This is the teacher's view of the quiz
+ * rather than the student's — production reveals answers to a student only behind
+ * `displayCorrectAnswers`, and always to whoever built it.
+ */
+.cw-options li.is-correct {
+  background: var(--tint-green);
+  font-weight: 600;
+  color: var(--on-green);
+}
+
+/* A note that belongs to the pane rather than to a row inside a card. */
+.cw-detached {
+  margin: 18px 0 0;
+}
+
+.cw-card {
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.cw-card h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--ink-900);
+}
+
+.cw-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  margin: 0;
+}
+
+.cw-facts dt {
+  margin-bottom: 3px;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+}
+
+.cw-facts dd {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-900);
+}
+
+.cw-path {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-500);
+  /* A storage path can be long and has no spaces to break on. */
+  overflow-wrap: anywhere;
+}
+
+/* The empty states, in the rail and in the pane. */
+.cw-empty,
+.cw-blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 20px;
+  border: 1px dashed var(--ink-300);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.cw-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  background: var(--ink-100);
+  color: var(--ink-500);
+}
+
+.cw-empty h3,
+.cw-blank h3 {
+  margin: 6px 0 0;
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--ink-900);
+}
+
+.cw-empty p,
+.cw-blank p {
+  margin: 0;
+  max-width: 380px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-500);
+}
+
+/* --------------------------------------------------------------------------
+   The pager
+   -------------------------------------------------------------------------- */
+
+/*
+ * CENTRED, which is where production puts it — under the divider, away from the
+ * Previous/Next pills above. It was right-aligned before the two-row arrangement
+ * existed, and against the pills it read as a second attempt at the same control.
+ *
+ * A DARK PILL HOLDING ALL THREE, not three separate buttons: the count belongs
+ * inside the control rather than beside it.
+ */
+.cw-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 26px;
+}
+
+/*
+ * PRODUCTION'S DARK PILL, with Prev and Next either side of the count. The two
+ * buttons share a class and the Prev arrow is flipped in the markup's icon order
+ * rather than with a second glyph — one arrow, two directions.
+ *
+ * THE SAME VIOLET AS SAVE, #330268, and sampled from the pager itself rather than
+ * assumed to match: 3541 pixels of exactly that value across the pill. It was
+ * --brand-900, the sidebar's navy, like the Save button beside it.
+ */
+.cw-page-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: var(--radius-full);
+  background: var(--save-violet);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--white);
+  cursor: pointer;
+}
+
+.cw-page-btn:hover:not(:disabled) {
+  background: var(--save-violet-dark);
+}
+
+.cw-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* The Prev arrow points back. */
+.cw-page-btn:first-child app-icon {
+  transform: rotate(180deg);
+}
+
+.cw-page-count {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-700);
+}
+
+/* --------------------------------------------------------------------------
+   Narrow screens: the rail stacks above the content rather than squeezing
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .cw-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cw-rail {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+
+/* --------------------------------------------------------------------------
+   THE UPLOAD CONTROL — production's blue pill, its View and its Download
+   -------------------------------------------------------------------------- */
+
+.cw-upload {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/*
+ * A LABEL, NOT A BUTTON, because it wraps the file input — that is the only way
+ * to style a file picker, and it is what production does too. `cursor: pointer`
+ * has to be said explicitly for the same reason: a label does not get it free.
+ */
+.cw-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border-radius: var(--radius-full);
+  background: var(--accent-500);
+  box-shadow: var(--shadow-btn);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--white);
+  cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+
+.cw-upload-btn:hover {
+  background: var(--accent-600);
+}
+
+.cw-upload-btn:focus-within {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.cw-upload-btn.is-busy {
+  background: var(--accent-400);
+  cursor: progress;
+}
+
+/*
+ * HIDDEN BUT STILL FOCUSABLE. `display: none` would take the input out of the tab
+ * order and off the accessibility tree, so the button could not be reached from a
+ * keyboard at all; a clipped, zero-opacity input keeps both.
+ */
+.cw-upload-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cw-upload-view {
+  padding: 10px 18px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-700);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cw-upload-view:hover {
+  border-color: var(--accent-500);
+  color: var(--accent-600);
+}
+
+.cw-upload-error {
+  margin: 8px 0 0;
+  max-width: 560px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--danger);
+}
+
+/* A ring with one quarter missing, spun. No image, no library. */
+.cw-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: var(--white);
+  border-radius: var(--radius-full);
+  animation: cw-spin 0.7s linear infinite;
+}
+
+@keyframes cw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* HONOURED, because a spinner is decoration and a reader who has asked for less
+   motion should not be given an animation that never stops. */
+@media (prefers-reduced-motion: reduce) {
+  .cw-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   THE FEEDBACK-SUBMITTED POPUP
+   -------------------------------------------------------------------------- */
+
+/*
+ * DISMISSED BY CLICKING ANYWHERE, the panel included by its Done button. It
+ * reports something already finished, so every route out of it should work — a
+ * confirmation that can only be closed one way is a confirmation that traps.
+ */
+.cw-popup-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  /* The app's own scrim token, matching every other modal on the page. */
+  background: var(--overlay);
+}
+
+.cw-popup {
+  width: 100%;
+  max-width: 380px;
+  padding: 26px 26px 22px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  cursor: default;
+}
+
+.cw-popup-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-full);
+  background: var(--tint-green);
+  color: var(--on-green);
+}
+
+.cw-popup-title {
+  margin: 0 0 8px;
+  font-size: 19px;
+  font-weight: 650;
+  color: var(--ink-900);
+}
+
+.cw-popup-note {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-500);
+}
+
+.cw-popup-btn {
+  min-width: 140px;
+  padding: 11px 24px;
+  border-radius: var(--radius-full);
+  background: var(--save-violet);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--white);
+  cursor: pointer;
+}
+
+.cw-popup-btn:hover {
+  background: var(--save-violet-dark);
+}
+
+/*
+ * A SAVE THAT WORKED BUT SKIPPED SOMETHING BLANK.
+ *
+ * AMBER, NOT RED. `.cw-error` is for a save that failed; this one succeeded and
+ * merely declined to store an empty block. Reporting it in red would claim a
+ * failure that did not happen, and a reader shown red for a success stops
+ * believing red.
+ */
+.cw-save-notice {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  background: var(--tint-amber);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--on-amber);
+}

@@ -37,14 +37,76 @@
     }
 
     <div class="cu-head-actions">
-      <!-- Real data. Production's Schedule and Year View buttons are NOT here:
-           neither has anything behind it in this app, and the dashboard's action
-           tiles were removed for exactly that reason. -->
+      <!-- REAL DATA: classroom.studentCounter. Restored after being removed —
+           it is in the UI being matched, and unlike Schedule and Year View it
+           has something behind it.
+
+           Schedule and Year View are still absent: neither has any data in this
+           app, and the dashboard's four action tiles were removed for exactly
+           that reason. Say the word and they can go in disabled. -->
       <span class="cu-students">
         <app-icon name="users" [size]="16" />
         Students
         <span class="cu-count">{{ studentCount() }}</span>
       </span>
+
+      <!-- PRESENT BUT DISABLED, and deliberately so.
+
+           Production's Schedule panel and Year View calendar have no data of any
+           kind in this app — no content calendar, no privilege model. Drawing
+           them enabled would be a button that does nothing, which is the thing
+           the dashboard's four action tiles were removed for. Drawn disabled,
+           with the reason on hover, the strip matches the UI being followed and
+           still tells the truth about what it can do. -->
+      <button
+        type="button"
+        class="cu-pill-btn"
+        disabled
+        title="The content calendar is not available in this app yet"
+      >
+        <app-icon name="clipboard" [size]="15" />
+        Schedule
+      </button>
+
+      <button
+        type="button"
+        class="cu-pill-btn"
+        disabled
+        title="The year calendar is not available in this app yet"
+      >
+        <app-icon name="clipboard" [size]="15" />
+        Year View
+      </button>
+
+      <!-- Cards or rows, the pair production puts at the end of this strip. A
+           segmented control rather than two loose buttons, so which one is active
+           is legible without reading a tooltip. Same markup and classes as the
+           Learning Units page's toggle, so the two behave identically. -->
+      <div class="view-toggle" role="group" aria-label="View">
+        <button
+          type="button"
+          class="vt-btn"
+          [class.is-on]="view() === 'card'"
+          [attr.aria-pressed]="view() === 'card'"
+          aria-label="Card view"
+          title="Card view"
+          (click)="setView('card')"
+        >
+          <app-icon name="grid" [size]="16" />
+        </button>
+
+        <button
+          type="button"
+          class="vt-btn"
+          [class.is-on]="view() === 'list'"
+          [attr.aria-pressed]="view() === 'list'"
+          aria-label="List view"
+          title="List view"
+          (click)="setView('list')"
+        >
+          <app-icon name="list" [size]="16" />
+        </button>
+      </div>
     </div>
   </header>
 
@@ -67,13 +129,15 @@
         />
       </div>
 
+      <!-- BY TYPE, as production's is: MuT, Group Activity, FLN, Micro
+           Improvement Programme, TACTivity. -->
       <div class="cu-lang">
-        <label for="cu-lang" class="visually-hidden">Language</label>
-        <select id="cu-lang" (change)="language.set(valueOf($event))">
-          <option value="" [selected]="language() === ''">All</option>
-          @for (code of languageOptions(); track code) {
-            <option [value]="code" [selected]="code === language()">
-              {{ languageName(code) }}
+        <label for="cu-type" class="visually-hidden">Learning unit type</label>
+        <select id="cu-type" (change)="unitType.set(valueOf($event))">
+          <option value="" [selected]="unitType() === ''">All</option>
+          @for (option of typeOptions(); track option.code) {
+            <option [value]="option.name" [selected]="option.name === unitType()">
+              {{ option.name }}
             </option>
           }
         </select>
@@ -96,16 +160,98 @@
           <p>Nothing matches that search.</p>
         }
       </div>
+    } @else if (view() === 'list') {
+      <!-- ================================================================
+           ROW VIEW.
+
+           The same units, the same order, as a table — for a class running
+           twenty units, where three-across cards mean scrolling to find one
+           code. The columns are what the card shows minus the artwork, so
+           nothing is only reachable in one view.
+           ================================================================ -->
+      <div class="cu-table-wrap">
+        <table class="cu-table">
+          <thead>
+            <tr>
+              <th scope="col">Code</th>
+              <th scope="col">Learning Unit</th>
+              <th scope="col">Type</th>
+              <th scope="col">Language</th>
+              <th scope="col">Duration</th>
+              <th scope="col">Scheduled</th>
+              <th scope="col" class="cu-num">Completion</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (unit of visibleUnits(); track unit.docId) {
+              <tr>
+                <td class="cu-cell-code">{{ unit.code || '—' }}</td>
+                <td class="cu-cell-name" [title]="unit.name">{{ unit.name || '—' }}</td>
+                <td>{{ unit.type || '—' }}</td>
+                <td>{{ languageName(unit.language) }}</td>
+                <td>{{ unit.minutes > 0 ? unit.minutes + ' min' : '—' }}</td>
+                <td>
+                  <span class="cu-chip" [class.is-scheduled]="unit.scheduled">
+                    {{ unit.scheduled || 'Not scheduled' }}
+                  </span>
+                </td>
+                <!-- Zero for the same reason as the card's pill: nothing is
+                     recorded, so nothing is claimed. -->
+                <td class="cu-num" [title]="progressTitle">{{ completion }}%</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
     } @else {
       <div class="cu-grid">
         @for (unit of visibleUnits(); track unit.docId) {
           <article class="cu-card">
-            <!-- The thumbnail. A unit's preview image is a STORAGE PATH, not a
-                 URL, and nothing in this app mints download URLs yet — so the
-                 placeholder shows the code, which is how a unit is recognised
-                 anyway. See learningUnitPreviewImage on the model. -->
+            <!-- THE THUMBNAIL, and its fallback.
+
+                 A unit stores a PATH into Cloud Storage, not a URL — the path is
+                 stored because a download URL carries a revocable token — so
+                 ResourceLinkService exchanges it for one after the card renders.
+                 Until then, and for a unit with no image at all, the code is
+                 shown: it is how a unit is recognised in every other list here,
+                 and it is honest where a broken-image icon would not be.
+
+                 `learningUnitPreviewImage` is preferred and `learningUnitImage`
+                 is the fallback — see the model. Production's resize step writes
+                 the first; this app does not, so most units resolve to the
+                 full-size original. -->
             <div class="cu-thumb">
-              <span class="cu-thumb-code">{{ unit.code || '—' }}</span>
+              @if (thumbnailFor(unit.docId); as url) {
+                <img
+                  class="cu-thumb-img"
+                  [src]="url"
+                  [alt]="unit.name"
+                  loading="lazy"
+                  (error)="onImageError(unit.docId)"
+                />
+              } @else {
+                <span class="cu-thumb-code">{{ unit.code || '—' }}</span>
+              }
+
+              <!-- The type, over the image, as production badges it. Uppercased
+                   in CSS rather than in the data, so the stored value stays
+                   'TACtivity' — the id format depends on its exact spelling. -->
+              @if (unit.type) {
+                <span class="cu-type-badge">{{ unit.type }}</span>
+              }
+
+              <!-- COMPLETION, top right, as production shows it.
+                   ALWAYS 0% HERE, and that is not a placeholder value chosen to
+                   look plausible — it is the true answer. Production computes this
+                   from student submissions against the unit's workflow, and this
+                   app records neither: there are no students on a classroom
+                   beyond a counter, and no workflow to progress through. Zero is
+                   what "nothing has been recorded" means; any other number would
+                   be invented. -->
+              <span class="cu-progress-pill" [title]="progressTitle">
+                <app-icon name="minus" [size]="12" />
+                {{ completion }}%
+              </span>
             </div>
 
             <div class="cu-body">
@@ -129,6 +275,46 @@
                 {{ unit.scheduled || 'Not scheduled' }}
               </span>
             </div>
+
+            <!-- ============================================================
+                 The card's footer: a progress track and the action.
+
+                 Both are in production's card and both are honest about having
+                 nothing behind them here — see the note on the pill above. The
+                 track renders empty rather than being omitted, because the row
+                 is what gives the card its height and the button its place.
+
+                 THE BUTTON OPENS THE WORKFLOW STEPPER, which this app now has.
+                 It was disabled with a note saying so; the stepper is the page
+                 that note was waiting for.
+
+                 START OR CONTINUE, on the same rule production uses: a unit whose
+                 classroom entry already names a workflow says Continue, and one
+                 with none says Start. The label is the only difference — both go
+                 to the same page, which decides what to show.
+                 ============================================================ -->
+            <footer class="cu-foot">
+              <span
+                class="cu-track"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                [attr.aria-valuenow]="completion"
+                [attr.aria-label]="'Completion for ' + unit.name"
+              >
+                <span class="cu-track-fill" [style.width.%]="completion"></span>
+              </span>
+
+              <a
+                class="cu-start"
+                [routerLink]="['/institutions/classroom', classroomId(), 'unit', unit.docId]"
+                [queryParams]="{ programmeId: programmeId() }"
+                [title]="startTitle(unit.docId)"
+              >
+                {{ hasWorkflow(unit.docId) ? 'Continue' : 'Start' }}
+                <app-icon name="arrow-right" [size]="14" />
+              </a>
+            </footer>
           </article>
         }
       </div>

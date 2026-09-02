@@ -1,0 +1,170 @@
+<!-- A FULL-PAGE OVERLAY, as production has it: four selects across the top and
+     the report beneath, rather than a dialog. The scope of a report is four
+     choices wide and does not fit a modal. -->
+<div class="report-overlay animate-fade-up">
+
+  <header class="report-head">
+    <h2>{{ heading() }}</h2>
+
+    <div class="report-filters">
+      <div class="field">
+        <label for="rp-institution">Select Institution</label>
+        <select
+          id="rp-institution"
+          [disabled]="loading()"
+          (change)="onSelectInstitution(valueOf($event))"
+        >
+          <option value="" [selected]="selectedInstitutionId() === ''"></option>
+          @for (option of institutions(); track option.id) {
+            <option [value]="option.id" [selected]="option.id === selectedInstitutionId()">
+              {{ option.name }}
+            </option>
+          }
+        </select>
+      </div>
+
+      <!-- Each select is disabled until the one before it is chosen: it reads its
+           options from that choice. -->
+      <div class="field">
+        <label for="rp-classroom">Select Classroom</label>
+        <select
+          id="rp-classroom"
+          [disabled]="selectedInstitutionId() === '' || classroomOptions().length === 0"
+          (change)="onSelectClassroom(valueOf($event))"
+        >
+          <option value="" [selected]="selectedClassroomId() === ''"></option>
+          @for (option of classroomOptions(); track option.id) {
+            <option [value]="option.id" [selected]="option.id === selectedClassroomId()">
+              {{ option.name }}
+            </option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="rp-programme">Select Programme</label>
+        <select
+          id="rp-programme"
+          [disabled]="selectedClassroomId() === '' || loadingClassroom() || programmeOptions().length === 0"
+          (change)="onSelectProgramme(valueOf($event))"
+        >
+          <option value="" [selected]="selectedProgrammeId() === ''"></option>
+          @for (option of programmeOptions(); track option.id) {
+            <option [value]="option.id" [selected]="option.id === selectedProgrammeId()">
+              {{ option.name }}
+            </option>
+          }
+        </select>
+        @if (loadingClassroom()) {
+          <span class="field-note">Loading the classroom…</span>
+        }
+      </div>
+
+      <div class="field">
+        <label for="rp-unit">Select Learning Unit</label>
+        <select
+          id="rp-unit"
+          [disabled]="selectedProgrammeId() === '' || learningUnitOptions().length === 0"
+          (change)="onSelectLearningUnit(valueOf($event))"
+        >
+          <option value="" [selected]="selectedLearningUnitId() === ''"></option>
+          @for (option of learningUnitOptions(); track option.id) {
+            <option [value]="option.id" [selected]="option.id === selectedLearningUnitId()">
+              {{ option.name }}
+            </option>
+          }
+        </select>
+        <!-- Said out loud rather than left as an empty dropdown: most of this
+             app's classroom-programme pairs have no allotted units. -->
+        @if (noUnitsReason()) {
+          <span class="field-note is-warn">{{ noUnitsReason() }}</span>
+        }
+      </div>
+    </div>
+
+    <button type="button" class="report-close" (click)="close()" aria-label="Close">
+      <app-icon name="close" [size]="19" />
+    </button>
+  </header>
+
+  <div class="report-body">
+    @if (error()) {
+      <div class="report-state is-error" role="alert">{{ error() }}</div>
+    } @else if (loading()) {
+      <div class="report-state">Loading…</div>
+    } @else if (ready()) {
+      <!-- The card production reveals once all four are chosen. -->
+      <section class="report-card">
+        <h3>Snappy Report</h3>
+
+        <dl class="report-scope">
+          <div>
+            <dt>Institution</dt>
+            <dd>{{ selectedInstitutionName() }}</dd>
+          </div>
+          <div>
+            <dt>Classroom</dt>
+            <dd>{{ selectedClassroomName() }}</dd>
+          </div>
+          <div>
+            <dt>Programme</dt>
+            <dd>{{ selectedProgrammeName() }}</dd>
+          </div>
+          <div>
+            <dt>Learning Unit</dt>
+            <dd>{{ selectedLearningUnitName() }}</dd>
+          </div>
+        </dl>
+
+        <!-- Production's two exports. Both read the same submissions and differ
+             only in how they are summarised: one row per question, or one per
+             student. -->
+        <div class="report-actions">
+          <button
+            type="button"
+            class="btn btn-primary"
+            [disabled]="exporting()"
+            (click)="downloadQuestionWise()"
+          >
+            <app-icon name="download" [size]="16" />
+            {{ exporting() ? 'Preparing…' : 'Download Question-wise' }}
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-outline"
+            [disabled]="exporting()"
+            (click)="downloadStudentWise()"
+          >
+            <app-icon name="download" [size]="16" />
+            {{ exporting() ? 'Preparing…' : 'Download Student-wise' }}
+          </button>
+        </div>
+
+        @if (studentsFound() !== null && !exportError()) {
+          <p class="report-found">
+            Students with submissions in this scope:
+            <strong>{{ studentsFound() }}</strong>
+          </p>
+        }
+
+        <!-- The empty-result explanation, which in this database is the expected
+             outcome rather than a failure. -->
+        @if (exportError()) {
+          <p class="report-unavailable" role="status">
+            <app-icon name="minus" [size]="15" />
+            <span>{{ exportError() }}</span>
+          </p>
+        }
+      </section>
+    } @else {
+      <div class="report-empty">
+        <span class="report-empty-icon"><app-icon name="download-circle" [size]="26" /></span>
+        <h3>Choose a scope</h3>
+        <p>Pick an institution, a classroom, a programme and a learning unit to
+           scope the report.</p>
+      </div>
+    }
+  </div>
+
+</div>

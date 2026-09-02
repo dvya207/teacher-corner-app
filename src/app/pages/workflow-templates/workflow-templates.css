@@ -1,0 +1,700 @@
+/* ==========================================================================
+   Workflow Templates — the sixth table built to this page's rules.
+
+   THE PAGE CHROME BELOW IS COPIED from assignments.css: the head, the stat
+   cards, the filter pills, the toolbar, the table shell and the trash overlay.
+   Component styles are scoped, so the sixth table cannot see the fifth one's
+   rules, and this is the same known duplication the other pages carry — the
+   note in upload-wizard.css explains the trade and names extraction as the
+   follow-up once nothing is moving.
+
+   Everything from `.wt-` onward, and the maturity pills, are this page's own.
+   ========================================================================== */
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.page-head-copy h1 {
+  font-size: 27px;
+  color: var(--ink-900);
+}
+
+.page-head-copy p {
+  margin-top: 5px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.page-head-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.add-btn,
+.trash-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 20px;
+  border-radius: var(--radius-md);
+  font-size: 14.5px;
+  font-weight: 600;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              transform 0.12s var(--ease);
+}
+
+.add-btn {
+  background: var(--accent-600);
+  color: var(--white);
+  box-shadow: var(--shadow-btn);
+}
+
+.add-btn:hover {
+  background: var(--accent-800);
+}
+
+.add-btn:active,
+.trash-btn:active {
+  transform: translateY(1px);
+}
+
+.trash-btn {
+  border: 1px solid var(--tint-red);
+  background: var(--white);
+  color: var(--on-red);
+}
+
+.trash-btn:hover {
+  background: var(--tint-red);
+  border-color: var(--on-red);
+}
+
+.stat-cards {
+  display: grid;
+  /* FOUR, where the other pages have three: Total plus one per type. */
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.sc-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+}
+
+.sc-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.sc-copy strong {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.sc-copy > span {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.load-error {
+  margin-bottom: 18px;
+  padding: 13px 16px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--on-red);
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--tint-green);
+  border-radius: var(--radius-md);
+  background: var(--tint-green);
+  font-size: 13.5px;
+  color: var(--on-green);
+}
+
+.toast-icon {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.toast-close {
+  margin-left: auto;
+  color: var(--on-green);
+}
+
+.table-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+}
+
+.filter-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--white);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.pill:hover {
+  border-color: var(--accent-400);
+  color: var(--accent-600);
+}
+
+.pill.is-active {
+  background: var(--tint-blue);
+  border-color: var(--accent-500);
+  color: var(--accent-500);
+  font-weight: 600;
+}
+
+.pill-count {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--ink-100);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  color: var(--ink-500);
+}
+
+.pill.is-active .pill-count {
+  background: color-mix(in srgb, var(--accent-500) 30%, var(--white));
+  color: var(--accent-800);
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.loaded-count {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.hide-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease);
+}
+
+.hide-btn:hover {
+  background: var(--ink-050);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.asgn-table {
+  width: 100%;
+  /* SIX columns, so this is the narrowest of the five tables and does not need
+     the 1280px floor the learning-unit table carries. */
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.asgn-table th {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--ink-050);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--ink-400);
+  white-space: nowrap;
+}
+
+.asgn-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+  color: var(--ink-700);
+  vertical-align: middle;
+}
+
+.asgn-table tbody tr:hover {
+  background: var(--ink-050);
+}
+
+.asgn-id {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-400);
+}
+
+/*
+ * LEFT-ALIGNED, under a left-aligned header — which is how the reference has it,
+ * and this column was right-aligned. With the icons pushed to the far right of a
+ * wide table they sat a long way from the header naming them, and further still
+ * from the row's own content.
+ */
+.asgn-actions-head,
+.asgn-actions {
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* Empty and loading states share one cell style: both are one centred sentence
+   across the whole table rather than a shape pretending to be rows. */
+.asgn-state {
+  padding: 36px 20px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.type-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.icon-act {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.icon-act:hover:not(:disabled) {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.icon-act.is-danger:hover:not(:disabled) {
+  background: var(--tint-red);
+  color: var(--on-red);
+}
+
+.icon-act:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.truncate {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-actions {
+  width: 92px;
+  white-space: nowrap;
+}
+
+.trash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  padding: 22px 26px 26px;
+  background: var(--page-bg);
+}
+
+.trash-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+}
+
+.trash-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 24px;
+  color: var(--ink-900);
+}
+
+.trash-count {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  background: var(--tint-red);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--on-red);
+}
+
+.trash-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.empty-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 18px;
+  border: 1px solid var(--tint-red);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-red);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease),
+              color 0.15s var(--ease);
+}
+
+.empty-btn:hover:not(:disabled) {
+  background: var(--tint-red);
+  border-color: var(--on-red);
+}
+
+/* Armed state. The label already says what will happen; the fill makes it
+   unmistakable that this click is the destructive one. */
+.empty-btn.is-confirming {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--white);
+}
+
+.empty-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trash-close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.trash-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.trash-body {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: auto;
+}
+
+.trash-table {
+  min-width: 780px;
+}
+
+.deleted-date {
+  color: var(--ink-400);
+  white-space: nowrap;
+}
+
+/* Boxed action buttons, as in the reference — outlined squares rather than the
+   bare icons used in the main table. */
+.row-btn.is-boxed {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+}
+
+.trash-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 340px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.trash-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: var(--ink-100);
+  color: var(--ink-400);
+}
+
+.trash-empty h3 {
+  font-size: 18px;
+  color: var(--ink-900);
+}
+
+.trash-empty p {
+  max-width: 340px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+/* Trash loading / error, matching the main table's state treatment. */
+.trash-state {
+  padding: 48px 20px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.trash-state.is-error {
+  color: var(--on-red);
+}
+
+/* --------------------------------------------------------------------------
+   This page's own
+   -------------------------------------------------------------------------- */
+
+/* The table shell, named for this page. Same geometry as the fifth table's. */
+.wt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.wt-table th {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--ink-050);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--ink-500);
+}
+
+.wt-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  color: var(--ink-700);
+}
+
+.wt-table tbody tr:hover {
+  background: var(--ink-050);
+}
+
+.wt-table tr.is-busy {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* The title column stacks the name over the id, as the other tables do. */
+.wt-table td.col-name {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 340px;
+}
+
+.wt-table td.col-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-900);
+}
+
+.wt-id {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-400);
+}
+
+.wt-date,
+.wt-steps {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.wt-steps {
+  text-align: left;
+}
+
+.wt-empty {
+  color: var(--ink-400);
+}
+
+.wt-state {
+  padding: 36px 20px;
+  text-align: center;
+  color: var(--ink-500);
+}
+
+/*
+ * THE MATURITY PILL, one tint per rung.
+ *
+ * Silver, Gold, Platinum and Diamond are a LADDER, so the colours climb rather
+ * than being four arbitrary hues: grey, amber, violet, blue. Production tints
+ * only Gold; the other three read as unlabelled there, and a filter you can
+ * click by colour is worth the three extra rules.
+ */
+.maturity-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  background: var(--ink-100);
+  color: var(--ink-600);
+}
+
+.maturity-pill.is-silver {
+  background: var(--ink-100);
+  color: var(--ink-600);
+}
+
+.maturity-pill.is-gold {
+  background: var(--tint-amber);
+  color: var(--on-amber);
+}
+
+.maturity-pill.is-platinum {
+  background: var(--tint-violet);
+  color: var(--on-violet);
+}
+
+.maturity-pill.is-diamond {
+  background: var(--tint-blue);
+  color: var(--accent-600);
+}
+
+/* The workflow type, plainer than the maturity: it is a category, not a rung. */
+.type-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--ink-050);
+  border: 1px solid var(--ink-300);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--ink-600);
+}
+
+/* The stat cards' icons, one per rung, matching the pills above. */
+.sc-icon.sc-silver {
+  background: var(--ink-100);
+  color: var(--ink-600);
+}
+
+.sc-icon.sc-gold {
+  background: var(--tint-amber);
+  color: var(--on-amber);
+}
+
+.sc-icon.sc-platinum {
+  background: var(--tint-violet);
+  color: var(--on-violet);
+}
+
+.sc-icon.sc-diamond {
+  background: var(--tint-blue);
+  color: var(--accent-600);
+}
+
+/* ---- Narrow ------------------------------------------------------------- */
+
+@media (max-width: 1080px) {
+  .stat-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .stat-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .page-head-actions {
+    width: 100%;
+  }
+}

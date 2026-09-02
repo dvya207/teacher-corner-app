@@ -18,7 +18,7 @@ import {
 } from '../../models/teaching.model';
 import { programmesFor } from '../../services/programme.service';
 import { isActiveStatus } from '../../data/programme-options';
-import { toClassroomProgramme } from '../../services/classroom.service';
+import { indexLearningUnits, toClassroomProgramme } from '../../services/classroom.service';
 
 /** The two halves of the Manage Programmes picker, and its two drop zones. */
 export type PickerPane = 'available' | 'selected';
@@ -334,9 +334,29 @@ export class EditClassroom {
   });
 
   addProgramme(programme: Programme): void {
+    const current = this.field('programmes') ?? {};
+
     this.patch('programmes', {
-      ...(this.field('programmes') ?? {}),
-      [programme.programmeId]: toClassroomProgramme(programme)
+      ...current,
+      /*
+       * THE EXISTING ENTRY IS PASSED IN, defensively rather than because a path
+       * needs it today: the picker only offers programmes that are NOT attached,
+       * and removeProgramme deletes the entry, so `current[programmeId]` is
+       * normally absent here and this resolves to undefined.
+       *
+       * It is passed anyway because the failure it prevents is silent. The moment
+       * anything re-derives an attached entry — a re-sync action, a bulk edit, a
+       * second call for an id already in the map — rebuilding without it resets
+       * every date and lock on that class to empty, and nothing on screen would
+       * say so.
+       */
+      [programme.programmeId]: toClassroomProgramme(
+        programme,
+        current[programme.programmeId],
+        // So the entry records WHAT each unit is — code, name, type, version,
+        // language — and not only its id.
+        indexLearningUnits(this.learningUnits())
+      )
     });
   }
 

@@ -12,6 +12,7 @@ import {
 
 import { Icon } from '../../components/icon/icon';
 import {
+  EXTERNAL_RESOURCE_SLOTS,
   emptyLearningUnitDraft,
   learningUnitIdOf,
   nextVersionLabel,
@@ -708,23 +709,26 @@ export class LearningUnitForm {
      variation — which is how the reference lays them out, and it is not the
      three-per-column chunking the other tabs use. */
 
+  /*
+   * BUILT FROM EXTERNAL_RESOURCE_SLOTS, not listed again here.
+   *
+   * The same nine are now needed in two other places — the workflow step
+   * dialog offers them as sub-categories and the stepper resolves them to files —
+   * so the keys and labels moved to the data layer. This keeps only the GROUPING,
+   * which is this editor's own: three columns by what each belongs to (the unit,
+   * the topic, the variation), which is how the reference lays them out.
+   */
   readonly externalGroups = [
-    [
-      { key: 'guidePath', label: 'Learning Unit Guide' },
-      { key: 'observationPath', label: 'Learning Unit Observation Sheet' },
-      { key: 'materialPath', label: 'Learning Unit Materials' },
-      { key: 'videoUrl', label: 'Learning Unit Video' },
-      { key: 'templatePath', label: 'Learning Unit Template (Optional)' }
-    ],
-    [
-      { key: 'topicGuidePath', label: 'Topic Guide' },
-      { key: 'topicVideoUrl', label: 'Topic Video' }
-    ],
-    [
-      { key: 'varGuidePath', label: 'VAR Guide (PDF)' },
-      { key: 'varVideoUrl', label: 'VAR Video' }
-    ]
-  ] as const;
+    ['guidePath', 'observationPath', 'materialPath', 'videoUrl', 'templatePath'],
+    ['topicGuidePath', 'topicVideoUrl'],
+    ['varGuidePath', 'varVideoUrl']
+  ].map(group =>
+    group.map(code => {
+      const slot = EXTERNAL_RESOURCE_SLOTS.find(entry => entry.code === code);
+
+      return { key: code, label: slot?.label ?? code };
+    })
+  );
 
   /** What the unit's own resources map holds for a key. */
   unitResource(key: string): string {

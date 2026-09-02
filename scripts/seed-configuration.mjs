@@ -111,6 +111,161 @@ const luLangTypes = [
   { code: 'TE', label: 'Telugu' }
 ];
 
+/**
+ * assignment-options.ts ASSIGNMENT_TYPE_OPTIONS — ALL FIVE, verified field for field
+ * against production's own Configuration/AssignmentTypes.
+ *
+ * FIVE HERE THOUGH THE APP CREATES THREE. This document mirrors production's, and
+ * production's has five; the restriction to Quiz, Upload and Form lives in
+ * ASSIGNMENT_TYPES in the model, which is what the Create menu reads. Seeding all
+ * five means a row already stored as GAME or TEXTBLOCK is labelled 'Game' or
+ * 'Text Block' in the table rather than shown as a raw SCREAMING_SNAKE value.
+ *
+ * `displayName` and `type`, in that order and with those names — production's.
+ */
+const assignmentsTypes = [
+  { displayName: 'Quiz', type: 'QUIZ' },
+  { displayName: 'Upload', type: 'UPLOAD' },
+  { displayName: 'Game', type: 'GAME' },
+  { displayName: 'Form', type: 'FORM' },
+  { displayName: 'Text Block', type: 'TEXTBLOCK' }
+];
+
+/**
+ * assignment-options.ts FORM_QUESTION_TYPES — the seven a form's fields can be.
+ *
+ * `display` and `key`, NOT `label` and `code`: this document has its own field
+ * names and they are what the reader looks up. Two are worth noticing — 'none' is
+ * "Display Only", a block of text with no input, and `text` and `textBox` are a
+ * single line and a multi-line box rather than synonyms.
+ */
+const questionTypesForm = [
+  { display: 'Display Only', key: 'none' },
+  { display: 'Text Field', key: 'text' },
+  { display: 'Text Box', key: 'textBox' },
+  { display: 'Drop Down', key: 'dropDown' },
+  { display: 'Star Rating', key: 'starRating' },
+  { display: 'Drop Down (Dynamic)', key: 'dropDownDynamic' },
+  { display: 'Drop Down (Dependent)', key: 'dropDownDependent' }
+];
+
+/**
+ * assignment-options.ts UPLOAD_FILE_TYPES — what a student may be asked to upload.
+ *
+ * A MAP, NOT AN ARRAY, which is production's shape for this one and the reason
+ * ConfigurationService reads it with its own loader rather than the generic list
+ * one. The KEY is what an upload slot stores in `uploadFileType` ('IMAGE') and the
+ * value is what the dropdown shows.
+ */
+const uploadFormatNames = {
+  PDF: 'PDF',
+  IMAGE: 'Image',
+  VIDEO: 'Video',
+  WORD: 'Word Document',
+  EXCEL: 'Spreadsheet',
+  PPT: 'Powerpoint Presentation'
+};
+
+/**
+ * teaching.model.ts QUIZ_QUESTION_TYPES — the five a quiz question can be.
+ *
+ * NO `icon` FIELD. The constant carries one; it names an SVG in the icon
+ * component, so a value here would be a string nothing can render unless it
+ * happens to match, and an editor changing it would produce a blank space with no
+ * way to tell why. ConfigurationService merges the configured label with the icon
+ * the code holds for that type.
+ *
+ * PRODUCTION HAS NO DOCUMENT FOR THIS — it hardcodes the list in its own quiz
+ * component. Seeded here because it is a vocabulary, and 'DESCRIPTIVE' as a label
+ * is the sort of thing somebody will want to sentence-case without a release.
+ */
+const questionTypesQuiz = [
+  { type: 'MCQ', label: 'MCQ' },
+  { type: 'FILL_IN_THE_BLANKS', label: 'Fill In The Blanks' },
+  { type: 'TEXT', label: 'Text' },
+  { type: 'RICH_BLANKS', label: 'Rich Blanks' },
+  { type: 'DESCRIPTIVE', label: 'DESCRIPTIVE' }
+];
+
+/**
+ * The two kinds of workflow a template can be.
+ *
+ * PRODUCTION'S OWN DOCUMENT, copied field for field —
+ * Configuration/WorkflowTypes.workflowTypes — which makes this one of the few
+ * entries in this script that MIRRORS rather than invents. Note the shape:
+ * `displayName`, not `label`. The app's own option type uses `label`, and the
+ * service translates; writing `label` here would match the app and diverge from
+ * production, which is the wrong way round for a document both read.
+ *
+ * THE HYPHEN IN 'STEM-CLUB' IS PART OF THE CODE. Every one of production's
+ * templates stores it hyphenated, so a tidied 'STEMCLUB' would write documents its
+ * own list page could not label.
+ */
+const workflowTypes = [
+  { code: 'CLASSROOM', displayName: 'Classroom' },
+  { code: 'STEM-CLUB', displayName: 'Stem Club' }
+];
+
+/**
+ * WHICH of the five kinds the Create menu offers.
+ *
+ * A POLICY, NOT A VOCABULARY, and the reader treats it as such: it may NARROW
+ * this list but never widen it, because adding 'TEXTBLOCK' here does not bring a
+ * text-block editor into being. Turning a type off is a real thing to want;
+ * turning one on is a release.
+ */
+const creatableTypes = ['QUIZ', 'UPLOAD', 'FORM'];
+
+/** teaching.model.ts PEDAGOGY_TYPES — formative and summative. */
+const pedagogyTypes = ['FA', 'SA'];
+
+/** teaching.model.ts QUIZ_AUTH_TYPES — whether an attempt needs a login. */
+const authenticationTypes = ['login', 'anonymous'];
+
+/**
+ * The megabyte ceiling per upload type, keyed as `formatNames` is, plus DEFAULT.
+ *
+ * Production expresses these as three ternaries inside a template binding —
+ * `VIDEO ? 200 : IMAGE ? 20 : 40` — which is the least editable place a number
+ * like that could live. `DEFAULT` is pulled out of the map by the reader, so it
+ * cannot be mistaken for an upload type.
+ */
+const uploadSizeCaps = { VIDEO: 200, IMAGE: 20, DEFAULT: 40 };
+
+/**
+ * assignment-options.ts ASSIGNMENT_STATUSES, and the two colouring lists.
+ *
+ * THREE LISTS, NOT ONE, and that separation is the point. `statuses` is what the
+ * Status select offers; `liveValues` and `closedValues` are which STORED values
+ * the badge paints. The collection holds statuses this app never writes —
+ * 'active', 'archived' — because production wrote them, so the badge must colour
+ * values the dropdown does not offer. Merging them would either offer 'archived'
+ * for creation or paint a stored 'archived' row as a draft.
+ *
+ * The colouring lists are lowercase: the comparison lowercases the stored value
+ * first, because the collection has 'LIVE', 'Live' and 'live'.
+ */
+const assignmentStatuses = ['LIVE', 'DEVELOPMENT'];
+const liveStatusValues = ['active', 'live'];
+const closedStatusValues = ['closed', 'archived'];
+
+/**
+ * What a new assignment opens with, and where its inline media goes.
+ *
+ * THREE UNRELATED SCALARS, grouped because each was a literal buried in the model
+ * or a service rather than because they belong together. The reader takes them
+ * FIELD BY FIELD, so a document setting only one leaves the others alone.
+ *
+ * `quizMediaFolder` IS PRODUCTION'S OWN FOLDER, and changing it has a consequence
+ * worth stating: production's tooling looks for quiz media under
+ * `quizzer_resources/`, so a different value writes files it cannot find.
+ */
+const assignmentDefaults = {
+  formInstructions: 'Please answer all the questions in the fields provided below',
+  slotMaxUploads: 1,
+  quizMediaFolder: 'quizzer_resources'
+};
+
 /** learning-unit-options.ts DIFFICULTY_LEVELS. Strings, as production stores them. */
 const luDifficultyLevels = ['1', '2', '3', '4', '5'];
 
@@ -545,6 +700,38 @@ async function main() {
      * actually wrote the document instead.
      */
     subjectTypes:         { subjectTypes },
+    /*
+     * TWO ARRAYS IN ONE DOCUMENT, which is production's own layout: the assignment
+     * kinds and a form's field types share `AssignmentTypes`. Note `assignmentsTypes`
+     * with the plural 's' in the middle — its spelling, not a typo here.
+     */
+    /*
+     * SIX LISTS IN ONE DOCUMENT. The first two are production's own layout — the
+     * assignment kinds and a form's field types share `AssignmentTypes`. The other
+     * four are NOT production's: it hardcodes each in its own components, and they
+     * are grouped here rather than given four documents because that is the
+     * convention this collection already follows.
+     */
+    AssignmentTypes:      {
+      assignmentsTypes,
+      questionTypesForm,
+      questionTypesQuiz,
+      creatableTypes,
+      pedagogyTypes,
+      authenticationTypes
+    },
+    /* Two MAPS: what may be uploaded, and how big. See the notes above. */
+    acceptedUploadFormats: { formatNames: uploadFormatNames, sizeCaps: uploadSizeCaps },
+    /* Three lists, and they are deliberately not one. See the note above. */
+    AssignmentStatuses:   {
+      statuses: assignmentStatuses,
+      liveValues: liveStatusValues,
+      closedValues: closedStatusValues
+    },
+    /* A map of unrelated scalars, read field by field. */
+    AssignmentDefaults:   { defaults: assignmentDefaults },
+    /* Production's own document, mirrored. `displayName`, not `label`. */
+    WorkflowTypes:        { workflowTypes },
     /*
      * TWO ARRAYS IN ONE DOCUMENT, as production has it. `subjectsNames` is listed
      * first so the summary line below reports it; both are written.

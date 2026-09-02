@@ -1,0 +1,166 @@
+<!-- A WHITE CARD WITH A CENTRED HEADING, which is production's form step: the word
+     "Instructions", the assignment's own instruction line under it, then the
+     questions. No tiles and no detail table — those belong to its upload
+     renderer. -->
+<div class="af-card">
+
+  <header class="af-head">
+    <h2 class="af-title">Instructions</h2>
+
+    @if (instructions()) {
+      <p class="af-instructions">{{ instructions() }}</p>
+    }
+  </header>
+
+  <ol class="af-questions">
+    @for (question of questions(); track $index; let qIndex = $index) {
+      <li class="af-question" [class.is-locked]="!isOpen(qIndex)">
+
+        <!-- 'Question 3:' for a question, '3:' for a subquestion — production
+             drops the word on a subquestion, which is how its nested numbering
+             reads as nesting. -->
+        <p class="af-label">
+          <span class="af-label-no">{{ label(question) }}</span>
+          <span class="af-label-text">{{ question.question }}</span>
+        </p>
+
+        @switch (question.questionType) {
+
+          <!-- 'none' IS A HEADING, not a question. Production's own name for the
+               type is "Display Only", and it renders no control at all. -->
+          @case ('none') {}
+
+          @case ('starRating') {
+            <div
+              class="af-stars"
+              role="radiogroup"
+              [attr.aria-label]="question.question"
+            >
+              @for (star of stars; track star) {
+                <button
+                  type="button"
+                  class="af-star"
+                  [class.is-lit]="rating(qIndex) >= star"
+                  [disabled]="!isOpen(qIndex)"
+                  role="radio"
+                  [attr.aria-checked]="rating(qIndex) === star"
+                  [attr.aria-label]="star + ' of 5'"
+                  (click)="set(qIndex, star)"
+                >
+                  <app-icon name="star" [size]="26" />
+                </button>
+              }
+
+              @if (rating(qIndex) > 0) {
+                <span class="af-star-value">{{ rating(qIndex) }} of 5</span>
+              }
+            </div>
+          }
+
+          @case ('textBox') {
+            <textarea
+              class="af-input af-textarea"
+              rows="3"
+              [placeholder]="placeholder(question)"
+              [disabled]="!isOpen(qIndex)"
+              [value]="value(qIndex)"
+              (input)="set(qIndex, valueOf($event))"
+              [attr.aria-label]="question.question"
+            ></textarea>
+          }
+
+          @case ('text') {
+            <input
+              type="text"
+              class="af-input"
+              autocomplete="off"
+              [placeholder]="placeholder(question)"
+              [disabled]="!isOpen(qIndex)"
+              [value]="value(qIndex)"
+              (input)="set(qIndex, valueOf($event))"
+              [attr.aria-label]="question.question"
+            />
+          }
+
+          @default {
+            <!-- THE THREE DROPDOWN VARIANTS. Each reads a different field and two
+                 of them name a Configuration document rather than listing their
+                 options; see FormSubmissionService.optionsFor. -->
+            @if (isUnresolvedDropdown(question)) {
+              <p class="af-note">
+                This question's options are not available: it names a
+                Configuration document that has none.
+              </p>
+            } @else {
+              <select
+                class="af-input af-select"
+                [disabled]="!isOpen(qIndex)"
+                [attr.aria-label]="question.question"
+                (change)="set(qIndex, valueOf($event))"
+              >
+                <option value="">Select</option>
+                @for (option of options(question); track option) {
+                  <option [value]="option" [selected]="option === value(qIndex)">
+                    {{ option }}
+                  </option>
+                }
+              </select>
+            }
+          }
+        }
+
+        <!-- WHY A FIELD IS GREYED, said on the field itself. Production disables
+             it with no explanation at all, which reads as a broken form rather
+             than as a form that wants answering in order. -->
+        @if (!isOpen(qIndex) && canAnswer(question)) {
+          <p class="af-note">Answer the question above first.</p>
+        }
+      </li>
+    }
+  </ol>
+
+  @if (questions().length === 0) {
+    <p class="af-note af-centred">This form has no questions yet.</p>
+  }
+
+  <!-- ==================================================================
+       SUBMIT — centred, as production draws it.
+       ================================================================== -->
+  @if (questions().length > 0) {
+    <footer class="af-foot">
+      @if (submissionFailed()) {
+        <p class="af-error" role="alert">{{ submissionNote() }}</p>
+      } @else if (submissionNote()) {
+        <p class="af-saved" role="status">
+          <app-icon name="tick" [size]="15" [strokeWidth]="2.6" />
+          <span>{{ submissionNote() }}</span>
+        </p>
+      }
+
+      @if (answerableCount() > 0 && !allAnswered()) {
+        <p class="af-note af-centred">
+          {{ answeredCount() }} of {{ answerableCount() }} answered.
+        </p>
+      }
+
+      <button
+        type="button"
+        class="af-submit"
+        [disabled]="submitting() || answerableCount() === 0"
+        (click)="submit()"
+      >
+        {{ submitting() ? 'Submitting…' : 'Submit' }}
+      </button>
+
+      <!-- SAID PLAINLY, because it is a real consequence and not a detail:
+           production keeps no version history for a form — the block exists in
+           its source and is commented out — so a second submission overwrites the
+           first with nothing kept. -->
+      @if (submissionNote() && !submissionFailed()) {
+        <p class="af-note af-centred">
+          Submitting again replaces these answers.
+        </p>
+      }
+    </footer>
+  }
+</div>

@@ -1,0 +1,102 @@
+<ol class="wt-timeline">
+  @for (step of steps(); track $index; let stepIndex = $index; let last = $last) {
+    <li
+      class="wt-tl-step"
+      [class.is-last]="last"
+      [class.is-current]="stepIndex === current()"
+      [class.is-done]="isDone(stepIndex)"
+    >
+      <!-- THE CONNECTOR IS DRAWN BY THE STEP ABOVE IT and suppressed on the last,
+           so the line ends at the final circle rather than trailing into whatever
+           follows the list. Production does the same with `*ngIf="!last"`. -->
+
+      @if (selectable()) {
+        <!-- A BUTTON, NOT A DIV WITH A CLICK. The stepper's timeline navigates, so
+             each row is a real control: reachable by keyboard and announced as
+             one, which a clickable <li> is not. -->
+        <button
+          type="button"
+          class="wt-tl-select"
+          [attr.aria-current]="stepIndex === current() ? 'step' : null"
+          (click)="selected.emit(stepIndex)"
+        >
+          <span class="wt-tl-mark">
+            @if (isDone(stepIndex)) {
+              <app-icon name="tick" [size]="15" [strokeWidth]="2.6" />
+            } @else {
+              {{ step.sequenceNumber }}
+            }
+          </span>
+
+          <span class="wt-tl-body">
+            <span class="wt-tl-title">
+              <strong>{{ step.workflowStepName || 'Untitled step' }}</strong>
+            </span>
+
+            @if (hasDuration(step)) {
+              <span class="wt-tl-meta">
+                <app-icon name="clock" [size]="14" />
+                {{ step.workflowStepDuration }} minutes
+              </span>
+            }
+          </span>
+        </button>
+      } @else {
+        <span class="wt-tl-mark">
+          @if (isDone(stepIndex)) {
+            <app-icon name="tick" [size]="15" [strokeWidth]="2.6" />
+          } @else {
+            {{ step.sequenceNumber }}
+          }
+        </span>
+
+        <span class="wt-tl-body">
+          <span class="wt-tl-title">
+            <strong>{{ step.workflowStepName || 'Untitled step' }}</strong>
+          </span>
+
+          @if (hasDuration(step)) {
+            <span class="wt-tl-meta">
+              <app-icon name="clock" [size]="14" />
+              {{ step.workflowStepDuration }} minutes
+            </span>
+          }
+        </span>
+      }
+
+      <!-- THE ACTIONS SIT OUTSIDE THE SELECT BUTTON, and have to: a button inside
+           a button is invalid HTML and the browser drops one of them, which would
+           make Edit either unclickable or indistinguishable from selecting the
+           step. -->
+      @if (editable()) {
+        <span class="wt-tl-actions">
+          <button
+            type="button"
+            class="wt-tl-act"
+            [attr.aria-label]="'Edit step ' + step.sequenceNumber"
+            title="Edit step"
+            (click)="edited.emit(stepIndex)"
+          >
+            <app-icon name="edit" [size]="15" />
+          </button>
+
+          <!-- THE LAST ONE CANNOT GO, with production's own wording on the
+               tooltip. A workflow with no steps is a state neither page can
+               render, so it is not reachable by deleting down to nothing. -->
+          <button
+            type="button"
+            class="wt-tl-act is-danger"
+            [disabled]="steps().length <= 1"
+            [attr.aria-label]="'Remove step ' + step.sequenceNumber"
+            [title]="steps().length <= 1
+              ? 'You cannot delete this step'
+              : 'Remove step'"
+            (click)="removed.emit(stepIndex)"
+          >
+            <app-icon name="trash" [size]="15" />
+          </button>
+        </span>
+      }
+    </li>
+  }
+</ol>

@@ -165,11 +165,12 @@
                      on the one the card is about. -->
                 <a
                   class="class-open"
-                  [routerLink]="['/classrooms', classroom.classroomId]"
+                  [routerLink]="['/institutions', 'classroom', classroom.classroomId]"
                   [queryParams]="{ programmeId: firstProgrammeId(classroom) }"
                 >
                   Open
-                  <app-icon name="arrow-right" [size]="15" />
+                  <!-- 14px, production's .tcc-view mat-icon size. -->
+                  <app-icon name="arrow-right" [size]="14" />
                 </a>
               </article>
             }

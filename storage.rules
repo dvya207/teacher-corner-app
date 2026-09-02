@@ -275,6 +275,107 @@ service firebase.storage {
       allow delete: if request.auth != null;
     }
 
+    // ========================================================================
+    // contests/submissions — PRESERVED VERBATIM. Do not edit here.
+    // ========================================================================
+    //
+    // ADDED TO THE LIVE BUCKET AFTER THIS FILE WAS LAST DEPLOYED, and copied back
+    // in before the next one. It was NOT in this file, so a deploy from here would
+    // have DELETED it and broken every contest submission upload — which is the
+    // exact failure the header describes happening once already.
+    //
+    // PROVENANCE: read from the live ruleset via the Firebase Rules API,
+    //   projects/helix-staging-india/rulesets/0ba1bfc3-c89a-4a66-b500-7ddc3cbbcc3f
+    //   (release firebase.storage/helix-staging-india.firebasestorage.app,
+    //    deployed 2026-09-01T09:36:00Z)
+    // A full comment-stripped diff of that ruleset against this file showed this
+    // block as the ONLY difference, so nothing else has drifted.
+    //
+    // Source of truth is the contests team's own repo; this copy exists only so a
+    // deploy from here does not delete it.
+    match /contests/submissions/{contestId}/{studentId}/{submissionId}/{file} {
+      allow read: if request.auth != null;
+
+      allow write: if request.auth != null
+                   && request.auth.uid == studentId
+                   && request.resource.size <= 200 * 1024 * 1024
+                   && (request.resource.contentType.matches('image/.*')
+                       || request.resource.contentType.matches('video/.*')
+                       || request.resource.contentType == 'application/pdf'
+                       || request.resource.contentType == 'text/csv'
+                       || request.resource.contentType.matches('application/vnd.ms-excel')
+                       || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                       || request.resource.contentType.matches('application/vnd.ms-powerpoint')
+                       || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.presentationml.presentation'));
+
+      allow delete: if request.auth != null && request.auth.uid == studentId;
+    }
+
+    // ========================================================================
+    // student_submissions — a teacher's uploads against an upload assignment
+    // ========================================================================
+    //
+    //   student_submissions/{teacherId}/{fileName}
+    //
+    // PRODUCTION'S OWN FOLDER, and the name is inherited rather than chosen: its
+    // TEACHER uploads go here too, alongside the student ones the name refers to.
+    // Verified against a live object,
+    //   student_submissions/0pDZGzHV3IgQyez1NFFtUPVyyol1/
+    //     BTpRtz4EW001Kfd86uch_RwUzSRxhKpykyWrfX8g8_1.jpg
+    // Filing this app's uploads anywhere else would put them where production's
+    // own report screens do not look.
+    //
+    // WRITE YOUR OWN FOLDER ONLY. The first segment is the uploader's uid, so
+    // ownership is the PATH — no field to check and no query to filter. One
+    // teacher cannot submit into another's folder.
+    //
+    // READ IS WIDER THAN WRITE, deliberately. A submission is reviewed by whoever
+    // runs the classroom, not only by whoever uploaded it, and this app's report
+    // screens read across teachers. Any signed-in teacher may read; only the owner
+    // may write.
+    //
+    // 3MB, WHICH IS PRODUCTION'S OWN CEILING — `event.size > 3145728` in its
+    // upload handler. Enforced here as well as in the client because a client
+    // check is a courtesy and a rule is the enforcement. Note this is far below
+    // what an upload slot's own `maxFileSize` claims (a video slot says 200mb);
+    // production has the same disagreement, and the smaller number is the one that
+    // actually applies.
+    //
+    // THE TYPES ARE A WHITELIST, matching Configuration/acceptedUploadFormats:
+    // image (jpg, png), video, pdf, Word, Excel and Powerpoint. Spelled out
+    // rather than given as `image/*` and `video/*`, so a file the browser labels
+    // creatively cannot slip through a wildcard.
+    //
+    // NO DELETE. A submission is a record of what somebody handed in; replacing it
+    // is an overwrite through write, which `versions` on the Firestore document
+    // keeps the history of. Nothing in this app deletes one, so nothing is granted.
+    match /student_submissions/{teacherId}/{fileName} {
+      allow read: if request.auth != null;
+
+      allow write: if request.auth != null
+                   && request.auth.uid == teacherId
+                   && request.resource.size <= 3 * 1024 * 1024
+                   && (
+                        request.resource.contentType.matches('image/(png|jpeg)')
+                        || request.resource.contentType == 'application/pdf'
+                        || request.resource.contentType == 'video/mp4'
+                        || request.resource.contentType == 'video/quicktime'
+                        || request.resource.contentType == 'video/x-msvideo'
+                        || request.resource.contentType == 'video/webm'
+                        || request.resource.contentType == 'video/x-matroska'
+                        || request.resource.contentType == 'video/3gpp'
+                        || request.resource.contentType == 'application/msword'
+                        || request.resource.contentType ==
+                             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                        || request.resource.contentType == 'application/vnd.ms-excel'
+                        || request.resource.contentType ==
+                             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                        || request.resource.contentType == 'application/vnd.ms-powerpoint'
+                        || request.resource.contentType ==
+                             'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                      );
+    }
+
     // No catch-all. Firebase Storage denies by default, so any path neither
     // block claims is already refused.
   }

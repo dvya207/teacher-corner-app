@@ -1,0 +1,303 @@
+/* ==========================================================================
+   Report Download — the full-page report panel.
+
+   Built on the trash overlay's geometry, which is the app's existing full-page
+   pattern, rather than on the modal's: a report's scope is four selects wide and
+   does not fit inside a dialog.
+   ========================================================================== */
+
+.report-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--page-bg);
+}
+
+/*
+ * The title and the four selects on one band, as production lays them out. The
+ * title takes what it needs and the selects share the rest; below 1200px the
+ * band wraps rather than squeezing four dropdowns past being readable.
+ */
+.report-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.report-head h2 {
+  flex-shrink: 0;
+  max-width: 320px;
+  margin: 0;
+  padding-top: 20px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--on-violet);
+}
+
+.report-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  flex: 1;
+  min-width: 0;
+}
+
+.report-filters .field {
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.report-filters label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-600);
+}
+
+.report-filters select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink-800);
+}
+
+.report-filters select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+.report-filters select:disabled {
+  background: var(--ink-050);
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+/* A note under a select, for a state the dropdown itself cannot express. */
+.field-note {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-500);
+}
+
+.field-note.is-warn {
+  color: var(--on-amber);
+}
+
+.report-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink-600);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.report-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.report-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 28px;
+}
+
+.report-state {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: 13.5px;
+  color: var(--ink-600);
+}
+
+.report-state.is-error {
+  background: var(--tint-red);
+  color: var(--danger);
+}
+
+/* The card production reveals once the scope is complete. */
+.report-card {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 26px 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--white);
+  box-shadow: var(--shadow-md, var(--shadow-lg));
+}
+
+.report-card h3 {
+  margin: 0 0 20px;
+  font-size: 19px;
+  font-weight: 650;
+  text-align: center;
+  color: var(--on-violet);
+}
+
+.report-scope {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 32px;
+  margin: 0 0 22px;
+}
+
+.report-scope dt {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+}
+
+.report-scope dd {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--ink-800);
+  overflow-wrap: anywhere;
+}
+
+/* The two exports, side by side and equal: neither is the default. */
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.report-actions .btn {
+  flex: 1;
+  min-width: 220px;
+  justify-content: center;
+}
+
+.report-found {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--ink-600);
+}
+
+.report-found strong {
+  display: inline-flex;
+  align-items: center;
+  min-width: 22px;
+  justify-content: center;
+  margin-left: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--tint-blue);
+  font-size: 12.5px;
+  color: var(--accent-600);
+}
+
+/*
+ * SHOWN AFTER A DOWNLOAD FINDS NOTHING, not instead of the buttons.
+ *
+ * An empty result is a finding worth reporting: it distinguishes "this class
+ * submitted nothing" from "this app has no submission data", and the wording says
+ * which is the case here.
+ */
+.report-unavailable {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--tint-amber);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--on-amber);
+}
+
+.report-unavailable app-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--warning);
+}
+
+.report-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 72px 20px;
+  text-align: center;
+}
+
+.report-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  background: var(--ink-100);
+  color: var(--ink-500);
+}
+
+.report-empty h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-800);
+}
+
+.report-empty p {
+  max-width: 380px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-500);
+}
+
+/* ---- Narrow ------------------------------------------------------------- */
+
+@media (max-width: 1200px) {
+  .report-head {
+    flex-wrap: wrap;
+  }
+
+  .report-head h2 {
+    max-width: none;
+    padding-top: 0;
+  }
+
+  .report-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    order: 3;
+    width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  .report-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .report-scope {
+    grid-template-columns: 1fr;
+  }
+}

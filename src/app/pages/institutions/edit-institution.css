@@ -277,9 +277,12 @@ select.with-state[data-state='yes'] {
   justify-content: center;
   padding: 12px 24px;
   border-radius: var(--radius-md);
-  /* The same primary ramp as .btn-primary: accent-500 base, sampled off the
-     reference's Save Changes, with the darker shades for hover and pressed. */
-  background: var(--accent-500);
+  /* PRODUCTION'S SAVE VIOLET, the same #330268 as .btn-save and the workflow
+     stepper's Save Workflow Steps. This was --accent-500, the primary blue —
+     which production keeps for actions that MOVE you (Next, Continue) rather than
+     ones that WRITE. Its own shape is kept: this button has never been a
+     .btn-primary, so it carries its own padding and width. */
+  background: var(--save-violet);
   font-size: 14.5px;
   font-weight: 600;
   color: var(--white);
@@ -287,11 +290,11 @@ select.with-state[data-state='yes'] {
 }
 
 .save-btn:hover:not(:disabled) {
-  background: var(--accent-600);
+  background: var(--save-violet-dark);
 }
 
 .save-btn:active:not(:disabled) {
-  background: var(--accent-800);
+  background: var(--save-violet-dark);
   transform: translateY(1px);
 }
 

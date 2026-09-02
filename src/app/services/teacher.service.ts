@@ -10,7 +10,8 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
-  where
+  where,
+  writeBatch
 } from 'firebase/firestore';
 
 import { db } from '../core/firebase';
@@ -977,6 +978,96 @@ export class TeacherService {
     }
 
     return [...byClassroom.values()];
+  }
+
+  /**
+   * Removes one classroom from every teacher document that lists it.
+   *
+   * WHY THIS EXISTS. Deleting a classroom moved the classroom document to the
+   * trash and nothing else — but the dashboard cards and the sidebar tree are
+   * built from `teachers/{id}.classrooms`, not from the classrooms collection.
+   * So a deleted class stayed on both surfaces indefinitely, and no amount of
+   * re-reading fixed it: the data itself still said the teacher taught it.
+   *
+   * RETURNS WHAT IT REMOVED, so a restore can put it back exactly. The entry is
+   * denormalised — name, grade, section, institution, programmes — and none of
+   * that can be reconstructed from the classroom document alone.
+   *
+   * A DOTTED DELETE per document: `classrooms.{id}` removes one key and leaves
+   * every sibling untouched, where writing the map back wholesale would drop any
+   * class attached between this read and this write.
+   */
+  async detachClassroom(
+    classroomId: string
+  ): Promise<{ teacherDocId: string; entry: TeacherClassroom }[]> {
+    if (!classroomId) {
+      return [];
+    }
+
+    let snapshot;
+
+    try {
+      snapshot = await getDocs(activeTeachersCollection());
+    } catch {
+      return [];
+    }
+
+    const removed: { teacherDocId: string; entry: TeacherClassroom }[] = [];
+    const batch = writeBatch(db);
+
+    for (const document of snapshot.docs) {
+      const classrooms = (document.data() as { classrooms?: Record<string, unknown> })
+        .classrooms;
+
+      if (!classrooms || !(classroomId in classrooms)) {
+        continue;
+      }
+
+      removed.push({
+        teacherDocId: document.id,
+        entry: normaliseTeacherClassroom(
+          classroomId,
+          (classrooms[classroomId] ?? {}) as Partial<TeacherClassroom>
+        )
+      });
+
+      batch.update(activeTeacherDoc(document.id), {
+        [`classrooms.${classroomId}`]: deleteField(),
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    if (removed.length > 0) {
+      await batch.commit();
+    }
+
+    return removed;
+  }
+
+  /**
+   * Puts detached classroom entries back. The mirror of detachClassroom.
+   *
+   * Takes what that returned rather than rebuilding it, for the reason given
+   * there: the entry carries denormalised fields the classroom document does not
+   * hold, so a reconstruction would quietly lose the programmes attached to it.
+   */
+  async reattachClassrooms(
+    links: readonly { teacherDocId: string; entry: TeacherClassroom }[]
+  ): Promise<void> {
+    if (links.length === 0) {
+      return;
+    }
+
+    const batch = writeBatch(db);
+
+    for (const link of links) {
+      batch.update(activeTeacherDoc(link.teacherDocId), {
+        [`classrooms.${link.entry.classroomId}`]: link.entry,
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    await batch.commit();
   }
 
   /** Saves an edit. Ownership and school membership are not editable here. */

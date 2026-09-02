@@ -1,0 +1,654 @@
+/* ==========================================================================
+   Create Form Assignment — the three-step dialog.
+
+   THE MODAL CHROME BELOW IS COPIED, byte for byte, from quiz-wizard.css, the
+   same way upload-wizard.css copies it. Component styles are scoped, so a third
+   wizard cannot see the first one's rules. The note in upload-wizard.css explains
+   why copying beat extracting while those dialogs were still moving; with three
+   copies now, lifting the shared half into one place has gone from tidy to worth
+   doing, and it is a mechanical change.
+
+   Everything from `.fw-` onward is this dialog's own.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Shared chrome — keep in step with quiz-wizard.css and upload-wizard.css.
+   -------------------------------------------------------------------------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  /* 60, matching the other modals — see assignments.css, where the trash sits at
+     55 so a form opened over it lands on top. */
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+}
+
+.modal-card {
+  display: flex;
+  flex-direction: column;
+  /*
+   * 600px, MEASURED off the reference rather than borrowed from another modal.
+   * Its card spans ~597px: two 237px columns, a 32px gap between them, and 44px
+   * of body padding either side — 237 + 32 + 236 + 88 = 593. This was 760px,
+   * which made every field half again as wide as production's and the dialog read
+   * as a different form.
+   */
+  width: min(600px, 100%);
+  max-height: calc(100dvh - 48px);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+/* 22px, where the BODY below is inset 44px. Measured, and not an inconsistency
+   in the reading: its header and footer sit closer to the card edge than the form
+   does, which is what gives the form its centred column. */
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.qw-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--tint-violet);
+  color: var(--on-violet);
+}
+
+.qw-titles {
+  min-width: 0;
+}
+
+.qw-titles h2 {
+  font-size: 18px;
+  color: var(--ink-900);
+}
+
+.modal-sub {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/*
+ * A NUMBER PER STEP, JOINED BY A RULE — and NOT a filled circle.
+ *
+ * This drew each step as a 24px disc, accent for the current one and green for a
+ * finished one. The reference draws bare numerals with a thin line between them
+ * and swaps a finished numeral for a tick; four coloured discs in a dialog header
+ * read as badges competing with the title.
+ */
+.qw-steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-left: auto;
+  padding-top: 4px;
+  list-style: none;
+}
+
+.qw-step {
+  display: grid;
+  place-items: center;
+  min-width: 14px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-400);
+}
+
+/* The connector, drawn as the gap between two steps rather than as a pseudo
+   element on one of them — a 26px flex item cannot be mispositioned the way an
+   absolutely placed rule can. */
+.qw-step + .qw-step {
+  margin-left: 34px;
+}
+
+.qw-step + .qw-step::before {
+  content: '';
+  position: absolute;
+  width: 26px;
+  height: 1px;
+  margin-left: -34px;
+  background: var(--ink-200);
+}
+
+/* Darker and heavier, not filled: the current step is where you are, not a
+   button. */
+.qw-step.is-current {
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.qw-step.is-done {
+  color: var(--on-green);
+}
+
+.modal-close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.modal-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.modal-body {
+  /* 44px inline — see the note on .modal-card for where the number comes from. */
+  padding: 24px 44px;
+  overflow-y: auto;
+}
+
+.modal-error {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13px;
+  color: var(--on-red);
+}
+
+/* 32px between the columns, measured; 26px between rows, which is the gap from a
+   field's bottom edge to the next row's label. */
+.qw-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 26px 32px;
+}
+
+.req {
+  color: var(--danger);
+}
+
+/* A label for a control that is not a single input — the rich-text editor and
+   the option lists. `.field > label` would be wrong: there is no `for` target. */
+.field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+/*
+ * NO BORDER AND NO BOX. The reference shows "Total Duration" as a plain caption
+ * over three bare fields; a bordered fieldset was this app's own invention and it
+ * boxed off a row that reads as part of the same form.
+ *
+ * A <fieldset> is still the right ELEMENT — three inputs under one caption is
+ * exactly what a legend is for — so the semantics stay and only the chrome goes.
+ */
+.qw-duration {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  /* 17px, measured. Tighter than the 32px between the two main columns, because
+     three fields at that gap would not fit the 512px content width. */
+  gap: 17px;
+  margin: 26px 0;
+  padding: 0;
+  border: 0;
+}
+
+/*
+ * SPANS EVERY COLUMN, so it sits on its own row above the three fields.
+ *
+ * A <legend> IS a grid item, and left to itself it takes the first cell — which
+ * put Hours and Minutes on row one and pushed Seconds down to row two. `float`
+ * was the first attempt and did not help: the measurement harness reported
+ * durationOneRow: false, which is how this was caught rather than shipped.
+ */
+.qw-duration legend {
+  grid-column: 1 / -1;
+  margin-bottom: 8px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+/* Inside a question card the row is tighter, and it keeps a white ground so it
+   reads as a field row against the card's tint. */
+.qw-duration.is-inline {
+  margin: 0 0 14px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--white);
+}
+
+.qw-review {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+  gap: 9px 16px;
+  margin-bottom: 18px;
+  font-size: 13.5px;
+}
+
+.qw-review.is-compact {
+  grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+  gap: 7px 14px;
+  margin-bottom: 0;
+  font-size: 13px;
+}
+
+.qw-review dt {
+  font-weight: 600;
+  color: var(--label);
+}
+
+.qw-review dd {
+  color: var(--ink-900);
+  overflow-wrap: anywhere;
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
+}
+
+/* Pushes Skip and Next to the right while Back stays left, without either side
+   needing a margin that would have to change when Skip appears. */
+.qw-foot-gap {
+  flex: 1;
+}
+
+/* The save-failure message repeated beside the footer — see the template note. */
+.qw-foot-error {
+  margin: 0 22px;
+  padding: 10px 13px;
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--on-red);
+}
+
+.qw-grid .field,
+.qw-duration .field {
+  margin-bottom: 0;
+}
+
+/*
+ * 40px TALL, which is what the reference's fields measure. The global
+ * `.field input` uses 12px of vertical padding and lands on 49px here.
+ */
+.modal-body .field input,
+.modal-body .field select {
+  padding: 9px 12px;
+  font-size: 13.5px;
+}
+
+.qw-review-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 22px 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+}
+
+.qw-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--tint-violet);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--on-violet);
+}
+
+/* --------------------------------------------------------------------------
+   Step 2 — the instructions panel and the question blocks
+   -------------------------------------------------------------------------- */
+
+/*
+ * ONE PANEL AROUND EVERYTHING, legend and all, as the reference frames it: the
+ * instructions and every question sit inside a single bordered box rather than
+ * each question being its own card. It reads as one form being assembled.
+ */
+.fw-panel {
+  margin: 0;
+  padding: 14px 16px 18px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+}
+
+.fw-panel legend {
+  padding: 0 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-600);
+}
+
+.fw-instructions {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink-800);
+}
+
+.fw-instructions:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+.fw-question {
+  margin-top: 18px;
+}
+
+/* The live echo of the question text, and the roman numeral once it is marked a
+   sub-question. Clipped to one line: the text can be a paragraph. */
+.fw-q-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The fields take the width; the tools sit in a fixed column at the right. */
+.fw-q-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.fw-q-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fw-q-fields .field {
+  margin-bottom: 0;
+}
+
+/* A checkbox and its label on one line, which `.field` would stack. */
+.fw-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.fw-check input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-500);
+  cursor: pointer;
+}
+
+.fw-q-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+  /* Aligned with the first field rather than the label above it. */
+  padding-top: 2px;
+}
+
+.fw-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent-600);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.fw-tool:hover:not(:disabled) {
+  border-color: var(--ink-300);
+  background: var(--white);
+}
+
+.fw-tool:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ONE ICON, ROTATED, for both arrows. The set has `arrow-right` and no vertical
+   pair, and rotating it is honest: they are the same glyph pointing two ways. */
+.fw-tool app-icon {
+  transform: rotate(-90deg);
+}
+
+.fw-tool.is-down app-icon {
+  transform: rotate(90deg);
+}
+
+.fw-tool.is-danger {
+  color: var(--danger);
+}
+
+.fw-tool.is-danger app-icon {
+  transform: none;
+}
+
+/* Production's round blue plus at the foot of the panel. */
+.fw-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-top: 18px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent-500);
+  color: var(--white);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.fw-add:hover {
+  background: var(--accent-600);
+  transform: scale(1.06);
+}
+
+/* --------------------------------------------------------------------------
+   Step 3 — review
+   -------------------------------------------------------------------------- */
+
+/*
+ * ONE SCROLLING PANEL, as production frames the whole review.
+ *
+ * The panel and not the body scrolls, which is what keeps the Save button below
+ * it in view — a form with twenty questions would otherwise push it off the
+ * bottom of the dialog.
+ */
+/*
+ * THE PANEL SCROLLS, NOT THE BODY, so the save button below it stays put.
+ *
+ * Production caps this at a fixed 57vh for the same reason. A real form has four
+ * or more questions of a paragraph each; left to grow, the panel pushed Save
+ * below the fold and reaching it meant scrolling the whole dialog — the button
+ * you are looking for moving away from where it was.
+ *
+ * `max-height` rather than production's fixed `height`: a one-question review
+ * then stays its own size instead of sitting in a mostly empty box.
+ */
+.fw-review {
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--ink-050);
+}
+
+/*
+ * LABELS IN ONE COLUMN, VALUES IN ANOTHER, in production's own 2:3 proportion.
+ *
+ * Two stacked <p> lists rather than a row per pair, which is exactly how its
+ * template is built — and it is what keeps the label column's own width: a grid
+ * of pairs lets a long value pull the label column narrow, which is what made
+ * this read as a cramped two-line stack before.
+ */
+.fw-recap {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  margin-bottom: 22px;
+}
+
+.fw-recap p {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.fw-recap-labels p {
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.fw-recap-values p {
+  font-weight: 500;
+  color: var(--ink-700);
+}
+
+/*
+ * A TABLE, because the review genuinely is one: a row label, the content, and
+ * the type, with the type column's heading sitting on the instructions row.
+ * `table-layout: fixed` with a third of the width on the label column is
+ * production's `w-1/3`, and it stops a long question stealing the label column.
+ */
+.fw-review-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* MIDDLE, not top: a question wraps to four lines and production's label sits
+   against the centre of that block rather than riding at its first line. */
+.fw-review-table th[scope='row'] {
+  width: 33%;
+  padding: 0 0 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  vertical-align: middle;
+  color: var(--ink-900);
+}
+
+.fw-review-table td {
+  padding: 0 0 14px 16px;
+  font-size: 13.5px;
+  vertical-align: top;
+  color: var(--ink-600);
+  /* A question can be a paragraph; wrapping beats a clipped single line here
+     because the review is the last look before saving. */
+  overflow-wrap: anywhere;
+}
+
+/* The 'Question Type' heading, which production styles as a label rather than a
+   value even though it sits in a data cell. */
+.fw-review-table td.fw-review-th {
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+/*
+ * 20%, MEASURED off the reference rather than guessed: its three columns run
+ * roughly 34 / 42 / 17 percent of the panel. At 26% the type column was taking
+ * room from the question, which then wrapped to five lines where production's
+ * wraps to three.
+ *
+ * Not narrower than 20%: 'Drop Down (Dependent)' is the longest label and needs
+ * two lines below that, which looks like a defect next to a one-line question.
+ */
+.fw-review-table td:last-child {
+  width: 20%;
+}
+
+/*
+ * SAVE BELOW THE PANEL, RIGHT-ALIGNED — production's review step puts it here
+ * rather than in the footer, and the footer keeps only Back.
+ */
+.fw-save-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+/*
+ * The reason line, immediately above the footer.
+ *
+ * A paragraph rather than the upload wizard's button: every question is already
+ * on this step, so there is nowhere to jump to — naming the number is the whole
+ * of the help. Placed here rather than at the top of the body because the body
+ * scrolls and the button it explains is at the bottom.
+ */
+.fw-blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 44px;
+  padding: 9px 12px;
+  /* The tint's own edge, not the full warning colour: this is a hint about
+     unfinished work, not an error. */
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--tint-amber);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--on-amber);
+}
+
+.fw-blocked app-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--warning);
+}
+
+.fw-blocked em {
+  display: block;
+  font-style: normal;
+  color: var(--ink-500);
+}

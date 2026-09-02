@@ -1,0 +1,185 @@
+<div class="rt" [class.is-compact]="compact()">
+
+  <!-- Two rows, grouped as the reference groups them. mousedown, NOT click:
+       clicking a button takes focus off the editable surface, and the selection is
+       gone before the command can act on it. -->
+  <div class="rt-bar" role="toolbar" aria-label="Text formatting">
+
+    <div class="rt-row">
+      <div class="rt-group">
+        @for (mark of marks; track mark.command) {
+          <button
+            type="button"
+            class="rt-btn"
+            [title]="mark.title"
+            [attr.aria-label]="mark.title"
+            [style]="mark.style"
+            (mousedown)="apply(mark, $event)"
+          >{{ mark.label }}</button>
+        }
+      </div>
+
+      <!-- SELECTS, as the reference has them, not four heading buttons. A select
+           shows which level is available in one control instead of four. -->
+      @if (!compact()) {
+      <div class="rt-group">
+        <label class="visually-hidden" for="rt-header">Heading level</label>
+        <select
+          id="rt-header"
+          class="rt-select"
+          title="Heading"
+          (change)="applyValue('formatBlock', $any($event.target).value)"
+        >
+          @for (choice of headers; track choice.value) {
+            <option [value]="choice.value">{{ choice.label }}</option>
+          }
+        </select>
+
+        <label class="visually-hidden" for="rt-size">Text size</label>
+        <select
+          id="rt-size"
+          class="rt-select"
+          title="Size"
+          (change)="applyValue('fontSize', $any($event.target).value)"
+        >
+          @for (choice of sizes; track choice.value) {
+            <option [value]="choice.value" [selected]="choice.value === '3'">
+              {{ choice.label }}
+            </option>
+          }
+        </select>
+      </div>
+
+      <div class="rt-group">
+        @for (mark of lists; track mark.command) {
+          <button
+            type="button"
+            class="rt-btn"
+            [title]="mark.title"
+            [attr.aria-label]="mark.title"
+            (mousedown)="apply(mark, $event)"
+          >{{ mark.label }}</button>
+        }
+      </div>
+      }
+    </div>
+
+    <div class="rt-row">
+      @if (!compact()) {
+      <div class="rt-group">
+        @for (mark of blocks; track mark.label) {
+          <button
+            type="button"
+            class="rt-btn"
+            [title]="mark.title"
+            [attr.aria-label]="mark.title"
+            (mousedown)="apply(mark, $event)"
+          >{{ mark.label }}</button>
+        }
+      </div>
+
+      <!-- The platform's own picker rather than a grid of swatches: it works with
+           the keyboard and offers every colour, in less code. -->
+      <div class="rt-group">
+        <label class="rt-colour" title="Text colour">
+          <span class="rt-colour-mark">A</span>
+          <input
+            type="color"
+            aria-label="Text colour"
+            (input)="applyColour('foreColor', $any($event.target).value)"
+          />
+        </label>
+
+        <label class="rt-colour" title="Highlight colour">
+          <span class="rt-colour-mark is-highlight">A</span>
+          <input
+            type="color"
+            aria-label="Highlight colour"
+            value="#ffff00"
+            (input)="applyColour('hiliteColor', $any($event.target).value)"
+          />
+        </label>
+      </div>
+
+      <div class="rt-group">
+        @for (mark of aligns; track mark.command) {
+          <button
+            type="button"
+            class="rt-btn"
+            [title]="mark.title"
+            [attr.aria-label]="mark.title"
+            (mousedown)="apply(mark, $event)"
+          >{{ mark.label }}</button>
+        }
+      </div>
+      }
+
+      <!-- Image and PDF, highlighted as the reference highlights them: they are
+           the two buttons that do something other than restyle what is there. -->
+      @if (allowMedia()) {
+        <div class="rt-group">
+          <label class="rt-btn is-media" title="Insert image">
+            <app-icon name="upload-circle" [size]="15" />
+            <input
+              type="file"
+              class="visually-hidden"
+              accept="image/*"
+              aria-label="Insert an image"
+              (change)="insertMedia('image', $event)"
+            />
+          </label>
+
+          <label class="rt-btn is-media" title="Insert PDF">
+            <app-icon name="clipboard" [size]="15" />
+            <input
+              type="file"
+              class="visually-hidden"
+              accept="application/pdf"
+              aria-label="Insert a PDF"
+              (change)="insertMedia('pdf', $event)"
+            />
+          </label>
+        </div>
+      }
+
+      <div class="rt-group">
+        <button
+          type="button"
+          class="rt-btn"
+          title="Clear formatting"
+          aria-label="Clear formatting"
+          (mousedown)="apply({ command: 'removeFormat', label: '', title: '' }, $event)"
+        >Tx</button>
+      </div>
+    </div>
+  </div>
+
+  @if (uploading() !== null) {
+    <p class="rt-status" role="status">Uploading… {{ uploading() }}%</p>
+  }
+
+  @if (uploadError()) {
+    <p class="rt-status is-error" role="alert">{{ uploadError() }}</p>
+  }
+
+  <!-- The placeholder is a sibling rather than an attribute: contenteditable has
+       no placeholder, and an :empty selector does not match the '<p><br></p>' a
+       browser leaves behind after the user types and deletes. -->
+  <div class="rt-surface-wrap" [style.min-height.px]="minHeight()">
+    @if (empty() && placeholder()) {
+      <span class="rt-placeholder" aria-hidden="true">{{ placeholder() }}</span>
+    }
+
+    <div
+      #surface
+      class="rt-surface"
+      contenteditable="true"
+      role="textbox"
+      aria-multiline="true"
+      [attr.aria-label]="placeholder() || 'Rich text'"
+      (input)="onInput()"
+      (paste)="onPaste($event)"
+    ></div>
+  </div>
+
+</div>

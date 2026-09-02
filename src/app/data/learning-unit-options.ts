@@ -1,3 +1,4 @@
+import { CodedOption } from '../core/configuration';
 import {
   LearningUnit,
   LearningUnitDraft,
@@ -287,3 +288,47 @@ export function emptyLearningUnitDraft(): LearningUnitDraft {
     totalTime: 45
   };
 }
+
+/**
+ * The learning unit's own "External Resources" — the ONE resource set with no
+ * maturity.
+ *
+ * A SECOND, SEPARATE STORE from `learningUnitResources`, and knowing that there
+ * are two is the whole point of this constant. These nine live on the unit
+ * document's own `resources` map — one set per unit, which is why the editor's
+ * External Resources tab has no Maturity selector — while every other slot lives
+ * on a resource document per maturity rung under a category and sub-category.
+ *
+ * DEFINED HERE BECAUSE THREE PLACES NEED THE SAME NINE: the learning-unit editor
+ * renders them as upload rows, the workflow step dialog offers them as
+ * sub-categories, and the workflow stepper resolves them to files. They were the
+ * editor's private list until a workflow step needed to point at one — a teacher
+ * uploaded a guide here and the step could not name it.
+ *
+ * THE KEYS ARE THE STORED FIELD NAMES on `resources`, and the labels are the
+ * editor's own wording, so a step's dropdown reads the same as the tab the file
+ * was uploaded on.
+ */
+export const EXTERNAL_RESOURCE_SLOTS: readonly CodedOption[] = Object.freeze([
+  { code: 'guidePath', label: 'Learning Unit Guide' },
+  { code: 'observationPath', label: 'Learning Unit Observation Sheet' },
+  { code: 'materialPath', label: 'Learning Unit Materials' },
+  { code: 'videoUrl', label: 'Learning Unit Video' },
+  { code: 'templatePath', label: 'Learning Unit Template (Optional)' },
+  { code: 'topicGuidePath', label: 'Topic Guide' },
+  { code: 'topicVideoUrl', label: 'Topic Video' },
+  { code: 'varGuidePath', label: 'VAR Guide (PDF)' },
+  { code: 'varVideoUrl', label: 'VAR Video' }
+]);
+
+/**
+ * The content CATEGORY a workflow step uses to reach those nine.
+ *
+ * NOT ONE OF PRODUCTION'S CATEGORIES, and that is a deliberate divergence worth
+ * stating plainly. Production's stepper resolves a content block only against the
+ * maturity resource document, so a block in this category resolves to nothing
+ * there and its pane shows an empty slot — it does not break, it just shows less.
+ * The alternative was leaving files a teacher had uploaded unreachable from any
+ * workflow step, which is the behaviour that prompted this.
+ */
+export const EXTERNAL_RESOURCES_CATEGORY = 'externalResources';

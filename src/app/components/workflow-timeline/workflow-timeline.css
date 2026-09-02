@@ -1,0 +1,211 @@
+/* --------------------------------------------------------------------------
+   The step timeline, as production draws it
+
+   SHARED BY TWO PAGES: the workflow-template form builds a blueprint's steps and
+   the classroom stepper walks a workflow's. Production draws the same ladder in
+   both places, so this is one component rather than two copies of 120 lines.
+   -------------------------------------------------------------------------- */
+
+/* --------------------------------------------------------------------------
+   The ladder itself
+
+   A NUMBERED LADDER, not a list of cards: an outlined circle per step with a
+   connector line between, the name beside it, and the duration under the name.
+   The circles are RINGED rather than filled because production rings them — a
+   filled circle is its "completed" state, which this editor has no notion of.
+   -------------------------------------------------------------------------- */
+
+.wt-timeline {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wt-tl-step {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding-bottom: 22px;
+}
+
+/*
+ * THE CONNECTOR, drawn as a pseudo-element on each step and SUPPRESSED ON THE
+ * LAST — production uses `*ngIf="!last"` for the same reason: a line under the
+ * final circle trails off into the Add button and reads as a step that failed to
+ * render.
+ *
+ * `left: 15px` centres it on the 32px circle (16px, less the 1px width, floored).
+ */
+.wt-tl-step::before {
+  content: '';
+  position: absolute;
+  top: 32px;
+  left: 15px;
+  width: 2px;
+  height: calc(100% - 32px);
+  background: var(--ink-200);
+}
+
+.wt-tl-step.is-last::before {
+  display: none;
+}
+
+.wt-tl-mark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  /* INSET, so the ring does not change the circle's footprint and the connector
+     stays centred on it. */
+  box-shadow: inset 0 0 0 2px var(--ink-300);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-500);
+}
+
+.wt-tl-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* min-width: 0 lets a long step name ellipsise instead of widening the rail. */
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.wt-tl-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wt-tl-title strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-900);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * THE ACTIONS SIT INLINE WITH THE NAME, which is production's arrangement — not
+ * pushed to a far edge. In a 420px column there is no far edge worth reaching for,
+ * and beside the name is where they read as belonging to that step.
+ */
+.wt-tl-act {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.wt-tl-act:hover:not(:disabled) {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.wt-tl-act.is-danger:hover:not(:disabled) {
+  background: var(--tint-red);
+  color: var(--on-red);
+}
+
+/* Production disables the last step's delete rather than hiding it, so the row
+   keeps its shape and the tooltip can say why. */
+.wt-tl-act:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.wt-tl-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-500);
+}
+
+/* --------------------------------------------------------------------------
+   THE CURRENT STEP, which only the stepper uses
+
+   Production rings the current step in its primary colour and leaves the others
+   grey; a step already passed is filled and carries a tick. This app has no
+   notion of "completed" — that is student progression it does not record — so
+   only the current ring is drawn, and `is-current` is simply absent on the
+   template form where there is no current step.
+   -------------------------------------------------------------------------- */
+
+.wt-tl-step.is-current .wt-tl-mark {
+  box-shadow: inset 0 0 0 2px var(--accent-500);
+  color: var(--accent-600);
+}
+
+.wt-tl-step.is-current .wt-tl-title strong {
+  color: var(--accent-600);
+}
+
+/*
+ * CLICKABLE ONLY WHERE IT NAVIGATES. The template form's timeline is a list; the
+ * stepper's selects a step, so it gets the affordance and the form does not.
+ */
+.wt-tl-select {
+  display: flex;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wt-tl-select:hover .wt-tl-title strong {
+  color: var(--accent-600);
+}
+
+/* --------------------------------------------------------------------------
+   A STEP ALREADY PASSED — filled teal with a white tick
+
+   PRODUCTION'S TREATMENT, and the tick is POSITIONAL: it means the reader has
+   moved past this step, not that a student completed it. See the component's
+   note — reading it as progress would claim knowledge of work nobody recorded.
+
+   TEAL, NOT THE ACCENT BLUE, because the current step is blue and the two states
+   have to be told apart at a glance.
+
+   AND NOT THE APP'S GREEN EITHER, which is what this used to be. --step-done is
+   #2c9fa6, sampled off a screenshot of production's own rail rather than matched
+   by eye; green against its teal is the difference between "our timeline" and
+   "the same timeline", on the most repeated mark on the busiest screen.
+   -------------------------------------------------------------------------- */
+
+.wt-tl-step.is-done .wt-tl-mark {
+  box-shadow: none;
+  background: var(--step-done);
+  color: var(--white);
+}
+
+/* The connector BELOW a passed step is teal too, so the walked part of the
+   ladder reads as one run rather than a series of unrelated circles. */
+.wt-tl-step.is-done::before {
+  background: var(--step-done);
+}
+
+.wt-tl-step.is-done .wt-tl-title strong {
+  color: var(--on-violet);
+}
+
+/*
+ * THE CURRENT STEP'S DELETE IS RED, which production draws that way: on the step
+ * you are standing on, removing it is the one action with a consequence you would
+ * not expect, so it is the one that announces itself.
+ */
+.wt-tl-step.is-current .wt-tl-act.is-danger:not(:disabled) {
+  color: var(--danger);
+}

@@ -398,7 +398,26 @@
       }
 
       <!-- ================================================================
-           Step 4 — Review
+           Step 4 — Select Assignments
+
+           THE SAME TWO-PANEL PICKER as step 3, with two differences that come
+           from the stored shape rather than from taste: the filter is by TYPE
+           rather than language, and there is no reordering, because
+           `assignmentIds` is a MAP keyed by doc id and has no order to hold.
+
+           SKIPPABLE, as production's is — its footer button reads Skip on this
+           step. A programme with no assignments is a normal programme.
+           ================================================================ -->
+      @if (step() === 4) {
+        <app-assignment-picker
+          [assignments]="assignments()"
+          [selected]="selectedAssignments()"
+          (selectedChange)="selectedAssignments.set($event)"
+        />
+      }
+
+      <!-- ================================================================
+           Step 5 — Review
            ================================================================ -->
       @if (step() === reviewStep) {
         <!-- TWO CARDS, as production has: the details, then what was chosen. -->
@@ -468,25 +487,64 @@
             }
           </div>
         </section>
+
+        <!-- A THIRD CARD, because step 4 is a real step now and a review that
+             omitted it would let somebody create a programme without seeing what
+             they had attached. -->
+        <section class="review-card">
+          <h3 class="review-card-head">
+            Selected Assignments
+            <span class="review-count">{{ selectedAssignmentRows().length }}</span>
+          </h3>
+
+          <div class="review-units">
+            @for (row of selectedAssignmentRows(); track row.docId) {
+              <article class="review-unit">
+                <span class="review-thumb" aria-hidden="true">{{ row.type }}</span>
+                <span class="review-unit-text">
+                  <strong>{{ row.displayName }}</strong>
+                  <!-- The due date, because it is stored alongside the id and is
+                       the one thing about the pairing a reader cannot guess. -->
+                  <span class="review-unit-code">
+                    @if (dueDateOf(row.docId); as due) {
+                      Due {{ due | date: 'dd MMM yyyy, h:mm a' }}
+                    } @else {
+                      No due date
+                    }
+                  </span>
+                </span>
+              </article>
+            } @empty {
+              <p class="review-empty">No assignments selected.</p>
+            }
+          </div>
+        </section>
       }
 
     </div>
 
     <footer class="modal-foot">
-      @if (step() > 1) {
+      <!-- Cancel on the FIRST reachable step, Back after it. When the school was
+           supplied by the caller, step 2 IS the first reachable step: offering
+           Back there would land on a step 1 that has already been answered. -->
+      @if (step() > (institutionLocked() ? 2 : 1)) {
         <button type="button" class="btn btn-ghost" (click)="back()">Back</button>
       } @else {
         <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
       }
 
       @if (step() < reviewStep) {
+        <!-- SKIP, not Continue, on the assignments step with nothing chosen —
+             production's own label. It says the step is optional at the moment
+             the reader is deciding whether to engage with it, which a greyed
+             Continue would not. -->
         <button
           type="button"
           class="btn btn-primary next-btn"
           [disabled]="continueBlocked()"
           (click)="next()"
         >
-          Continue
+          {{ showSkip() ? 'Skip' : 'Continue' }}
         </button>
       } @else {
         <button

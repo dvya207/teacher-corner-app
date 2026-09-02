@@ -7,7 +7,8 @@ export type IconName =
   | 'mail' | 'lock' | 'eye' | 'eye-off' | 'plus' | 'check' | 'google'
   | 'trophy' | 'clipboard' | 'box' | 'edit' | 'arrow-right' | 'close' | 'check-mail'
   | 'trash' | 'plus-circle' | 'minus' | 'bank' | 'restore' | 'check-circle' | 'map-pin' | 'venus' | 'translate'
-  | 'grip' | 'list' | 'download' | 'download-circle' | 'upload-circle' | 'copy';
+  | 'grip' | 'list' | 'download' | 'download-circle' | 'upload-circle' | 'copy'
+  | 'cloud-download' | 'clipboard-plain' | 'academic-cap' | 'clock' | 'tick';
 
 /**
  * Every icon in the app, in one place.
@@ -139,6 +140,34 @@ export type IconName =
             <path d="M9 4.6a1.6 1.6 0 0 1 1.6-1.6h2.8A1.6 1.6 0 0 1 15 4.6v1.2H9Z" />
             <path d="m8.8 12.4 1.9 1.9 3.6-3.8" />
           }
+          <!-- ==============================================================
+               PRODUCTION'S OWN TWO SIDEBAR MARKS, matched deliberately.
+
+               'clipboard-plain' is heroicons_outline:clipboard, which is what
+               production's Workflow Templates entry uses; 'academic-cap' is
+               heroicons_outline:academic-cap, which its Assignments entry uses.
+
+               NOT REUSING 'clipboard' FOR EITHER. That one carries a tick — it is
+               heroicons' clipboard-CHECK — and it is also the Quiz type badge in
+               the assignments table, so redrawing it to match the sidebar would
+               silently change a mark somewhere else. Two names, two glyphs.
+               ============================================================== -->
+          <!-- The step timeline's duration line, matching production's
+               heroicons_solid:clock beside '60 minutes'. Drawn as an outline to
+               sit with the rest of this set. -->
+          @case ('clock') {
+            <circle cx="12" cy="12" r="8.4" />
+            <path d="M12 7.8V12l3 1.8" />
+          }
+          @case ('clipboard-plain') {
+            <rect x="5" y="4.6" width="14" height="16" rx="2.2" />
+            <path d="M9 4.6a1.6 1.6 0 0 1 1.6-1.6h2.8A1.6 1.6 0 0 1 15 4.6v1.2H9Z" />
+          }
+          @case ('academic-cap') {
+            <path d="M12 3.6 2.8 8.1 12 12.6l9.2-4.5Z" />
+            <path d="M6.2 10.3v5.1c0 .6.3 1.1.8 1.4 1.3.8 3.1 1.3 5 1.3s3.7-.5 5-1.3c.5-.3.8-.8.8-1.4v-5.1" />
+            <path d="M21.2 8.1v5.6" />
+          }
           @case ('box') {
             <path d="M20.5 8.2v7.6a1.6 1.6 0 0 1-.85 1.42l-6.9 3.6a1.6 1.6 0 0 1-1.5 0l-6.9-3.6a1.6 1.6 0 0 1-.85-1.42V8.2" />
             <path d="m3.7 7.5 7.55-3.9a1.6 1.6 0 0 1 1.5 0l7.55 3.9-8.3 4.3Z" />
@@ -167,6 +196,16 @@ export type IconName =
                a replacement, because the tray one is the Export button's and the
                two mean different things. (No backticks in this comment: the
                whole template is a template literal, and one would end it.) -->
+          <!-- A CLOUD, not a circle, because that is the mark the reference uses
+               for its Report column. The two read differently at 18px: a circled
+               arrow says "download this row" and a cloud says "fetch this from
+               the server", which is what a report actually is. -->
+          @case ('cloud-download') {
+            <path d="M6.5 17.5a3.75 3.75 0 0 1-.3-7.49 5.25 5.25 0 0 1 10.24-1.1A4.2 4.2 0 0 1 17.8 17.5" />
+            <path d="M12 12.4v5.9" />
+            <path d="m9.4 15.7 2.6 2.6 2.6-2.6" />
+          }
+
           @case ('download-circle') {
             <circle cx="12" cy="12" r="9" />
             <path d="M12 7.6v8.8" />
@@ -205,6 +244,16 @@ export type IconName =
           @case ('check') {
             <circle cx="12" cy="12" r="9" />
             <path d="m8 12.2 2.75 2.75L16.2 9.5" />
+          }
+          <!--
+            A BARE TICK, no circle — for use ON a filled shape that is already the
+            circle. 'check' above draws its own ring and is used that way in eight
+            places, so redrawing it to suit the workflow timeline would have
+            quietly changed a mark everywhere else. The timeline's passed step is a
+            filled teal disc, and a ring inside a disc reads as a target.
+          -->
+          @case ('tick') {
+            <path d="m6.5 12.4 3.6 3.6L17.5 8.6" />
           }
           @case ('venus') {
             <!-- Gender Types. The Venus symbol: ring over a cross. -->

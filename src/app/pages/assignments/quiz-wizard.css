@@ -1,0 +1,846 @@
+/* ==========================================================================
+   Create Quiz — the four-step dialog.
+
+   Wider than the other modals in this app and taller, because step 3 holds a
+   rich-text editor, a duration row, an option list and a sub-question list per
+   question. The overlay and card recipe is otherwise the shared one.
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  /* 60, matching the other modals — see assignments.css, where the trash sits at
+     55 so a form opened over it lands on top. */
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+}
+
+.modal-card {
+  display: flex;
+  flex-direction: column;
+  /*
+   * 600px, MEASURED off the reference rather than borrowed from another modal.
+   * Its card spans ~597px: two 237px columns, a 32px gap between them, and 44px
+   * of body padding either side — 237 + 32 + 236 + 88 = 593. This was 760px,
+   * which made every field half again as wide as production's and the dialog read
+   * as a different form.
+   */
+  width: min(600px, 100%);
+  max-height: calc(100dvh - 48px);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+/* ---- Head, with the stepper --------------------------------------------- */
+
+/* 22px, where the BODY below is inset 44px. Measured, and not an inconsistency
+   in the reading: its header and footer sit closer to the card edge than the form
+   does, which is what gives the form its centred column. */
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.qw-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--tint-violet);
+  color: var(--on-violet);
+}
+
+.qw-titles {
+  min-width: 0;
+}
+
+.qw-titles h2 {
+  font-size: 18px;
+  color: var(--ink-900);
+}
+
+.modal-sub {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/*
+ * A NUMBER PER STEP, JOINED BY A RULE — and NOT a filled circle.
+ *
+ * This drew each step as a 24px disc, accent for the current one and green for a
+ * finished one. The reference draws bare numerals with a thin line between them
+ * and swaps a finished numeral for a tick; four coloured discs in a dialog header
+ * read as badges competing with the title.
+ */
+.qw-steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-left: auto;
+  padding-top: 4px;
+  list-style: none;
+}
+
+.qw-step {
+  display: grid;
+  place-items: center;
+  min-width: 14px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-400);
+}
+
+/* The connector, drawn as the gap between two steps rather than as a pseudo
+   element on one of them — a 26px flex item cannot be mispositioned the way an
+   absolutely placed rule can. */
+.qw-step + .qw-step {
+  margin-left: 34px;
+}
+
+.qw-step + .qw-step::before {
+  content: '';
+  position: absolute;
+  width: 26px;
+  height: 1px;
+  margin-left: -34px;
+  background: var(--ink-200);
+}
+
+/* Darker and heavier, not filled: the current step is where you are, not a
+   button. */
+.qw-step.is-current {
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.qw-step.is-done {
+  color: var(--on-green);
+}
+
+.modal-close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.modal-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+/* ---- Body --------------------------------------------------------------- */
+
+.modal-body {
+  /* 44px inline — see the note on .modal-card for where the number comes from. */
+  padding: 24px 44px;
+  overflow-y: auto;
+}
+
+.modal-error {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13px;
+  color: var(--on-red);
+}
+
+/* 32px between the columns, measured; 26px between rows, which is the gap from a
+   field's bottom edge to the next row's label. */
+.qw-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 26px 32px;
+}
+
+/* The global `.field` carries an 18px bottom margin for stacked forms. Inside a
+   grid that ADDS to the row gap, so the rows drift apart by a whole label's
+   height. The grid owns the spacing here. */
+.qw-grid .field,
+.qw-q-grid .field,
+.qw-duration .field {
+  margin-bottom: 0;
+}
+
+/*
+ * 40px TALL, which is what the reference's fields measure.
+ *
+ * The global `.field input` uses 12px of vertical padding for the app's other
+ * forms and lands on 49px here. Nine px gets it to 40. Applied to selects too,
+ * so a select and an input on the same row are the same height — at the global
+ * padding they differ by a couple of pixels and the row looks misaligned.
+ */
+.modal-body .field input,
+.modal-body .field select {
+  padding: 9px 12px;
+  font-size: 13.5px;
+}
+
+.req {
+  color: var(--danger);
+}
+
+/* A label for a control that is not a single input — the rich-text editor and
+   the option lists. `.field > label` would be wrong: there is no `for` target. */
+.field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+/* ---- Duration ----------------------------------------------------------- */
+
+/*
+ * NO BORDER AND NO BOX. The reference shows "Total Duration" as a plain caption
+ * over three bare fields; a bordered fieldset was this app's own invention and it
+ * boxed off a row that reads as part of the same form.
+ *
+ * A <fieldset> is still the right ELEMENT — three inputs under one caption is
+ * exactly what a legend is for — so the semantics stay and only the chrome goes.
+ */
+.qw-duration {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  /* 17px, measured. Tighter than the 32px between the two main columns, because
+     three fields at that gap would not fit the 512px content width. */
+  gap: 17px;
+  margin: 26px 0;
+  padding: 0;
+  border: 0;
+}
+
+/*
+ * SPANS EVERY COLUMN, so it sits on its own row above the three fields.
+ *
+ * A <legend> IS a grid item, and left to itself it takes the first cell — which
+ * put Hours and Minutes on row one and pushed Seconds down to row two. `float`
+ * was the first attempt and did not help: the measurement harness reported
+ * durationOneRow: false, which is how this was caught rather than shipped.
+ */
+.qw-duration legend {
+  grid-column: 1 / -1;
+  margin-bottom: 8px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+/* Inside a question card the row is tighter, and it keeps a white ground so it
+   reads as a field row against the card's tint. */
+.qw-duration.is-inline {
+  margin: 0 0 14px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--white);
+}
+
+/* ---- Panels (case study, review sections) ------------------------------- */
+
+.qw-panel {
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--ink-050);
+}
+
+.qw-panel h3 {
+  margin-bottom: 12px;
+  font-size: 14.5px;
+  color: var(--ink-900);
+}
+
+.qw-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--tint-blue);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--on-blue);
+}
+
+.qw-note app-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* The sentence is ONE flex item. Without this wrapper each inline child — every
+   <strong> and every text node between them — becomes its own item and the words
+   render out of order. */
+.qw-note > span {
+  min-width: 0;
+}
+
+/* ---- Add New Question --------------------------------------------------- */
+
+.qw-add-host {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+/* The second host sits BELOW the list, so its margin belongs on top. */
+.qw-add-host.is-bottom {
+  margin: 4px 0 0;
+}
+
+.qw-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  background: var(--accent-500);
+  color: var(--white);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.qw-add:hover {
+  background: var(--accent-600);
+}
+
+/* The one at the bottom of the list is quieter: it repeats an action already
+   offered above rather than being the page's main call. */
+.qw-add.is-secondary {
+  margin-top: 4px;
+  border: 1px solid var(--accent-500);
+  background: var(--white);
+  color: var(--accent-600);
+}
+
+/* Anchored to the button that opened it — each host is its own positioning
+   context, which is what stops the bottom button's menu appearing at the top. */
+.qw-type-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+/* DROPS UPWARD from the lower button. `bottom` rather than a translate, so the
+   menu grows away from the button as items are added rather than drifting over
+   it. */
+.qw-type-menu.is-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.qw-type-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--accent-600);
+  text-align: left;
+}
+
+.qw-type-item:hover {
+  background: var(--tint-blue);
+}
+
+.qw-empty {
+  margin-bottom: 16px;
+  padding: 26px;
+  border: 1px dashed var(--ink-300);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+/* ---- One question ------------------------------------------------------- */
+
+.qw-question {
+  margin-bottom: 16px;
+  padding: 16px;
+  /* TINTED, so a question reads as one unit against the white body — production
+     tints its question cards for the same reason. */
+  border: 1px solid var(--accent-300, var(--border));
+  border-radius: var(--radius-lg);
+  background: var(--tint-blue);
+}
+
+.qw-q-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.qw-q-head strong {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--on-blue);
+}
+
+.qw-q-del {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--on-red);
+}
+
+.qw-q-del:hover {
+  background: var(--tint-red);
+}
+
+.qw-q-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.qw-span-2 {
+  grid-column: span 2;
+}
+
+/* ---- Options and blanks ------------------------------------------------- */
+
+.qw-options,
+.qw-subparts {
+  margin-top: 4px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--white);
+}
+
+.qw-subparts {
+  margin-top: 12px;
+}
+
+.qw-options-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.qw-options-head strong {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--label);
+}
+
+.qw-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.qw-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.qw-mini {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--ink-100);
+  color: var(--ink-700);
+}
+
+.qw-mini:hover {
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+.qw-mini.is-danger:hover {
+  background: var(--danger);
+}
+
+.qw-mini-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-600);
+}
+
+.qw-mini-text:hover {
+  background: var(--tint-blue);
+}
+
+.qw-option,
+.qw-subpart {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 0;
+}
+
+.qw-option-no,
+.qw-subpart-label {
+  width: 18px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-500);
+  text-align: center;
+}
+
+/* The radio and checkbox share a class so the row's geometry does not shift when
+   the Multiple Correct toggle swaps one for the other. */
+.qw-correct {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: var(--accent-500);
+}
+
+.qw-option-type {
+  width: 92px;
+  flex-shrink: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  font-size: 12.5px;
+}
+
+.qw-option-value {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 11px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.qw-option-value:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+.qw-subpart-marks {
+  width: 72px;
+  flex-shrink: 0;
+  padding: 8px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  text-align: center;
+}
+
+.qw-blank {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.qw-blank-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 4px;
+}
+
+.qw-blank-head code {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-100);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-700);
+}
+
+.qw-blank-head .qw-mini:last-child {
+  margin-left: auto;
+}
+
+/* ---- Review ------------------------------------------------------------- */
+
+.qw-review {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+  gap: 9px 16px;
+  margin-bottom: 18px;
+  font-size: 13.5px;
+}
+
+.qw-review.is-compact {
+  grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+  gap: 7px 14px;
+  margin-bottom: 0;
+  font-size: 13px;
+}
+
+.qw-review dt {
+  font-weight: 600;
+  color: var(--label);
+}
+
+.qw-review dd {
+  color: var(--ink-900);
+  overflow-wrap: anywhere;
+}
+
+.qw-review-title {
+  margin-bottom: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink-900);
+}
+
+.qw-review-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-700);
+}
+
+.qw-review-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+}
+
+.qw-review-options li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qw-review-options li.is-correct {
+  font-weight: 600;
+  color: var(--on-green);
+}
+
+/*
+ * A WARNING, NOT AN ERROR: amber rather than red, because a quiz can legitimately
+ * be built before its answers are decided and this does not block saving.
+ */
+.qw-review-warn {
+  margin: 8px 0 0;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--tint-amber);
+  font-size: 12px;
+  color: var(--on-amber);
+}
+
+.qw-tick {
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: var(--tint-green);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* ---- Foot --------------------------------------------------------------- */
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
+}
+
+/* Pushes Skip and Next to the right while Back stays left, without either side
+   needing a margin that would have to change when Skip appears. */
+.qw-foot-gap {
+  flex: 1;
+}
+
+@media (max-width: 620px) {
+  .qw-grid,
+  .qw-q-grid,
+  .qw-duration {
+    grid-template-columns: 1fr;
+  }
+
+  .qw-span-2 {
+    grid-column: auto;
+  }
+
+  .qw-review {
+    grid-template-columns: 1fr;
+    gap: 2px 0;
+  }
+
+  .qw-review dd {
+    margin-bottom: 8px;
+  }
+}
+
+/* ---- Four-column question row -------------------------------------------
+   TEXT and DESCRIPTIVE carry Max. Length on the same row as Pedagogy Type,
+   Question Type and Marks, which is where production puts it. */
+.qw-q-grid.is-four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* The model answer, full width and multi-line: a descriptive answer runs to a
+   paragraph and a single-line input hides all but the start of it. */
+.qw-answer {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.qw-answer:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- One sub-part, with its own options -------------------------------- */
+
+.qw-subpart-card {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.qw-subpart-card .qw-subpart {
+  padding-top: 0;
+}
+
+/* Indented under its own row, so it reads as belonging to that part rather than
+   to the question. */
+.qw-subpart-options {
+  margin-left: 27px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+
+.qw-subpart-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.qw-subpart-total {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.qw-subpart-total strong {
+  color: var(--ink-900);
+}
+
+@media (max-width: 620px) {
+  .qw-q-grid.is-four {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Blanks on the review ------------------------------------------------
+   One panel per blank, keyed by its stored name, with the correct choice in
+   green and ticked — production's own review shows exactly this, and the key
+   name matters because that is what the player looks the blank up by. */
+
+.qw-review-blank {
+  margin-bottom: 8px;
+  padding: 9px 11px;
+  border-radius: var(--radius-md);
+  background: var(--white);
+}
+
+.qw-review-blank:last-child {
+  margin-bottom: 0;
+}
+
+.qw-review-blank-key {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-600);
+}
+
+.qw-review-blank p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 12.5px;
+  color: var(--ink-700);
+}
+
+.qw-review-blank p.is-correct {
+  font-weight: 600;
+  color: var(--on-green);
+}
+
+.qw-review-muted {
+  color: var(--text-muted);
+}
+
+/* The save-failure message repeated beside the footer — see the template note. */
+.qw-foot-error {
+  margin: 0 22px;
+  padding: 10px 13px;
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--on-red);
+}

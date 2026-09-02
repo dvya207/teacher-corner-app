@@ -1,0 +1,211 @@
+<!-- The furniture below reuses the learning-unit picker's classes; see the note
+     on the component for why the stylesheet is shared rather than copied. -->
+<div class="unit-filters">
+  <div class="field">
+    <label for="ap-type" class="visually-hidden">Assignment type</label>
+    <select id="ap-type" (change)="typeFilter.set(valueOf($event))">
+      @for (option of typeOptions(); track option.value) {
+        <option [value]="option.value" [selected]="option.value === typeFilter()">
+          {{ option.label }}
+        </option>
+      }
+    </select>
+  </div>
+
+  <div class="field unit-search">
+    <label for="ap-search" class="visually-hidden">Search assignment</label>
+    <app-icon name="search" [size]="15" />
+    <input
+      id="ap-search"
+      type="text"
+      autocomplete="off"
+      placeholder="Search assignment"
+      [value]="query()"
+      (input)="query.set(valueOf($event))"
+    />
+  </div>
+</div>
+
+<div class="unit-columns">
+  <!-- ---- Available ---- -->
+  <section class="unit-col">
+    <header class="unit-col-head">
+      <span>Available</span>
+      <span class="unit-count">{{ availableCount() }}</span>
+    </header>
+
+    <!-- Also a DROP TARGET: dragging a chosen assignment back here removes it,
+         which is the gesture the two columns imply. -->
+    <div
+      class="unit-list"
+      [class.is-drop-target]="dropOnAvailable()"
+      (dragover)="onDragOverAvailable($event)"
+      (drop)="onDropAvailable($event)"
+    >
+      @for (row of available(); track row.docId) {
+        <!-- A BUTTON as well as draggable. Click still adds it: dragging is
+             unavailable on a touchscreen and from a keyboard, so it cannot be
+             the only way in. -->
+        <button
+          type="button"
+          class="unit-row"
+          draggable="true"
+          [class.is-dragging]="draggingId() === row.docId"
+          [title]="row.displayName"
+          (dragstart)="onDragStart($event, row.docId, 'available')"
+          (dragend)="onDragEnd()"
+          (click)="openDueDialogForAdd(row.docId)"
+        >
+          <app-icon name="grip" [size]="14" />
+          <span class="unit-text">
+            <span class="unit-name">{{ row.displayName }}</span>
+            <span class="unit-meta ap-type">{{ row.type }}</span>
+          </span>
+          <app-icon name="plus" [size]="15" />
+        </button>
+      } @empty {
+        <p class="unit-empty">
+          @if (assignments().length === 0) {
+            No assignments available.
+          } @else {
+            Nothing matches that filter.
+          }
+        </p>
+      }
+    </div>
+  </section>
+
+  <!-- ---- Selected ---- -->
+  <section class="unit-col">
+    <header class="unit-col-head">
+      <span>Selected</span>
+      <span class="unit-count">{{ selectedCount() }}</span>
+    </header>
+
+    <!-- NO DROP LINE and no position, unlike the learning-unit column: this is
+         stored as a map keyed by doc id, so there is no order to place a row in. -->
+    <div
+      class="unit-list"
+      [class.is-drop-target]="dropOnSelected()"
+      (dragover)="onDragOverSelected($event)"
+      (drop)="onDropSelected($event)"
+    >
+      @for (row of picked(); track row.docId) {
+        <div
+          class="unit-row is-selected ap-selected"
+          draggable="true"
+          [class.is-dragging]="draggingId() === row.docId"
+          [title]="row.displayName"
+          (dragstart)="onDragStart($event, row.docId, 'selected')"
+          (dragend)="onDragEnd()"
+        >
+          <app-icon name="grip" [size]="14" />
+
+          <span class="unit-text">
+            <span class="unit-name">{{ row.displayName }}</span>
+            <span class="unit-meta ap-type">{{ row.type }}</span>
+
+            <!-- The due date, READ ONLY here. It is set in the dialog, which is
+                 where production asks for it; the pencil beside the row reopens
+                 that dialog. -->
+            <span class="ap-due-shown">
+              @if (dueLabelFor(row.docId); as due) {
+                Due {{ due }}
+              } @else {
+                <em>No due date</em>
+              }
+            </span>
+          </span>
+
+          <span class="unit-actions">
+            <!-- The pencil production puts on each selected row: it reopens the
+                 due-date dialog for something already chosen. -->
+            <button
+              type="button"
+              class="unit-move ap-edit"
+              [attr.aria-label]="'Edit the due date for ' + row.displayName"
+              title="Edit the due date"
+              (click)="openDueDialogForEdit(row.docId)"
+            >
+              <app-icon name="edit" [size]="14" />
+            </button>
+
+            <button
+              type="button"
+              class="unit-remove"
+              [attr.aria-label]="'Remove ' + row.displayName"
+              (click)="remove(row.docId)"
+            >
+              <app-icon name="close" [size]="14" />
+            </button>
+          </span>
+        </div>
+      } @empty {
+        <p class="unit-empty is-drop">Drag assignments here to assign</p>
+      }
+    </div>
+  </section>
+</div>
+
+<!-- ======================================================================
+     Set a due date for this Assignment
+
+     PRODUCTION'S OWN DIALOG, opened on the drop and by the pencil. Save is
+     refused until a value is chosen, as its is.
+
+     The picker inside is the PLATFORM'S — `datetime-local` gives the browser's
+     own calendar and clock. Production's is Angular Material's year grid, month
+     grid and hour/minute/AM-PM spinners; hand-building that would be several
+     hundred lines to arrive at the same value, and the native one is
+     keyboard-accessible and localised for free.
+     ====================================================================== -->
+@if (dueDialog(); as open) {
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+  <div class="ap-dialog-overlay" (click)="closeDueDialog()">
+    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+    <div
+      class="ap-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Set a due date for this Assignment"
+      (click)="$event.stopPropagation()"
+    >
+      <h3>Set a due date for this Assignment</h3>
+
+      <!-- The assignment being dated, which production's dialog does not name and
+           which is the one thing a reader here might otherwise have to guess. -->
+      @if (dueDialogRow(); as row) {
+        <p class="ap-dialog-for">{{ row.displayName }}</p>
+      }
+
+      <div class="ap-dialog-panel">
+        <label class="ap-dialog-label" for="ap-due-input">
+          Assignment Due Date <span class="req">*</span>
+        </label>
+
+        <input
+          id="ap-due-input"
+          class="ap-dialog-input"
+          type="datetime-local"
+          placeholder="Choose date and time"
+          [value]="dueDialogValue()"
+          (input)="dueDialogValue.set(valueOf($event))"
+        />
+
+        <div class="ap-dialog-actions">
+          <button type="button" class="btn btn-ghost" (click)="closeDueDialog()">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary btn-save"
+            [disabled]="!dueDialogValid()"
+            (click)="saveDueDialog()"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+}

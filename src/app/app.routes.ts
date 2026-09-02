@@ -44,6 +44,36 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/login/login').then(m => m.Login)
   },
 
+  /*
+   * Admin impersonation — signing in AS a teacher, for support.
+   *
+   * OUTSIDE THE SHELL, like /login: it is a sign-in form and shows no sidebar,
+   * and production's /impersonation is the same full-page split layout.
+   *
+   * NO GUARDS AT ALL, so typing the URL always lands on this page.
+   *
+   * It HAD authGuard, on the reasoning that the callable needs a signed-in
+   * administrator so an unguarded page could only show a refusal. That was wrong
+   * about what a guard costs: a redirect to /login is indistinguishable from the
+   * URL being broken, and it fires on every cold load — Firebase rehydrates the
+   * session asynchronously, so even a signed-in administrator opening this link
+   * in a fresh tab could be bounced. Production's page has no guard either.
+   *
+   * The page now resolves the session itself and says what is missing, in place,
+   * rather than sending anyone elsewhere to find out. The server is still the
+   * only thing deciding whether the impersonation is allowed, which is where that
+   * decision belonged all along — a guard here was never the security boundary.
+   *
+   * NO registrationGuard either: that one sends anyone without a users/{uid}
+   * profile to Create Account, and an administrator arriving here has no business
+   * being routed through a teacher's registration form.
+   */
+  {
+    path: 'impersonation',
+    loadComponent: () =>
+      import('./pages/impersonation/impersonation').then(m => m.Impersonation)
+  },
+
   // Create Account, reached after sign-in by a teacher who has no profile yet.
   //
   // OUTSIDE THE SHELL: production shows no sidebar here, and there is nothing to
@@ -81,6 +111,36 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/sign-out/sign-out').then(m => m.SignOut)
   },
 
+  /*
+   * WORKFLOW TEMPLATE BUILDER — outside the shell, on purpose.
+   *
+   * A sibling of the shell branch rather than one of its children, so the page
+   * fills the viewport with no sidebar and no topbar. That is what production's
+   * create view does, and it is right for this one: the rail and the step editor
+   * sit side by side and a template is built over several minutes.
+   *
+   * THE SAME GUARDS as the shell branch, because leaving them off would make this
+   * the one authenticated page anybody could open.
+   */
+  {
+    path: 'workflow-templates/new',
+    loadComponent: () =>
+      import('./pages/workflow-templates/workflow-template-page').then(
+        m => m.WorkflowTemplatePage
+      ),
+    canActivate: [authGuard, registrationGuard],
+    data: { title: 'Create Workflow Template' }
+  },
+  {
+    path: 'workflow-templates/:docId/edit',
+    loadComponent: () =>
+      import('./pages/workflow-templates/workflow-template-page').then(
+        m => m.WorkflowTemplatePage
+      ),
+    canActivate: [authGuard, registrationGuard],
+    data: { title: 'Edit Workflow Template' }
+  },
+
   {
     path: '',
     loadComponent: () => import('./layout/shell/shell').then(m => m.Shell),
@@ -114,8 +174,12 @@ export const routes: Routes = [
       /*
        * ONE CLASSROOM'S LEARNING UNITS.
        *
-       * AFTER the bare 'classrooms' route, because Angular matches in order and
-       * a parameterised path declared first would swallow it.
+       * UNDER 'institutions', NOT under 'classrooms'. It was
+       * `classrooms/:classroomId`, and the consequence was in the sidebar: the
+       * Admin group's Classrooms entry matches by PREFIX, so viewing one class
+       * lit up the Classrooms table instead of that class's own row in the
+       * Institutions tree. A class is reached THROUGH its school, and the URL now
+       * says so.
        *
        * The classroom is a PATH segment and the programme a QUERY parameter,
        * following production's own URL: a classroom has one page, and which of
@@ -124,10 +188,43 @@ export const routes: Routes = [
        * resolves — the page falls back to the first programme attached.
        */
       {
-        path: 'classrooms/:classroomId',
+        path: 'institutions/classroom/:classroomId',
         loadComponent: () =>
           import('./pages/classroom-units/classroom-units').then(m => m.ClassroomUnits),
-        data: { title: 'Classroom', crumbRoot: 'Admin', search: 'Search learning units...' }
+        // FALLBACK ONLY. The page names itself through PageContextService —
+        // institution › class › programme — because none of the three is known
+        // until the classroom is read. 'Institutions' rather than 'Admin',
+        // because that is the section this route now lives under.
+        data: {
+          title: 'Classroom',
+          crumbRoot: 'Institutions',
+          search: 'Search learning units...'
+        }
+      },
+      /*
+       * THE WORKFLOW STEPPER — one learning unit's steps inside one classroom.
+       *
+       * A CHILD OF THE CLASSROOM PATH, not a sibling, because that is what it is:
+       * the unit only means anything in the context of the class working through
+       * it, and the URL should survive being pasted. `programmeId` rides in the
+       * query string exactly as the unit list's does — a classroom can have
+       * several programmes and the same unit can appear under more than one.
+       *
+       * INSIDE THE SHELL, unlike the workflow-template form. Production keeps its
+       * sidebar here too, and the reason is the difference in task: building a
+       * blueprint is a job you sit down to, while stepping through a unit is done
+       * mid-lesson with the class list a click away.
+       */
+      {
+        path: 'institutions/classroom/:classroomId/unit/:unitId',
+        loadComponent: () =>
+          import('./pages/classroom-workflow/classroom-workflow').then(
+            m => m.ClassroomWorkflow
+          ),
+        data: {
+          title: 'Workflow',
+          crumbRoot: 'Institutions'
+        }
       },
       // ProgrammePage, not Programme: the component sits alongside a Programme
       // MODEL interface of the same name, and importing both into one file is
@@ -159,6 +256,28 @@ export const routes: Routes = [
           title: 'Learning Units',
           crumbRoot: 'Admin',
           search: 'Search learning units...'
+        }
+      },
+      {
+        path: 'assignments',
+        loadComponent: () =>
+          import('./pages/assignments/assignments').then(m => m.Assignments),
+        data: {
+          title: 'Assignments',
+          crumbRoot: 'Admin',
+          search: 'Search assignments...'
+        }
+      },
+      {
+        path: 'workflow-templates',
+        loadComponent: () =>
+          import('./pages/workflow-templates/workflow-templates').then(
+            m => m.WorkflowTemplates
+          ),
+        data: {
+          title: 'Workflow Templates',
+          crumbRoot: 'Admin',
+          search: 'Search workflow templates...'
         }
       },
       // Reached from the topbar user menu, so it has no sidebar entry.

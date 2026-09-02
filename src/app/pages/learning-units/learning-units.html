@@ -254,8 +254,31 @@
         [class.is-open]="openCard() === unit.docId"
         [attr.data-doc-id]="unit.docId"
       >
+        <!-- The gradient stays on the banner even when there is an image: it is
+             what shows while the image loads, so a card never flashes white, and
+             it is the ground the code sits on for a unit with no picture. -->
         <div class="card-banner" [style.background]="cardGradient(unit, i)">
-          <span class="card-banner-code">{{ unit.learningUnitCode || '—' }}</span>
+
+          <!-- THE UNIT'S OWN UPLOADED IMAGE, which production puts here and this
+               page was missing entirely.
+
+               A PATH is stored, not a URL — a download URL carries a revocable
+               token — so ResourceLinkService mints one after the card renders and
+               this is absent until then. `is-behind` on the code keeps it legible
+               over a photo rather than hiding it. -->
+          @if (bannerImage(unit.docId); as url) {
+            <img
+              class="card-banner-img"
+              [src]="url"
+              [alt]="title(unit)"
+              loading="lazy"
+              (error)="onImageError(unit.docId)"
+            />
+          }
+
+          <span class="card-banner-code" [class.over-image]="bannerImage(unit.docId)">
+            {{ unit.learningUnitCode || '—' }}
+          </span>
 
           <!-- Centred over the banner, revealed on hover, on focus — a
                keyboard user reaches these by tabbing, at which point hover has

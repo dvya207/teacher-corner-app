@@ -1,0 +1,409 @@
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="modal-overlay" (click)="close()">
+
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="modal-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="heading()"
+    (click)="$event.stopPropagation()"
+  >
+
+    <header class="modal-head">
+      <span class="qw-icon"><app-icon name="list" [size]="19" /></span>
+
+      <div class="qw-titles">
+        <h2>{{ heading() }}</h2>
+        <p class="modal-sub">Build a form with custom fields and validation.</p>
+      </div>
+
+      <!-- A number per step, a tick once passed — production's own stepper. -->
+      <ol class="qw-steps">
+        @for (item of steps; track item.index) {
+          <li
+            class="qw-step"
+            [class.is-current]="step() === item.index"
+            [class.is-done]="isDone(item.index)"
+            [title]="item.label"
+          >
+            @if (isDone(item.index)) {
+              <app-icon name="check" [size]="13" />
+            } @else {
+              {{ item.index }}
+            }
+          </li>
+        }
+      </ol>
+
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">
+        <app-icon name="close" [size]="18" />
+      </button>
+    </header>
+
+    <div class="modal-body">
+
+      @if (error()) {
+        <div class="modal-error" role="alert">{{ error() }}</div>
+      }
+
+      <!-- ================================================================
+           STEP 1 — Basic info
+
+           FOUR FIELDS, which is production's own step one for a form: no
+           submission count and no duration, because a form document has neither.
+           ================================================================ -->
+      @if (step() === 1) {
+        <div class="qw-grid">
+          <div class="field">
+            <label for="fw-name">Assignment Name <span class="req">*</span></label>
+            <input
+              id="fw-name"
+              type="text"
+              autocomplete="off"
+              [value]="displayName()"
+              (input)="displayName.set(valueOf($event))"
+            />
+          </div>
+
+          <!-- Disabled and shown, not hidden: the value IS stored, so hiding it
+               would mean writing a field the reader never saw. -->
+          <div class="field">
+            <label for="fw-creator">Creator Name</label>
+            <input id="fw-creator" type="text" [value]="creator()" disabled />
+          </div>
+
+          <div class="field">
+            <label for="fw-author">Author Name <span class="req">*</span></label>
+            <input
+              id="fw-author"
+              type="text"
+              autocomplete="off"
+              [value]="author()"
+              (input)="author.set(valueOf($event))"
+            />
+          </div>
+
+          <div class="field">
+            <label for="fw-status">Status <span class="req">*</span></label>
+            <select id="fw-status" (change)="status.set(valueOf($event))">
+              <option value="" [selected]="status() === ''">Select the status</option>
+              @for (option of statuses(); track option) {
+                <option [value]="option" [selected]="option === status()">{{ option }}</option>
+              }
+            </select>
+          </div>
+        </div>
+      }
+
+      <!-- ================================================================
+           STEP 2 — Instructions and the questions
+           ================================================================ -->
+      @if (step() === 2) {
+
+        <!-- One bordered panel holding the instructions and every question, as
+             production frames it. -->
+        <fieldset class="fw-panel">
+          <legend>Instructions</legend>
+
+          <input
+            id="fw-instructions"
+            class="fw-instructions"
+            type="text"
+            autocomplete="off"
+            aria-label="Instructions"
+            placeholder="Enter the instructions for this assignment"
+            [value]="instructions()"
+            (input)="instructions.set(valueOf($event))"
+          />
+
+          @for (question of questions(); track $index) {
+            <div class="fw-question">
+
+              <!-- The heading echoes the text as it is typed, and switches to a
+                   roman numeral once the question is marked as a sub-question. -->
+              <p class="fw-q-label">{{ questionLabel(question, $index) }}</p>
+
+              <div class="fw-q-body">
+                <div class="fw-q-fields">
+                  <div class="field">
+                    <label class="visually-hidden" [attr.for]="'fw-q-' + $index">
+                      Question {{ $index + 1 }}
+                    </label>
+                    <input
+                      [id]="'fw-q-' + $index"
+                      type="text"
+                      autocomplete="off"
+                      [attr.placeholder]="'Enter the question number ' + ($index + 1)"
+                      [value]="question.question"
+                      (input)="setQuestionText($index, valueOf($event))"
+                    />
+                  </div>
+
+                  <div class="field">
+                    <label [attr.for]="'fw-type-' + $index">Question Type <span class="req">*</span></label>
+                    <select
+                      [id]="'fw-type-' + $index"
+                      (change)="setQuestionType($index, valueOf($event))"
+                    >
+                      <option value="" [selected]="question.questionType === ''">
+                        Select the question type
+                      </option>
+                      @for (option of questionTypes(); track option.key) {
+                        <option
+                          [value]="option.key"
+                          [selected]="option.key === question.questionType"
+                        >{{ option.display }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <!-- FORM PREFIX ICON COMES BEFORE THE TYPE-SPECIFIC FIELD,
+                       which is the order in production's own template. -->
+                  <div class="field">
+                    <label [attr.for]="'fw-icon-' + $index">Form Prefix Icon</label>
+                    <input
+                      [id]="'fw-icon-' + $index"
+                      type="text"
+                      autocomplete="off"
+                      placeholder="Enter the name of the icon to be added in the prefix"
+                      [value]="question.fieldIcon"
+                      (input)="setFieldIcon($index, valueOf($event))"
+                    />
+                  </div>
+
+                  <!-- ONE EXTRA FIELD FOR FOUR OF THE SEVEN TYPES, each writing a
+                       different key. See needsOptions / needsDynamicName /
+                       needsDependentName / needsPrompt. -->
+                  @if (needsOptions(question)) {
+                    <div class="field">
+                      <label [attr.for]="'fw-opts-' + $index">Drop Down Options</label>
+                      <input
+                        [attr.id]="'fw-opts-' + $index"
+                        type="text"
+                        autocomplete="off"
+                        placeholder="Enter the drop down options separated by a comma"
+                        [value]="question.dropDownOptions"
+                        (input)="setDropDownOptions($index, valueOf($event))"
+                      />
+                    </div>
+                  }
+
+                  @if (needsDynamicName(question)) {
+                    <div class="field">
+                      <label [attr.for]="'fw-dyn-' + $index">Configuration Document</label>
+                      <input
+                        [attr.id]="'fw-dyn-' + $index"
+                        type="text"
+                        autocomplete="off"
+                        placeholder="Enter the configuration document name which has the options"
+                        [value]="question.dropDownOptionsDynamic"
+                        (input)="setDynamicName($index, valueOf($event))"
+                      />
+                    </div>
+                  }
+
+                  @if (needsDependentName(question)) {
+                    <div class="field">
+                      <label [attr.for]="'fw-dep-' + $index">Dependent Drop Down Name</label>
+                      <input
+                        [attr.id]="'fw-dep-' + $index"
+                        type="text"
+                        autocomplete="off"
+                        placeholder="Enter the dependent drop down name which has the options"
+                        [value]="question.dropDownOptionsDependent"
+                        (input)="setDependentName($index, valueOf($event))"
+                      />
+                    </div>
+                  }
+
+                  @if (needsPrompt(question)) {
+                    <div class="field">
+                      <label [attr.for]="'fw-prompt-' + $index">Prompt</label>
+                      <input
+                        [attr.id]="'fw-prompt-' + $index"
+                        type="text"
+                        autocomplete="off"
+                        placeholder="Enter the prompt message which will be a placeholder"
+                        [value]="question.prompt"
+                        (input)="setPrompt($index, valueOf($event))"
+                      />
+                    </div>
+                  }
+
+                  <label class="fw-check">
+                    <input
+                      type="checkbox"
+                      [checked]="question.isSubquestion"
+                      (change)="setSubquestion($index, checkedOf($event))"
+                    />
+                    Is this a sub question?
+                  </label>
+                </div>
+
+                <!-- Reorder and delete, stacked at the right as production has
+                     them. -->
+                <div class="fw-q-tools">
+                  <button
+                    type="button"
+                    class="fw-tool"
+                    title="Move up"
+                    aria-label="Move up"
+                    [disabled]="!canMoveUp($index)"
+                    (click)="moveQuestion($index, -1)"
+                  >
+                    <app-icon name="arrow-right" [size]="16" />
+                  </button>
+
+                  <button
+                    type="button"
+                    class="fw-tool is-down"
+                    title="Move down"
+                    aria-label="Move down"
+                    [disabled]="!canMoveDown($index)"
+                    (click)="moveQuestion($index, 1)"
+                  >
+                    <app-icon name="arrow-right" [size]="16" />
+                  </button>
+
+                  <button
+                    type="button"
+                    class="fw-tool is-danger"
+                    title="Delete this question"
+                    aria-label="Delete this question"
+                    [disabled]="questions().length <= 1"
+                    (click)="removeQuestion($index)"
+                  >
+                    <app-icon name="trash" [size]="16" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- Production's round blue plus, at the foot of the panel. -->
+          <button
+            type="button"
+            class="fw-add"
+            title="Add another question"
+            aria-label="Add another question"
+            (click)="addQuestion()"
+          >
+            <app-icon name="plus-circle" [size]="26" />
+          </button>
+        </fieldset>
+      }
+
+      <!-- ================================================================
+           STEP 3 — Review
+           ================================================================ -->
+      @if (step() === 3) {
+
+        <!-- ONE PANEL, then a label column and a value column, which is
+             production's own recap: a 5-wide grid with the labels in two columns
+             and the values in three. Status is NOT shown, and that is its choice
+             rather than an omission here. -->
+        <div class="fw-review">
+
+          <div class="fw-recap">
+            <div class="fw-recap-labels">
+              <p>Assignment Name</p>
+              <p>Creator</p>
+              <p>Author</p>
+            </div>
+            <div class="fw-recap-values">
+              <p>{{ displayName() }}</p>
+              <p>{{ creator() }}</p>
+              <p>{{ author() }}</p>
+            </div>
+          </div>
+
+          <!-- A REAL TABLE, as production uses: the instructions row carries the
+               'Question Type' heading for the third column, and every question
+               is a row beneath it. -->
+          <table class="fw-review-table">
+            <tbody>
+              <tr>
+                <th scope="row">Instructions</th>
+                <td>{{ instructions() }}</td>
+                <td class="fw-review-th">Question Type</td>
+              </tr>
+
+              @for (question of questions(); track $index) {
+                <tr>
+                  <th scope="row">{{ reviewLabel($index) }}</th>
+                  <td>{{ question.question }}</td>
+                  <td>{{ typeLabel(question.questionType) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <!-- SAVE SITS HERE, not in the footer, which is where production's review
+             step puts it — its footer holds only Back. -->
+        <div class="fw-save-row">
+          <button
+            type="button"
+            class="btn btn-primary btn-save"
+            [disabled]="saving()"
+            (click)="save()"
+          >
+            {{ saving() ? 'Saving…' : saveLabel() }}
+            <app-icon name="arrow-right" [size]="15" />
+          </button>
+        </div>
+      }
+
+    </div>
+
+    <!-- WHY NEXT IS REFUSING. A disabled button that cannot explain itself is
+         indistinguishable from a broken one. -->
+    @if (blockedReason()) {
+      <p class="fw-blocked">
+        <app-icon name="minus" [size]="14" />
+        <span>
+          {{ blockedReason() }}
+          @if (alsoIncomplete() > 0) {
+            <em>{{ alsoIncomplete() }} more question(s) also unfinished.</em>
+          }
+        </span>
+      </p>
+    }
+
+    <!-- The SAME error, again, immediately above the footer: a save fails from the
+         last step with the body scrolled down, which put the message off-screen
+         next to the button that had just appeared to do nothing. `aria-hidden`
+         because a screen reader announced the copy at the top of the body. -->
+    @if (error()) {
+      <p class="qw-foot-error" aria-hidden="true">{{ error() }}</p>
+    }
+
+    <footer class="modal-foot">
+      @if (step() > 1) {
+        <button type="button" class="btn btn-ghost" (click)="back()">
+          <app-icon name="chevron-left" [size]="15" />
+          Back
+        </button>
+      } @else {
+        <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
+      }
+
+      <span class="qw-foot-gap"></span>
+
+      <!-- No Save here: the review step carries its own, above. -->
+      @if (step() < steps.length) {
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="continueBlocked()"
+          (click)="next()"
+        >
+          Next
+          <app-icon name="arrow-right" [size]="15" />
+        </button>
+      }
+    </footer>
+
+  </div>
+</div>

@@ -5,7 +5,6 @@ import { RouterLink } from '@angular/router';
 import { Icon } from '../../components/icon/icon';
 import {
   AllottedInstitution,
-  TeacherAllotment,
   TeacherClassroom
 } from '../../models/teaching.model';
 import { AuthService } from '../../services/auth.service';
@@ -67,13 +66,29 @@ export class Dashboard implements OnInit {
    * questions in the same banner reads as a bug — see the note on
    * DashboardService.myAllotment.
    */
-  readonly allotment = signal<TeacherAllotment | null>(null);
-  readonly loading = signal(true);
-  readonly error = signal('');
+  /**
+   * THE SHARED SIGNAL, not a private copy.
+   *
+   * The sidebar's Institutions tree renders the same allotment. Holding a second
+   * snapshot here meant deleting a classroom left one of them stale — see the
+   * note on DashboardService.allotment.
+   */
+  readonly allotment = this.dashboard.allotment;
+  readonly loading = this.dashboard.allotmentLoading;
 
-  readonly institutions = computed(() => this.allotment()?.institutions ?? []);
+  /**
+   * FROM THE SERVICE, not a local copy.
+   *
+   * refresh() deliberately does not throw — it is called after a delete, where a
+   * read failure must not overwrite the message about the write. So the reason
+   * lives on the service and this renders it; a local catch here would never
+   * fire and the page would show an empty allotment as though it were genuinely empty.
+   */
+  readonly error = this.dashboard.allotmentError;
+
+  readonly institutions = computed(() => this.allotment().institutions);
   readonly institutionCount = computed(() => this.institutions().length);
-  readonly classroomCount = computed(() => this.allotment()?.classroomCount ?? 0);
+  readonly classroomCount = computed(() => this.allotment().classroomCount);
 
   /**
    * Nothing allotted, and the read SUCCEEDED.
@@ -166,13 +181,10 @@ export class Dashboard implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    try {
-      this.allotment.set(await this.dashboard.myAllotment());
-    } catch (error) {
-      this.error.set(this.describe(error));
-    } finally {
-      this.loading.set(false);
-    }
+    // The shell already primed the shared signal, so this is a re-read rather
+    // than a first read — cheap, and it means arriving at the dashboard after
+    // changing something elsewhere shows the change.
+    await this.dashboard.refresh();
   }
 
   /**

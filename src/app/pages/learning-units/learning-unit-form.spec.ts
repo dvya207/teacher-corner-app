@@ -6,6 +6,7 @@ import { LearningUnitResourceService } from '../../services/learning-unit-resour
 import { ResourceLinkService } from '../../services/resource-link.service';
 import { BoardGradeResourceService } from '../../services/board-grade-resource.service';
 import { ResourceUploadService } from '../../services/resource-upload.service';
+import { EXTERNAL_RESOURCE_SLOTS } from '../../data/learning-unit-options';
 import { LearningUnitForm } from './learning-unit-form';
 
 /**
@@ -124,6 +125,106 @@ function unit(): LearningUnit {
     updatedAt: null as never
   } as unknown as LearningUnit;
 }
+
+/**
+ * The External Resources tab, whose nine slots are now SHARED.
+ *
+ * WHY THIS SUITE EXISTS. Those nine used to be listed inline on this component.
+ * They moved to EXTERNAL_RESOURCE_SLOTS when two other places needed the same
+ * list — the workflow step dialog offers them as sub-categories and the workflow
+ * stepper resolves them to files — and splitting one list into a constant plus a
+ * grouping is exactly how the two drift apart.
+ *
+ * THE DRIFT IS SILENT AND ITS CONSEQUENCE IS THE BUG THAT PROMPTED THE SHARING:
+ * a slot the editor can WRITE but the workflow cannot NAME is a file a teacher
+ * uploads and never sees again. A slot the workflow offers but the editor cannot
+ * write is a dropdown entry that can never resolve. So the two directions are
+ * asserted separately below.
+ */
+describe('LearningUnitForm — the External Resources tab', () => {
+  let component: LearningUnitForm;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [LearningUnitForm],
+      providers: [{ provide: LearningUnitResourceService, useClass: StubResourceService }]
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(LearningUnitForm);
+
+    component = fixture.componentInstance;
+    fixture.componentRef.setInput('unit', unit());
+    fixture.detectChanges();
+  });
+
+  /** EVERY SHARED SLOT IS RENDERED — none is offered elsewhere but unwritable. */
+  it('renders every slot in the shared list', () => {
+    const rendered = component.externalGroups.flat().map(row => row.key);
+
+    expect([...rendered].sort()).toEqual(
+      EXTERNAL_RESOURCE_SLOTS.map(slot => slot.code).sort()
+    );
+  });
+
+  /** AND NONE BEYOND IT — nothing writable that the workflow cannot name. */
+  it('renders nothing outside the shared list', () => {
+    const known = new Set(EXTERNAL_RESOURCE_SLOTS.map(slot => slot.code));
+
+    for (const row of component.externalGroups.flat()) {
+      expect(known.has(row.key)).toBe(true);
+    }
+  });
+
+  /** The labels come from the shared list, so a step's dropdown reads the same. */
+  it('takes its labels from the shared list', () => {
+    const byKey = new Map(EXTERNAL_RESOURCE_SLOTS.map(slot => [slot.code, slot.label]));
+
+    for (const row of component.externalGroups.flat()) {
+      expect(row.label).toBe(byKey.get(row.key));
+    }
+  });
+
+  /**
+   * THE GROUPING IS THIS EDITOR'S OWN and stays here: three columns by what each
+   * belongs to — the unit, the topic, the variation — which is how the reference
+   * lays them out and is not something the workflow needs.
+   */
+  it('keeps its three columns', () => {
+    expect(component.externalGroups.map(group => group.length)).toEqual([5, 2, 2]);
+  });
+
+  /**
+   * THESE NINE HAVE NO MATURITY, which is the whole reason they are a separate
+   * store: one set per unit, written onto the unit document rather than onto a
+   * resource document per rung. Reading one must not touch the maturity ladder
+   * keys that share the same map — `silver` and `gold` hold document ids, and
+   * treating one as a file would try to open an id from Storage.
+   */
+  it('reads a slot off the unit’s own resources map', () => {
+    expect(component.unitResource('guidePath')).toBe('');
+
+    component.setUnitResource('guidePath', 'learningUnits/u1/Sample.pdf');
+
+    expect(component.unitResource('guidePath')).toBe('learningUnits/u1/Sample.pdf');
+  });
+
+  /**
+   * THE LADDER IDS ON THE SAME MAP SURVIVE A SLOT WRITE.
+   *
+   * `resources` carries both: the nine external slots AND `silver`/`gold`, which
+   * hold the resource DOCUMENT IDS for each maturity rung. A write that replaced
+   * the map rather than spreading it would drop the ladder, and the unit would
+   * lose the pointer to every per-maturity file it has.
+   */
+  it('does not disturb the maturity ladder when writing a slot', () => {
+    const before = component.unitResource('gold');
+
+    component.setUnitResource('guidePath', 'learningUnits/u1/Sample.pdf');
+
+    expect(component.unitResource('guidePath')).toBe('learningUnits/u1/Sample.pdf');
+    expect(component.unitResource('gold')).toBe(before);
+  });
+});
 
 describe('LearningUnitForm — the Save button', () => {
   let fixture: ComponentFixture<LearningUnitForm>;

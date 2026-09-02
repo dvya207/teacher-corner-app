@@ -32,6 +32,17 @@ export type UserRole = 'Teacher' | 'Admin';
  */
 export const FALLBACK_DISPLAY_NAME = 'Teacher';
 
+/**
+ * Who borrowed this session, when it was borrowed.
+ *
+ * `by` is the administrator's uid and `byEmail` their address, both taken from
+ * the token's claims rather than from anything the page passed in.
+ */
+export interface ImpersonationSession {
+  by: string;
+  byEmail: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -87,8 +98,27 @@ export class AuthService {
    * outlives every component; there is no teardown point that is not also the
    * end of the page.
    */
-  private readonly stopWatchingSession = onAuthStateChanged(auth, () => {
+  /**
+   * Set while this session belongs to somebody else.
+   *
+   * READ FROM THE ID TOKEN, not from a flag set when the impersonation started.
+   * `tcDevImpersonate` mints the custom token with `impersonated` and
+   * `impersonatedBy` claims, so the session itself carries the fact. A field
+   * written at sign-in time would be lost on the next reload and the banner
+   * would vanish while the borrowed session continued — which is precisely the
+   * situation the banner exists to prevent.
+   *
+   * Filled asynchronously (getIdTokenResult is a promise), so anything rendering
+   * it must be a signal. Null both when nobody is signed in and when the session
+   * is the user's own.
+   */
+  readonly impersonation = signal<ImpersonationSession | null>(null);
+
+  private readonly stopWatchingSession = onAuthStateChanged(auth, user => {
     this.nameVersion.update(version => version + 1);
+    // Floating on purpose: the listener is synchronous and nothing waits on the
+    // claim read. The banner appears a tick later, which is invisible.
+    void this.refreshImpersonation(user);
   });
 
   get currentUser(): User | null {
@@ -295,6 +325,55 @@ export class AuthService {
   }
 
   /**
+   * Exchange an IMPERSONATION token for a session, becoming the target user.
+   *
+   * Separate from loginWithToken above for one reason: it does NOT call
+   * recordSignIn. That helper stamps `lastSignInAt` and seeds users/{uid} on
+   * behalf of whoever the token belongs to, and doing it here would write a
+   * support visit into the teacher's own record as though they had signed in
+   * themselves. The teacher's document must read the same before and after
+   * somebody looked at their account.
+   *
+   * The claims are refreshed explicitly rather than left to the auth-state
+   * listener, so the banner is already correct by the time this resolves and the
+   * caller can navigate without a frame of un-bannered app.
+   */
+  async loginByImpersonation(token: string): Promise<void> {
+    await signInWithCustomToken(auth, token);
+    await this.refreshImpersonation(auth.currentUser);
+  }
+
+  /**
+   * Reads the impersonation claims off the current ID token.
+   *
+   * NEVER THROWS. A failed claim read must not be reported as a failed sign-in;
+   * it costs the banner, and the safe reading of a missing claim is 'not
+   * impersonating', which is also the common case.
+   */
+  private async refreshImpersonation(user: User | null): Promise<void> {
+    if (!user) {
+      this.impersonation.set(null);
+      return;
+    }
+
+    try {
+      const { claims } = await user.getIdTokenResult();
+
+      this.impersonation.set(
+        claims['impersonated'] === true
+          ? {
+              by: String(claims['impersonatedBy'] ?? ''),
+              byEmail: String(claims['impersonatedByEmail'] ?? '')
+            }
+          : null
+      );
+    } catch (error) {
+      console.error('Could not read the session claims.', error);
+      this.impersonation.set(null);
+    }
+  }
+
+  /**
    * Records the teacher in users/{uid}, so that collection holds everyone who has
    * signed in rather than only those who saved a profile.
    *
@@ -352,6 +431,55 @@ export class AuthService {
         return 'Could not reach the server. Check your connection and retry.';
       case 'functions/internal':
         return 'The code could not be sent. Please try again in a moment.';
+      default:
+        return this.describeError(error);
+    }
+  }
+
+  /**
+   * Errors from tcDevImpersonate.
+   *
+   * A SEPARATE DESCRIBER, not a branch inside describeOtpError, because the same
+   * callable codes mean different things here: `permission-denied` is "you are
+   * not an administrator" or "that is not today's passcode" rather than "that
+   * code is not correct", and `unauthenticated` and `not-found` do not arise in
+   * the OTP flow at all. Sharing one describer would have this page telling an
+   * administrator to check their SMS.
+   *
+   * The SERVER'S message is preferred throughout, for the same reason as above:
+   * it is the only place the specific refusal lives, and there are six of them.
+   */
+  describeImpersonationError(error: unknown): string {
+    const code = (error as { code?: string })?.code ?? '';
+    const serverMessage = (error as { message?: string })?.message?.trim() ?? '';
+
+    if (code === 'impersonation/not-provisioned') {
+      return 'Impersonation is not switched on yet — the function has not been deployed.';
+    }
+
+    switch (code) {
+      /*
+       * SHOULD NO LONGER ARISE. The callable stopped requiring a session, so it
+       * has nothing to answer `unauthenticated` about. Kept as a fallback rather
+       * than deleted: if the caller check is ever restored, this is the code it
+       * will send, and the alternative is the generic describeError() saying
+       * nothing useful.
+       */
+      case 'functions/unauthenticated':
+        return 'The server would not accept the request. Sign in and try again.';
+      case 'functions/permission-denied':
+        return serverMessage || 'This account is not allowed to impersonate users.';
+      case 'functions/resource-exhausted':
+        return serverMessage || 'Too many incorrect passcodes. Try again later.';
+      case 'functions/not-found':
+        return serverMessage || 'No account exists for that mobile number.';
+      case 'functions/invalid-argument':
+        return serverMessage || 'A mobile number and today\'s passcode are both required.';
+      case 'functions/unavailable':
+      case 'functions/deadline-exceeded':
+        return 'Could not reach the server. Check your connection and retry.';
+      case 'functions/internal':
+        return serverMessage || 'The session could not be issued. Try again in a moment.';
       default:
         return this.describeError(error);
     }

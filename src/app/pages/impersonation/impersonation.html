@@ -1,0 +1,169 @@
+<!-- Reuses the sign-in page's class names throughout, because it reuses its
+     stylesheet. See the styleUrls note on the component. -->
+<div class="login-layout">
+
+  <!-- ====================================================================
+       Left: the form
+       ==================================================================== -->
+  <section class="form-panel">
+    <div class="form-inner animate-fade-up">
+
+      <app-logo class="brand" [size]="30" />
+
+      <p class="eyebrow">Admin Impersonation</p>
+
+      <h1>Impersonation Login</h1>
+      <p class="subtitle">Enter the user's mobile number and today's admin passcode.</p>
+
+      <!-- Says WHY the button will refuse, rather than letting the click return
+           an opaque error. Removed by flipping one flag once the function is
+           deployed. -->
+      @if (!provisioned) {
+        <div class="notice" role="status">
+          <strong>Not switched on yet.</strong>
+          <code>tcDevImpersonate</code> has not been deployed, so this form cannot
+          issue a session.
+        </div>
+      }
+
+      <!-- NO "you are not signed in" NOTICE. Removed on instruction: this page no
+           longer needs a session at all, so there is nothing to warn about. The
+           only requirement is that the number is already in the users or teachers
+           list, which the server answers when the form is submitted. -->
+
+      @if (errorMessage()) {
+        <div class="form-error" role="alert">{{ errorMessage() }}</div>
+      }
+
+      <form (submit)="$event.preventDefault(); submit()">
+
+        <div class="field">
+          <label for="mobile">Mobile Number</label>
+
+          <div class="phone-row">
+            <select
+              class="country"
+              aria-label="Country dial code"
+              (change)="onCountryChange($any($event.target).value)"
+              [disabled]="busy()"
+            >
+              @for (dial of dialCodes; track dial.label) {
+                <option [value]="dial.code" [selected]="dial.code === countryCode()">
+                  {{ dial.flag }} {{ dial.code }}
+                </option>
+              }
+            </select>
+
+            <input
+              id="mobile"
+              type="tel"
+              inputmode="numeric"
+              autocomplete="off"
+              [attr.maxlength]="maxDigits()"
+              [placeholder]="numberHint()"
+              [value]="phoneNumber()"
+              (input)="onPhoneInput($any($event.target).value)"
+              [disabled]="busy()"
+            />
+          </div>
+        </div>
+
+        <!-- Appears once the number could be real. Eight boxes behaving as one
+             field, exactly as the sign-in code row does. -->
+        @if (showPasscode()) {
+          <!-- NOT class="field", deliberately. The global `.field input` rule is
+               more specific than `.digit` and would give each box the full-width
+               padding of a text input, collapsing the row. The label is styled
+               locally to match `.field > label` instead. -->
+          <div class="passcode-field">
+            <label class="passcode-label" for="passcode-0">Admin Passcode</label>
+
+            <div class="code-row" role="group" aria-label="Admin passcode">
+              @for (slot of slots; track slot) {
+                <input
+                  #digitInput
+                  [id]="'passcode-' + slot"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  maxlength="1"
+                  class="digit"
+                  [class.is-filled]="digits()[slot]"
+                  [attr.aria-label]="'Passcode digit ' + (slot + 1)"
+                  [value]="digits()[slot]"
+                  (input)="onDigitInput(slot, $any($event.target).value)"
+                  (keydown)="onDigitKeydown(slot, $event)"
+                  (paste)="onDigitPaste(slot, $event)"
+                  [disabled]="busy()"
+                />
+              }
+            </div>
+
+            <!-- The FORMAT, not the value. Which date it wants is not a secret —
+                 the passcode's whole job is to be a deliberate second step — and
+                 eight empty boxes otherwise say nothing about what goes in them.
+                 The check itself is server-side; see the component's note. -->
+            <p class="passcode-hint">
+              Today's date as <strong>DDMMYYYY</strong>, {{ slots.length }} digits.
+            </p>
+          </div>
+        }
+
+        <button type="submit" class="btn btn-primary btn-block send-btn" [disabled]="!canSubmit()">
+          @if (pending()) {
+            <span class="spinner" aria-hidden="true"></span>
+            Signing in...
+          } @else {
+            Impersonate
+          }
+        </button>
+
+      </form>
+
+      <!-- No Google button, no "or", and no "Back to dashboard": this page is not
+           another way to sign in, and the link out was removed on instruction. The
+           browser's own Back still works, and /dashboard is a URL away. -->
+
+      <p class="foot">Signing in as <strong>another user</strong>. Every attempt is logged.</p>
+
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       Right: the same hero as the sign-in page. Presentational and
+       aria-hidden, so a screen reader lands on the mobile number field.
+       ==================================================================== -->
+  <section class="hero-panel" aria-hidden="true">
+
+    <span class="deco-dots"></span>
+    <span class="deco-blob deco-blob--tr"></span>
+    <span class="deco-blob deco-blob--bl"></span>
+    <span class="ring ring-lg"></span>
+    <span class="ring ring-md"></span>
+    <span class="ring ring-sm"></span>
+
+    <div class="hero-copy">
+      <span class="hero-pill-top"><i class="dot"></i> STEM Education Platform</span>
+
+      <h2>
+        Empowering Teachers,
+        <span class="accent">Inspiring Futures</span>
+      </h2>
+
+      <p>
+        Manage institutions, classrooms, programmes and STEM clubs from one place.
+      </p>
+
+      <ul class="hero-modules">
+        @for (module of heroModules; track module.name) {
+          <li class="hero-module">
+            <app-icon [name]="module.icon" [size]="15" />
+            {{ module.name }}
+          </li>
+        }
+      </ul>
+    </div>
+
+  </section>
+
+</div>

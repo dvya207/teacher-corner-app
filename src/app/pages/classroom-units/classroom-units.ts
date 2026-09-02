@@ -15,11 +15,15 @@ import { languageLabel } from '../../data/learning-unit-options';
 import {
   Classroom,
   ClassroomProgramme,
-  LearningUnit
+  LearningUnit,
+  classLabel
 } from '../../models/teaching.model';
 import { ClassroomService } from '../../services/classroom.service';
+import { ConfigurationService } from '../../services/configuration.service';
 import { LearningUnitService } from '../../services/learning-unit.service';
+import { PageContextService } from '../../services/page-context.service';
 import { ProgrammeService } from '../../services/programme.service';
+import { ResourceLinkService } from '../../services/resource-link.service';
 
 /** One card on this page: a learning unit, plus what the classroom says about it. */
 export interface ClassroomUnit {
@@ -32,6 +36,8 @@ export interface ClassroomUnit {
   imagePath: string;
   /** Empty when the classroom has no open/close dates for this unit. */
   scheduled: string;
+  /** 'TACtivity', 'MuT' — the badge on the thumbnail, and what the filter picks. */
+  type: string;
 }
 
 /**
@@ -74,6 +80,9 @@ export class ClassroomUnits implements OnInit {
   private classrooms = inject(ClassroomService);
   private programmes = inject(ProgrammeService);
   private learningUnits = inject(LearningUnitService);
+  private links = inject(ResourceLinkService);
+  private config = inject(ConfigurationService);
+  private pageContext = inject(PageContextService);
 
   readonly classroom = signal<Classroom | null>(null);
   readonly units = signal<ClassroomUnit[]>([]);
@@ -83,8 +92,99 @@ export class ClassroomUnits implements OnInit {
   /** Which programme's units are showing. From the query string. */
   readonly programmeId = signal('');
 
+  /** The classroom in the URL, so a card can link into its workflow stepper. */
+  readonly classroomId = signal('');
+
+  /**
+   * Resolved thumbnail URLs, keyed by unit docId.
+   *
+   * A unit stores a PATH into Cloud Storage, not a URL — the path is stored
+   * precisely because a download URL carries a token that can be revoked — so
+   * each one has to be exchanged for a URL before a browser can show it.
+   * ResourceLinkService already does that exchange for resource slots; this is
+   * the same round trip for a card.
+   *
+   * A SEPARATE MAP rather than a field on ClassroomUnit, because the units
+   * render immediately and the URLs arrive after: putting them on the row would
+   * mean rebuilding every row when one image resolves.
+   */
+  readonly imageUrls = signal<Record<string, string>>({});
+
+  /**
+   * Paths that failed to LOAD in the browser, so the card can fall back.
+   *
+   * urlFor succeeding only means Storage minted a URL; the image can still 404
+   * or be blocked afterwards. Without this the card shows a broken-image icon,
+   * which is worse than the placeholder it replaced.
+   */
+  readonly brokenImages = signal<Record<string, boolean>>({});
+
   readonly search = signal('');
-  readonly language = signal('');
+
+  /**
+   * Cards or rows, matching the toggle production puts at the right of the
+   * action strip.
+   *
+   * Cards by default, which is what its page opens on and what the artwork is
+   * for; the row view is for a class running twenty units, where three-across
+   * cards mean a lot of scrolling to find one code.
+   */
+  readonly view = signal<'card' | 'list'>('card');
+
+  setView(view: 'card' | 'list'): void {
+    this.view.set(view);
+  }
+
+  /**
+   * Completion, in percent. ZERO, for every unit, and not as a placeholder.
+   *
+   * Production computes this from student submissions against the unit's
+   * workflow. This app records neither — a classroom carries a student COUNTER
+   * and no students, and there is no workflow to progress through — so nothing
+   * has been recorded and zero is the true answer. A number chosen to look
+   * plausible would be worse than the honest one, and would be indistinguishable
+   * from real data to whoever read it next.
+   *
+   * A constant rather than a computed, because there is nothing to derive it
+   * from. When submissions exist it becomes a per-unit lookup, and the card
+   * already reads it per unit.
+   */
+  readonly completion = 0;
+
+  readonly progressTitle =
+    'Completion is not tracked in this app: it needs student submissions, which are not recorded here.';
+
+  /**
+   * Whether this unit already has a workflow, from the CLASSROOM'S OWN ENTRY.
+   *
+   * `programmes[programmeId].workflowIds[]` holds one entry per unit and the
+   * entry's `workflowId` is the document id — so a non-empty id means the unit has
+   * been started. That is the whole Start-versus-Continue rule, and it needs no
+   * extra read: the classroom is already loaded for this page.
+   */
+  hasWorkflow(unitDocId: string): boolean {
+    const entry = this.programme()?.workflowIds?.find(
+      workflow => workflow.learningUnitId === unitDocId
+    );
+
+    return !!entry?.workflowId;
+  }
+
+  startTitle(unitDocId: string): string {
+    return this.hasWorkflow(unitDocId)
+      ? 'Continue this unit’s workflow'
+      : 'Start this unit’s workflow';
+  }
+
+  /**
+   * The dropdown filters by TYPE, not by language.
+   *
+   * Production's "All" select lists MuT, Group Activity, FLN, Micro Improvement
+   * Programme and TACTivity — its learning-unit type vocabulary. This filtered by
+   * language on a guess; the units on one classroom page are nearly always in one
+   * language anyway, so the filter did almost nothing.
+   */
+  readonly unitType = signal('');
 
   /**
    * The programme this page is about.
@@ -143,25 +243,22 @@ export class ClassroomUnits implements OnInit {
 
   readonly studentCount = computed(() => this.classroom()?.studentCounter ?? 0);
 
-  /** Every language the listed units are in, for the filter. */
-  readonly languageOptions = computed(() => {
-    const seen = new Set<string>();
-
-    for (const unit of this.units()) {
-      if (unit.language) {
-        seen.add(unit.language);
-      }
-    }
-
-    return [...seen].sort((a, b) => a.localeCompare(b));
-  });
+  /**
+   * The type vocabulary, from Configuration.
+   *
+   * The WHOLE vocabulary, as production's list is — so an option can match
+   * nothing on this particular class. Offering only the types present would hide
+   * a type because this programme happens not to use it, which reads as the type
+   * not existing.
+   */
+  readonly typeOptions = this.config.learningUnitTypes;
 
   readonly visibleUnits = computed(() => {
     const query = this.search().trim().toLowerCase();
-    const language = this.language();
+    const type = this.unitType();
 
     return this.units().filter(unit => {
-      if (language !== '' && unit.language !== language) {
+      if (type !== '' && unit.type !== type) {
         return false;
       }
 
@@ -198,6 +295,7 @@ export class ClassroomUnits implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(([params, query]) => {
         this.programmeId.set(query.get('programmeId') ?? '');
+        this.classroomId.set(params.get('classroomId') ?? '');
         void this.load(params.get('classroomId') ?? '');
       });
   }
@@ -208,6 +306,8 @@ export class ClassroomUnits implements OnInit {
     this.loading.set(true);
     this.error.set('');
     this.units.set([]);
+    this.imageUrls.set({});
+    this.brokenImages.set({});
 
     try {
       const classroom = await this.classrooms.get(classroomId);
@@ -219,6 +319,21 @@ export class ClassroomUnits implements OnInit {
 
         return;
       }
+
+      /*
+       * THE CRUMB NAMES THE CLASS, not the screen.
+       *
+       * It read "Admin › Classroom" for every class, which named the wrong
+       * section and told the reader nothing. Production's is
+       * institution › class › programme, so: school, then the class, then the
+       * programme showing. Set here rather than in route data because none of
+       * the three is known until the classroom is read.
+       */
+      this.pageContext.set(
+        classroom.institutionName || 'Institutions',
+        [classLabel(classroom)],
+        this.programmeTitle() || 'Learning units'
+      );
 
       await this.loadUnits();
     } catch (error) {
@@ -281,9 +396,56 @@ export class ClassroomUnits implements OnInit {
           language: unit.isoCode,
           minutes: Number(unit.totalTime) || 0,
           imagePath: unit.learningUnitPreviewImage || unit.learningUnitImage || '',
-          scheduled: scheduleLabel(programme, unit.docId)
+          scheduled: scheduleLabel(programme, unit.docId),
+          type: unit.type
         }))
     );
+
+    // AFTER the cards are on screen. Each is one Storage round trip, and a card
+    // must not wait on an image to render its name and duration.
+    void this.resolveThumbnails();
+  }
+
+  /**
+   * Exchanges each unit's stored path for a download URL.
+   *
+   * In parallel, and failures are simply absent from the map — a unit with no
+   * image, a path that no longer exists and a bucket this app may not read are
+   * the same thing to a card: there is nothing to show, so it shows the code.
+   */
+  private async resolveThumbnails(): Promise<void> {
+    const withPaths = this.units().filter(unit => unit.imagePath !== '');
+
+    if (withPaths.length === 0) {
+      return;
+    }
+
+    const resolved = await Promise.all(
+      withPaths.map(async unit => ({
+        docId: unit.docId,
+        url: await this.links.urlFor(unit.imagePath)
+      }))
+    );
+
+    const urls: Record<string, string> = {};
+
+    for (const entry of resolved) {
+      if (entry.url) {
+        urls[entry.docId] = entry.url;
+      }
+    }
+
+    this.imageUrls.set(urls);
+  }
+
+  /** The thumbnail to draw, or '' for the code placeholder. */
+  thumbnailFor(docId: string): string {
+    return this.brokenImages()[docId] ? '' : (this.imageUrls()[docId] ?? '');
+  }
+
+  /** An image that resolved but would not load. Falls back for good. */
+  onImageError(docId: string): void {
+    this.brokenImages.update(current => ({ ...current, [docId]: true }));
   }
 
   languageName(code: string): string {
@@ -319,14 +481,19 @@ function scheduleLabel(programme: ClassroomProgramme, learningUnitId: string): s
     return '';
   }
 
-  if (opens && closes) {
-    return `${opens} – ${closes}`;
-  }
-
-  return opens ? `From ${opens}` : `Until ${closes}`;
+  // THE MONTH, which is what production's chip shows — 'May', 'June', 'July'.
+  // A date range was more precise and read as noise in a chip that sits under
+  // the unit's name; the month is the granularity a class is planned at.
+  return opens || closes;
 }
 
-/** A Timestamp, or production's empty string, as 'd MMM'. */
+/**
+ * A Timestamp, or production's empty string, as a month name.
+ *
+ * Production's chip reads 'May' rather than a date, so the day is deliberately
+ * dropped. Locale-aware, so it follows the browser rather than hardcoding
+ * English month names.
+ */
 function asDate(value: unknown): string {
   const millis = (value as { toMillis?: () => number } | null)?.toMillis?.();
 
@@ -334,8 +501,5 @@ function asDate(value: unknown): string {
     return '';
   }
 
-  return new Date(millis).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short'
-  });
+  return new Date(millis).toLocaleDateString(undefined, { month: 'long' });
 }

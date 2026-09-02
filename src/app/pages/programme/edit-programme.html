@@ -149,13 +149,27 @@
           (selectedChange)="setUnits($event)"
         />
       }
+
+      @if (tab() === 'Assignments') {
+        <!-- The same panel step 4 of Create Programme uses, and the same
+             mechanism as the tab above: the selection is patched into `edits`, so
+             Save writes it to `assignmentIds` and Cancel discards it.
+
+             The due-date dialog comes with the picker, so an assignment attached
+             here is dated here too, and the pencil re-edits it. -->
+        <app-assignment-picker
+          [assignments]="assignments()"
+          [selected]="selectedAssignments()"
+          (selectedChange)="setAssignments($event)"
+        />
+      }
     </div>
 
     <footer class="modal-foot">
       <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
       <button
         type="button"
-        class="btn btn-primary save-btn"
+        class="btn btn-primary btn-save save-btn"
         [disabled]="!valid() || !dirty() || saving()"
         (click)="save()"
       >

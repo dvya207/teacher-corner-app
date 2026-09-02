@@ -185,6 +185,7 @@
     [institutions]="institutions()"
     [existing]="programmes()"
     [units]="pickableUnits()"
+    [assignments]="pickableAssignments()"
     [saving]="saving()"
     [error]="modalError()"
     (closed)="closeAdd()"
@@ -196,6 +197,7 @@
   <app-edit-programme
     [programme]="target"
     [units]="pickableUnits()"
+    [assignments]="pickableAssignments()"
     [saving]="saving()"
     [error]="modalError()"
     (closed)="closeEdit()"

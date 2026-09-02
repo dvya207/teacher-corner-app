@@ -1,0 +1,533 @@
+/* ==========================================================================
+   The quiz player.
+
+   A FULL-SCREEN SHEET, which is what production's is: it replaces the page
+   rather than sitting inside the workflow step's pane. A class working through a
+   quiz should not be looking at the step rail beside it.
+   ========================================================================== */
+
+.qp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: start center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  background: var(--page-bg);
+}
+
+.qp-sheet {
+  width: 100%;
+  max-width: 1180px;
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+/* --------------------------------------------------------------------------
+   The rail
+   -------------------------------------------------------------------------- */
+
+.qp-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 22px 26px 0;
+}
+
+.qp-rail {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * THE CONNECTOR IS THE ITEM'S OWN LINE, drawn as a flexible pseudo-element
+ * BEFORE each circle except the first. That way the line stretches to whatever
+ * space is left rather than being a fixed width — a rail of eleven circles has to
+ * fit the same row as a rail of three.
+ */
+.qp-rail-item {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.qp-rail-item:first-child {
+  flex: 0 0 auto;
+}
+
+.qp-rail-item:not(:first-child)::before {
+  content: '';
+  flex: 1;
+  min-width: 14px;
+  height: 2px;
+  background: var(--ink-200);
+}
+
+.qp-dot {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  background: var(--ink-100);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--ink-500);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.qp-dot:hover {
+  background: var(--ink-200);
+}
+
+/* ANSWERED IS FILLED BLUE WITH A TICK, which is production's treatment. */
+.qp-dot.is-answered {
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+/*
+ * THE CURRENT ONE IS RINGED, on top of whatever else it is. A reader has to be
+ * able to tell "where I am" from "what I have done" — production tints the whole
+ * cell behind the current circle, which is what the ring plus the halo do here.
+ */
+.qp-dot.is-current {
+  box-shadow: 0 0 0 4px var(--tint-blue);
+}
+
+.qp-dot.is-done {
+  background: var(--white);
+  box-shadow: inset 0 0 0 2px var(--ink-300);
+  color: var(--ink-500);
+}
+
+.qp-dot.is-done.is-current {
+  box-shadow: inset 0 0 0 2px var(--accent-500), 0 0 0 4px var(--tint-blue);
+  color: var(--accent-600);
+}
+
+.qp-rail-item.is-done-item {
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.qp-done-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-500);
+}
+
+.qp-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  color: var(--ink-500);
+  cursor: pointer;
+}
+
+.qp-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+/* --------------------------------------------------------------------------
+   The question
+   -------------------------------------------------------------------------- */
+
+.qp-body {
+  padding: 28px 34px 34px;
+}
+
+.qp-question {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 26px;
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--ink-900);
+}
+
+.qp-q-no {
+  flex-shrink: 0;
+}
+
+.qp-q-text {
+  min-width: 0;
+}
+
+.qp-q-text :first-child {
+  margin-top: 0;
+}
+
+.qp-q-text :last-child {
+  margin-bottom: 0;
+}
+
+/* A question title can carry an image from the wizard's editor. */
+.qp-q-text img {
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+}
+
+/*
+ * EXACTLY TWO COLUMNS, as production lays the options out.
+ *
+ * `auto-fit` was wrong here and the screenshot showed why: on a 1100px sheet it
+ * fitted THREE, which reads as a different question shape from the one production
+ * presents. A fixed pair keeps the layout the same at every width the sheet has,
+ * and the media query below drops to one column where two will not fit.
+ */
+.qp-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 28px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qp-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  color: var(--ink-800);
+  cursor: pointer;
+}
+
+.qp-option:hover {
+  background: var(--ink-050);
+}
+
+.qp-option.is-chosen {
+  border-color: var(--accent-400);
+  background: var(--tint-blue);
+}
+
+.qp-option input {
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent-500);
+}
+
+.qp-option-no {
+  font-weight: 650;
+  color: var(--ink-700);
+}
+
+/* Text, descriptive and the blanks. */
+.qp-text {
+  width: 100%;
+  max-width: 720px;
+  padding: 12px 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink-800);
+  resize: vertical;
+}
+
+.qp-text:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+.qp-blanks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 560px;
+}
+
+.qp-blank {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 14px;
+  color: var(--ink-700);
+}
+
+.qp-blank span {
+  flex: 0 0 160px;
+  font-weight: 600;
+}
+
+.qp-blank input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink-800);
+}
+
+.qp-blank input:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+.qp-muted {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--ink-500);
+}
+
+/* --------------------------------------------------------------------------
+   The footer: the clock, Back and Next
+   -------------------------------------------------------------------------- */
+
+.qp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-top: 34px;
+}
+
+/*
+ * THE CLOCK IS A RINGED PILL, as production draws it, and turns red under a
+ * minute. `tabular-nums` keeps the digits from shifting as it ticks — a timer that
+ * reflows pulls the eye off the question every second.
+ */
+.qp-clock {
+  display: grid;
+  place-items: center;
+  min-width: 62px;
+  height: 44px;
+  margin-right: auto;
+  padding: 0 14px;
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 2px var(--accent-400);
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-600);
+}
+
+.qp-clock.is-low {
+  box-shadow: inset 0 0 0 2px var(--danger);
+  color: var(--danger);
+}
+
+.qp-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: var(--radius-full);
+  background: var(--accent-500);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--white);
+  cursor: pointer;
+}
+
+.qp-primary:hover {
+  background: var(--accent-600);
+}
+
+.qp-ghost {
+  padding: 12px 20px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-full);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.qp-ghost:hover {
+  background: var(--ink-050);
+}
+
+/* --------------------------------------------------------------------------
+   Done and submitted
+   -------------------------------------------------------------------------- */
+
+.qp-heading {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 650;
+  color: var(--ink-900);
+}
+
+.qp-note {
+  max-width: 620px;
+  margin: 0 0 22px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-500);
+}
+
+.qp-score {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 36px;
+  margin: 0 0 20px;
+}
+
+.qp-score dt {
+  margin-bottom: 4px;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+}
+
+.qp-score dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  color: var(--ink-900);
+}
+
+/*
+ * SUBMIT IS OUTLINED, not filled, which is production's. It is the end of a run
+ * rather than the primary action of the page, and this app records nothing — a
+ * heavy button would promise more than it does.
+ */
+.qp-submit {
+  padding: 12px 28px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink-800);
+  cursor: pointer;
+}
+
+.qp-submit:hover {
+  border-color: var(--accent-500);
+  color: var(--accent-600);
+}
+
+@media (max-width: 720px) {
+  .qp-body {
+    padding: 22px 18px 26px;
+  }
+
+  .qp-question {
+    font-size: 18px;
+  }
+
+  /* One column, where two would leave no room for the option text. */
+  .qp-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Confirm Submission
+   -------------------------------------------------------------------------- */
+
+/*
+ * ITS OWN SCRIM ABOVE THE SHEET. The player is already a full-screen overlay, so
+ * the dialog needs a higher layer and its own dimming — without the second scrim
+ * the question behind it stays at full contrast and the dialog reads as part of
+ * the page rather than as a stop.
+ */
+.qp-confirm-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.qp-confirm {
+  width: 100%;
+  max-width: 380px;
+  padding: 22px 24px 18px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg, 0 20px 50px rgba(0, 0, 0, 0.25));
+}
+
+.qp-confirm-title {
+  margin: 0 0 14px;
+  font-size: 19px;
+  font-weight: 650;
+  color: var(--ink-900);
+}
+
+/* RED, which is production's own treatment of this line — the click it guards
+   spends one of a capped number of attempts and cannot be undone. */
+.qp-confirm-ask {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--danger);
+}
+
+.qp-confirm-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-500);
+}
+
+.qp-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* --------------------------------------------------------------------------
+   Submitted
+   -------------------------------------------------------------------------- */
+
+.qp-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 22px;
+  padding: 11px 16px;
+  border-radius: var(--radius-md);
+  background: var(--tint-green);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--on-green);
+}
+
+.qp-note.is-error {
+  color: var(--danger);
+}
+
+.qp-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

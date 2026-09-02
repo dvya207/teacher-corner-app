@@ -33,6 +33,7 @@ import {
 import {
   Classroom,
   Programme,
+  ProgrammeAssignment,
   ProgrammeDraft,
   ProgrammeType,
   TRASH_METADATA_FIELDS,
@@ -131,6 +132,7 @@ export function normaliseProgramme(docId: string, data: Record<string, unknown>)
     programmeStatus: (data['programmeStatus'] as Programme['programmeStatus'] | undefined) ?? 'LIVE',
     programmeImagePath: (data['programmeImagePath'] as string | undefined) ?? '',
     learningUnitsIds: toStringList(data['learningUnitsIds']),
+    assignmentIds: toAssignmentMap(data['assignmentIds']),
 
     /*
      * DEFAULTED, because documents written before these fields existed do not
@@ -207,6 +209,43 @@ function runningOnLocalhost(): boolean {
  */
 function toWireScope(values: readonly string[]): (string | number)[] {
   return values.map(value => (/^\d+$/.test(value.trim()) ? Number(value) : value));
+}
+
+/**
+ * `assignmentIds` as a MAP, however the document holds it.
+ *
+ * DEFENSIVE ABOUT THE SHAPE, because two wrong ones exist in the wild. Production
+ * carries this as a map keyed by doc id, but `--schema--` holds an ARRAY under the
+ * near-identical `assignmentsIds`, and a document written by an older flow may
+ * have the key absent entirely. An array reaching the picker would render nothing
+ * and save nothing, silently.
+ *
+ * EACH ENTRY IS REBUILT rather than passed through, so an entry missing its inner
+ * `assignmentId` still gets one — the map key is authoritative, and production's
+ * own data always has the two agreeing.
+ *
+ * `{}` FOR AN ABSENT KEY, not undefined: Firestore refuses undefined outright if
+ * such an object is written back, which is the same reason the fields below it are
+ * defaulted.
+ */
+function toAssignmentMap(value: unknown): Record<string, ProgrammeAssignment> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  const out: Record<string, ProgrammeAssignment> = {};
+
+  for (const [docId, entry] of Object.entries(value as Record<string, unknown>)) {
+    const row = (entry ?? {}) as Record<string, unknown>;
+    const due = row['assignmentDueDate'];
+
+    out[docId] = {
+      assignmentId: typeof row['assignmentId'] === 'string' ? row['assignmentId'] : docId,
+      assignmentDueDate: (due as ProgrammeAssignment['assignmentDueDate']) ?? null
+    };
+  }
+
+  return out;
 }
 
 /**

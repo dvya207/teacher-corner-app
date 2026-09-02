@@ -1,6 +1,11 @@
-import { Component, computed, input, output, signal, inject } from '@angular/core';
+import { Component, OnInit, computed, input, output, signal, inject } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { ConfigurationService } from '../../services/configuration.service';
 
+import {
+  AssignmentPicker,
+  PickableAssignment
+} from '../../components/assignment-picker/assignment-picker';
 import { Icon } from '../../components/icon/icon';
 import { LearningUnitPicker } from '../../components/learning-unit-picker/learning-unit-picker';
 import { FlowField, isFieldLocked } from '../../data/form-flow';
@@ -15,6 +20,7 @@ import {
   Institution,
   PickableUnit,
   Programme,
+  ProgrammeAssignment,
   ProgrammeDraft
 } from '../../models/teaching.model';
 import {
@@ -28,7 +34,8 @@ export const PROGRAMME_STEPS = [
   { index: 1, label: 'Institution' },
   { index: 2, label: 'Create Programme' },
   { index: 3, label: 'Select Learning Units' },
-  { index: 4, label: 'Review' }
+  { index: 4, label: 'Select Assignments' },
+  { index: 5, label: 'Review' }
 ] as const;
 
 /**
@@ -43,16 +50,16 @@ export const REVIEW_STEP = PROGRAMME_STEPS.length;
 /**
  * Create Programme — a modal wizard.
  *
- * FIVE STEPS, PRODUCTION'S OWN. It was three: steps 3 and 4 were omitted on the
- * grounds that neither Learning Units nor Assignments existed in this app. Half
- * of that is no longer true — the learning-unit catalogue exists now, so step 3
- * selects from it for real.
+ * FIVE STEPS, PRODUCTION'S OWN, and now all five are real. It was three, then
+ * four: Select Assignments was left out because this app had no assignments
+ * collection, path or service, so the step could only ever have said "nothing
+ * here". The note here used to read "the day assignments exist, the field comes
+ * back with them" — that day arrived, and it has.
  *
- * SELECT ASSIGNMENTS IS NOT HERE, and neither is the field behind it. Production
- * has the step between Learning Units and Review; this app has no assignments
- * collection, path or service at all, so it could only ever say "nothing here".
- * Both the step and `assignmentIds` were removed on instruction — the day
- * assignments exist, the field comes back with them.
+ * `assignmentIds` IS A MAP, NOT AN ARRAY, which is why step 4's picker differs
+ * from step 3's in more than its contents. See ProgrammeAssignment on the model:
+ * 2715 of production's 14240 programmes carry it keyed by doc id, so there is no
+ * order to preserve and the picker exposes none.
  *
  * Step 1 is the SAME institution picker the Add Classroom modal uses —
  * country, pincode, board, search, school, unlocking in sequence. Production
@@ -65,7 +72,7 @@ export const REVIEW_STEP = PROGRAMME_STEPS.length;
  */
 @Component({
   selector: 'app-add-programme',
-  imports: [Icon, LearningUnitPicker],
+  imports: [DatePipe, AssignmentPicker, Icon, LearningUnitPicker],
   templateUrl: './add-programme.html',
   styleUrl: './add-programme.css',
   /**
@@ -74,7 +81,7 @@ export const REVIEW_STEP = PROGRAMME_STEPS.length;
    */
   host: { '(document:keydown.escape)': 'close()' }
 })
-export class AddProgramme {
+export class AddProgramme implements OnInit {
 
   /**
    * Option lists, read from the Configuration collection in Firestore.
@@ -107,6 +114,37 @@ export class AddProgramme {
    */
   readonly units = input<PickableUnit[]>([]);
 
+  /**
+   * Opens the wizard already scoped to one school, skipping step 1.
+   *
+   * WHY THIS EXISTS. Add Classroom offers "New programme for this grade" when the
+   * picker has nothing to show for the chosen school and grade. That used to open
+   * a name-only inline form, which created a programme with no description, no
+   * type, no status choice, no image and no learning units — a different and
+   * poorer thing than the wizard makes. It opens this component now, and the
+   * school and grade are already known, so asking for them again would be asking
+   * the user to re-enter what they just filled in.
+   *
+   * '' means the ordinary four-step flow, which is what the Programme page uses.
+   */
+  /**
+   * The assignments to choose from on step 4.
+   *
+   * Defaulted to empty, so the step renders its own "No assignments available"
+   * rather than the wizard needing to know whether the caller has any.
+   */
+  readonly assignments = input<PickableAssignment[]>([]);
+
+  readonly lockedInstitutionId = input('');
+
+  /**
+   * Grades the programme is scoped to, when the caller already knows them.
+   *
+   * Only consulted while `lockedInstitutionId` is set — outside that case step 1
+   * is where scope is chosen, and seeding it would silently override the user.
+   */
+  readonly presetGrades = input<string[]>([]);
+
   readonly saving = input(false);
   readonly error = input('');
 
@@ -125,21 +163,66 @@ export class AddProgramme {
 
   readonly step = signal(1);
 
-  constructor() {
-    /*
-     * Read once, when the wizard opens.
-     *
-     * Not on entering step 2: the number does not change while the wizard is
-     * open — nothing here reserves it — so re-reading would only give a
-     * different answer if someone else saved meanwhile, which the hint already
-     * warns about. `highestProgrammeNumber` over the caller's catalogue is the
-     * same floor `create` will use.
-     */
+  /**
+   * ngOnInit, NOT THE CONSTRUCTOR, and that is a bug fix rather than a style
+   * preference.
+   *
+   * Both things below read an INPUT, and a signal input is not bound until after
+   * construction — an optional one returns its DEFAULT in a constructor body.
+   * `previewCode(highestProgrammeNumber(this.existing()))` therefore always ran
+   * against `[]`, so the floor from the caller's catalogue was never applied and
+   * the preview fell back to the per-uid counter alone.
+   *
+   * The visible symptom: a teacher whose own counter document does not exist yet
+   * was shown "P10001" as the next code while the catalogue already held P10024.
+   * The counter is per uid, so a teacher who has never created a programme
+   * legitimately has none — the catalogue floor is exactly what is supposed to
+   * cover that case, and it was being read as empty.
+   *
+   * Still read ONCE rather than on entering step 2: the number does not change
+   * while the wizard is open, since nothing here reserves it, so re-reading would
+   * only differ if someone else saved meanwhile — which the hint under the field
+   * already warns about.
+   */
+  ngOnInit(): void {
     void this.programmes
       .previewCode(highestProgrammeNumber(this.existing()))
       .then(code => this.programmeCode.set(code))
       .catch(() => this.programmeCode.set(''));
+
+    this.applyLockedScope();
   }
+
+  /**
+   * Opens on step 2 with the school already chosen, when the caller supplied one.
+   *
+   * Only the FIRST preset grade is used, seeded as the range's `from` with `to`
+   * left empty — `isRange()` is then false and `scopeValuesChosen` resolves to
+   * that single grade. Add Classroom knows exactly one grade, so a range would be
+   * inventing scope the user did not ask for.
+   */
+  private applyLockedScope(): void {
+    const locked = this.lockedInstitutionId();
+
+    if (!locked) {
+      return;
+    }
+
+    this.institutionId.set(locked);
+
+    const [firstGrade] = this.presetGrades();
+
+    if (firstGrade) {
+      this.gradeFrom.set(firstGrade);
+    }
+
+    // Step 1's question is already answered, so asking it would be asking the
+    // user to re-enter what they just filled in on the classroom form.
+    this.step.set(2);
+  }
+
+  /** True while the school was supplied by the caller and cannot be changed. */
+  readonly institutionLocked = computed(() => this.lockedInstitutionId() !== '');
 
   // ---- Step 1: institution ----------------------------------------------
 
@@ -274,6 +357,50 @@ export class AddProgramme {
 
   readonly selectedSchool = computed(() =>
     this.institutions().find(institution => institution.docId === this.institutionId()) ?? null
+  );
+
+  // ---- Step 4: assignments -----------------------------------------------
+
+  /**
+   * The chosen assignments, KEYED BY DOC ID, as the document stores them.
+   *
+   * A map rather than a list of ids because that IS the stored shape, and holding
+   * it in the shape it will be written in means the picker, the review and the
+   * save all read the same object. Each entry also carries the due date.
+   */
+  readonly selectedAssignments = signal<Record<string, ProgrammeAssignment>>({});
+
+  /**
+   * The chosen assignments resolved for the Review card, by name.
+   *
+   * Sorted rather than in key order: an object's key order is not something to
+   * rely on, and this has to match the order the picker showed.
+   */
+  readonly selectedAssignmentRows = computed(() => {
+    const byId = new Map(this.assignments().map(row => [row.docId, row]));
+
+    return Object.keys(this.selectedAssignments())
+      .map(id => byId.get(id))
+      .filter((row): row is PickableAssignment => row !== undefined)
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  });
+
+  /** The due date of a chosen assignment, for the Review card. */
+  dueDateOf(docId: string): Date | null {
+    const stamp = this.selectedAssignments()[docId]?.assignmentDueDate;
+
+    return stamp?.toDate ? stamp.toDate() : null;
+  }
+
+  /**
+   * Whether the footer's forward button should read Skip.
+   *
+   * ONLY ON THE ASSIGNMENTS STEP, AND ONLY WITH NOTHING CHOSEN. Production labels
+   * it Skip there; once something is selected the word would be wrong, because
+   * pressing it keeps the selection rather than discarding it.
+   */
+  readonly showSkip = computed(
+    () => this.step() === 4 && Object.keys(this.selectedAssignments()).length === 0
   );
 
   readonly stepOneValid = computed(() => this.institutionId() !== '');
@@ -611,8 +738,17 @@ export class AddProgramme {
     this.step.update(current => Math.min(current + 1, this.steps.length));
   }
 
+  /**
+   * FLOORS AT STEP 2 WHEN THE SCHOOL IS LOCKED.
+   *
+   * Without this, Back from step 2 lands on a step 1 the caller has already
+   * answered — and worse, one whose Search flow could be used to change the
+   * school out from under the classroom the programme is being created for.
+   */
   back(): void {
-    this.step.update(current => Math.max(current - 1, 1));
+    const floor = this.institutionLocked() ? 2 : 1;
+
+    this.step.update(current => Math.max(current - 1, floor));
   }
 
   save(): void {
@@ -639,7 +775,14 @@ export class AddProgramme {
       // Written empty rather than omitted, so the document matches production's
       // shape and the steps that fill these can be added later.
       programmeImagePath: this.imagePath(),
-      learningUnitsIds: this.selectedIds()
+      learningUnitsIds: this.selectedIds(),
+      /*
+       * ALWAYS WRITTEN, EMPTY WHEN NOTHING WAS CHOSEN, because step 4 is skippable
+       * and 2715 of production's programmes carry the key with an empty map. An
+       * omitted field and an empty one read differently to whoever looks next:
+       * absent says nobody has been through this step.
+       */
+      assignmentIds: this.selectedAssignments()
     });
   }
 

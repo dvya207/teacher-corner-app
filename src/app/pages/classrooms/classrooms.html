@@ -195,8 +195,39 @@
     (closed)="closeAdd()"
     [createdInstitution]="createdInstitution()"
     (submitted)="saveClassroom($event)"
-    (programmeRequested)="createProgramme($event)"
+    (programmeWizardRequested)="openProgrammeWizard($event)"
     (institutionRequested)="createInstitution($event)"
+  />
+}
+
+<!-- ======================================================================
+     The Create Programme wizard, opened from Add Classroom's
+     "New programme for this grade".
+
+     AFTER app-add-classroom in the DOM, so it paints over it: both use the same
+     overlay class, and the later sibling wins without a z-index fight. Add
+     Classroom stays mounted behind it, so everything already filled in is intact
+     when the wizard closes.
+
+     RENDERED HERE rather than inside that modal, deliberately: its `.modal-card`
+     combines `overflow: hidden` with an animation, which makes it a containing
+     block that clips a `position: fixed` descendant — the same trap that clipped
+     the board-and-grade panel in the learning-unit form.
+
+     The school and grade come from the classroom being filled in, so the wizard
+     opens on step 2 with step 1 already answered.
+     ====================================================================== -->
+@if (programmeWizardScope(); as scope) {
+  <app-add-programme
+    [institutions]="institutions()"
+    [existing]="programmes()"
+    [units]="pickableUnits()"
+    [lockedInstitutionId]="scope.institutionId"
+    [presetGrades]="scope.grades"
+    [saving]="saving()"
+    [error]="modalError()"
+    (closed)="closeProgrammeWizard()"
+    (submitted)="createProgrammeFromWizard($event)"
   />
 }
 

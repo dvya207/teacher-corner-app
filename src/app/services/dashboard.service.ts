@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { getCountFromServer } from 'firebase/firestore';
 
 import { activeInstitutionsCollection,
@@ -21,6 +21,54 @@ export class DashboardService {
 
   private auth = inject(AuthService);
   private teachers = inject(TeacherService);
+
+  /**
+   * THE ONE COPY of the signed-in person's allotment, shared by every surface.
+   *
+   * The dashboard cards, its two headline tiles and the sidebar's Institutions
+   * tree all render this. They each used to call myAllotment() separately, which
+   * meant three reads and — worse — three snapshots that drifted apart: deleting
+   * a classroom updated none of them until a reload.
+   *
+   * `refresh()` is what anything that CHANGES the allotment calls, and every
+   * reader updates at once because they are reading one signal.
+   */
+  readonly allotment = signal<TeacherAllotment>({ institutions: [], classroomCount: 0 });
+
+  /** True until the first read lands, so a surface can show a placeholder. */
+  readonly allotmentLoading = signal(true);
+
+  /**
+   * Why the last read failed, or ''.
+   *
+   * ON THE SERVICE, because the allotment is. refresh() must not throw — it is
+   * called after a delete, where the caller already has an error surface for the
+   * write and a read failure must not overwrite "the classroom was deleted".
+   * But the dashboard still has to be able to SAY the read failed, or it renders
+   * an empty page that looks like a teacher with no classes.
+   */
+  readonly allotmentError = signal('');
+
+  /**
+   * Re-reads the allotment.
+   *
+   * SWALLOWS ITS ERROR. Called after a delete or a restore, where the caller
+   * already has its own error surface for the write that just happened — a
+   * failed refresh there must not overwrite "the classroom was deleted" with a
+   * message about reading. The previous value stays, and the next navigation
+   * corrects it.
+   */
+  async refresh(): Promise<void> {
+    try {
+      this.allotment.set(await this.myAllotment());
+      this.allotmentError.set('');
+    } catch (error) {
+      // Keeps whatever was loaded, and records why, for whoever renders it.
+      this.allotmentError.set(describeAllotmentError(error));
+    } finally {
+      this.allotmentLoading.set(false);
+    }
+  }
 
   /**
    * The two headline counts.
@@ -167,4 +215,26 @@ function gradeOrder(grade: string): number {
   const parsed = Number(grade);
 
   return Number.isFinite(parsed) && grade.trim() !== '' ? parsed : Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * A read failure, in words a banner can show.
+ *
+ * The same two cases every reader in this app distinguishes: rules that are not
+ * deployed, and a connection that is not there. Anything else keeps its own
+ * message rather than being flattened into a generic one.
+ */
+function describeAllotmentError(error: unknown): string {
+  const code = (error as { code?: string } | null)?.code ?? '';
+
+  if (code === 'permission-denied') {
+    return 'Could not read your classrooms — the Firestore rules for this app may ' +
+           'not be deployed. Reload to see the current state.';
+  }
+
+  if (code === 'unavailable') {
+    return 'Could not reach the database. Check your connection and retry.';
+  }
+
+  return (error as { message?: string } | null)?.message || 'Could not load your classrooms.';
 }
