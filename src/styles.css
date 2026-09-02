@@ -545,6 +545,27 @@ select:has(option[value='']:checked) {
   transform: translateY(1px);
 }
 
+/*
+ * A DISABLED SAVE STAYS VIOLET, on instruction — the same call already made for
+ * the stepper's Save Workflow Steps.
+ *
+ * `.btn:disabled` greys the shared button, and grey read as broken: a form saved
+ * successfully and its Save turned into dead furniture, which is the complaint
+ * that started this ("dim coloured and disabled looking"). It keeps its colour and
+ * loses only some contrast, so it still reads as THE SAVE BUTTON, currently with
+ * nothing to do.
+ *
+ * THE REMAINING DISABLED CASES ARE VALIDATION, not "already saved" — those five
+ * buttons no longer disable on a clean form at all. So this styles a button that
+ * is waiting for a required field, and `cursor: not-allowed` plus the reduced
+ * contrast are what say it is not ready.
+ */
+.btn-save:disabled {
+  background: var(--save-violet);
+  color: var(--white);
+  opacity: 0.55;
+}
+
 .btn-outline {
   background: var(--white);
   color: var(--ink-700);

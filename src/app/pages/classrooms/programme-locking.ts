@@ -206,6 +206,18 @@ export class ProgrammeLocking {
     JSON.stringify(this.form()) !== JSON.stringify(this.initial())
   );
 
+  /**
+   * THE CLEAN-FORM GUARD STAYS, and this one is protective rather than cosmetic.
+   *
+   * It was briefly removed so the button could stay live and violet like every
+   * other Save. The test suite caught what that costs: the emit rebuilds
+   * `workflowIds` from the dialog's own five fields, so handing it back unchanged
+   * DROPS whatever else a stored entry carried — `learningUnitCode`,
+   * `learningUnitName` — and marks the classroom dirty for a change nobody made.
+   *
+   * So this button keeps its disabled-when-clean gate. Its colour is handled by
+   * `.btn-save:disabled`, which stays violet rather than going grey.
+   */
   save(): void {
     if (!this.dirty()) {
       return;

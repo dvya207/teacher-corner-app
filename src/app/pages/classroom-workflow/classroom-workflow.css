@@ -1008,24 +1008,6 @@
   pointer-events: none;
 }
 
-.cw-upload-view {
-  padding: 10px 18px;
-  border: 1px solid var(--ink-300);
-  border-radius: var(--radius-full);
-  background: var(--surface);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink-700);
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.cw-upload-view:hover {
-  border-color: var(--accent-500);
-  color: var(--accent-600);
-}
-
 .cw-upload-error {
   margin: 8px 0 0;
   max-width: 560px;

@@ -127,7 +127,7 @@ import { WorkflowTemplateService } from '../../services/workflow-template.servic
    * to empty.
    */
   host: {
-    '(document:keydown.escape)': 'dismissFormPopup()'
+    '(document:keydown.escape)': 'dismissPopup()'
   }
 })
 export class ClassroomWorkflow implements OnInit {
@@ -1079,9 +1079,6 @@ export class ClassroomWorkflow implements OnInit {
   /** The path already recorded for the open slot, or ''. */
   readonly uploadedPath = signal('');
 
-  /** A download URL for that path, fetched on demand. */
-  readonly uploadedUrl = signal('');
-
   /** What the file picker's `accept` offers. */
   readonly uploadAccept = computed(() => {
     const slot = this.openSlot();
@@ -1101,20 +1098,16 @@ export class ClassroomWorkflow implements OnInit {
     const target = this.uploadTarget();
 
     this.uploadedPath.set('');
-    this.uploadedUrl.set('');
 
     if (!slot || !target) {
       return;
     }
 
     try {
-      const path = await this.uploads.storedPath(target, slot);
-
-      this.uploadedPath.set(path);
-
-      if (path) {
-        this.uploadedUrl.set((await this.links.urlFor(path)) ?? '');
-      }
+      /* THE PATH ONLY. A download URL used to be minted here for the View and
+         Download links; both are gone, so fetching one on every slot change
+         would be a round trip nothing reads. */
+      this.uploadedPath.set(await this.uploads.storedPath(target, slot));
     } catch {
       this.uploadedPath.set('');
     }
@@ -1197,18 +1190,20 @@ export class ClassroomWorkflow implements OnInit {
         this.uploadError.set(outcome.error);
       } else {
         await this.readStoredUpload();
+
+        /*
+         * SAID IN THE POPUP, because the button alone is not evidence. Its label
+         * flips to Re-upload, which is a small change a long way from where the
+         * reader was looking, and View and Download — the other two signs that
+         * anything had happened — are gone on instruction.
+         */
+        this.popup.set('Uploaded successfully');
+        this.popupNote.set(
+          `${file.name} is stored against this slot. Uploading again replaces it.`
+        );
       }
     } finally {
       this.uploading.set(false);
-    }
-  }
-
-  /** Opens the stored file. The URL is minted on demand, never stored. */
-  async openUpload(): Promise<void> {
-    const path = this.uploadedPath();
-
-    if (path) {
-      await this.links.open(path);
     }
   }
 
@@ -1243,8 +1238,16 @@ export class ClassroomWorkflow implements OnInit {
   /** Bumped on every successful write; the form empties itself on the change. */
   readonly formClearedAt = signal(0);
 
-  /** The popup shown after a successful submission, until it is dismissed. */
-  readonly formPopup = signal('');
+  /**
+   * The popup shown after something is successfully stored, until dismissed.
+   *
+   * ONE POPUP FOR THE PAGE, used by the form's Submit and by an upload. Its TITLE
+   * and its NOTE are separate signals because the two have different things to
+   * explain: a form was cleared and can be overwritten, a file replaced whatever
+   * was there. A single blob of text would have to be vague enough for both.
+   */
+  readonly popup = signal('');
+  readonly popupNote = signal('');
 
   /** Answers already recorded, so the form opens showing them. */
   readonly storedFormAnswers = signal<AnsweredFormQuestion[] | null>(null);
@@ -1315,7 +1318,10 @@ export class ClassroomWorkflow implements OnInit {
       });
 
       /* PRODUCTION'S OWN WORDING, in the popup rather than inline. */
-      this.formPopup.set('Feedback submitted');
+      this.popup.set('Feedback submitted');
+      this.popupNote.set(
+        'Your answers are saved. The form has been cleared — submitting it again replaces what was just stored.'
+      );
       this.formNote.set('Form Submitted Successfully');
 
       /*
@@ -1801,8 +1807,9 @@ export class ClassroomWorkflow implements OnInit {
 
   readonly backQuery = computed(() => ({ programmeId: this.programmeId() }));
 
-  dismissFormPopup(): void {
-    this.formPopup.set('');
+  dismissPopup(): void {
+    this.popup.set('');
+    this.popupNote.set('');
   }
 
   valueOf(event: Event): string {

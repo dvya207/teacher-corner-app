@@ -203,7 +203,7 @@
       <button
         type="button"
         class="btn btn-primary btn-save save-btn"
-        [disabled]="!dirty() || saving()"
+        [disabled]="saving()"
         (click)="save()"
       >
         {{ saving() ? 'Saving…' : 'Save Changes' }}

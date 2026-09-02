@@ -350,8 +350,7 @@
       <button
         type="button"
         class="save-btn"
-        [disabled]="saving() || !dirty()"
-        [attr.title]="dirty() ? null : 'No changes to save yet'"
+        [disabled]="saving()"
         (click)="save()"
       >
         @if (saving()) {

@@ -337,31 +337,6 @@
                               />
                             </label>
 
-                            @if (uploadedPath()) {
-                              <!-- VIEW OPENS A URL MINTED ON DEMAND. What is
-                                   stored is the path; a download URL carries a
-                                   token that can be revoked, so it is never kept
-                                   on the document. -->
-                              <button
-                                type="button"
-                                class="cw-upload-view"
-                                (click)="openUpload()"
-                              >
-                                View
-                              </button>
-
-                              @if (uploadedUrl()) {
-                                <a
-                                  class="cw-upload-view"
-                                  [href]="uploadedUrl()"
-                                  target="_blank"
-                                  rel="noopener"
-                                  download
-                                >
-                                  Download
-                                </a>
-                              }
-                            }
                           </div>
 
                           <!-- NO "PDF (.pdf), up to 3MB" LINE, AND NO "Uploaded."
@@ -713,12 +688,12 @@
      again overwrites — and an emptied form no longer shows what would be
      overwritten. This is where that warning lives now.
      ====================================================================== -->
-@if (formPopup()) {
+@if (popup()) {
   <!-- The backdrop dismisses on click and Escape dismisses from the keyboard,
        bound on the host — the same pair ConfirmDialog uses, with the same
        disables, because a div cannot receive a keydown it never has focus for. -->
   <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
-  <div class="cw-popup-scrim" (click)="dismissFormPopup()">
+  <div class="cw-popup-scrim" (click)="dismissPopup()">
     <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
     <div
       class="cw-popup"
@@ -729,14 +704,13 @@
     >
       <span class="cw-popup-icon"><app-icon name="check-circle" [size]="30" /></span>
 
-      <h2 class="cw-popup-title" id="cw-popup-title">{{ formPopup() }}</h2>
+      <h2 class="cw-popup-title" id="cw-popup-title">{{ popup() }}</h2>
 
-      <p class="cw-popup-note">
-        Your answers are saved. The form has been cleared — submitting it again
-        replaces what was just stored.
-      </p>
+      @if (popupNote()) {
+        <p class="cw-popup-note">{{ popupNote() }}</p>
+      }
 
-      <button type="button" class="cw-popup-btn" (click)="dismissFormPopup()">
+      <button type="button" class="cw-popup-btn" (click)="dismissPopup()">
         Done
       </button>
     </div>
