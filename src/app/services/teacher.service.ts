@@ -773,6 +773,101 @@ export class TeacherService {
   }
 
   /**
+   * Guarantees the signed-in account HAS a teacher record, and returns its id.
+   *
+   * WHY THIS EXISTS. Everything a teacher accumulates — workflow completion,
+   * activity progress, submissions — now hangs off `teachers/{docId}`, which is
+   * production's own root. Production never needs this method because its
+   * `Teachers/{uid}` IS the account: signing in and having a record are the same
+   * event there. Here they are two, and measured on the dev database more than
+   * half the accounts had fallen through the gap: 7 of 13 signed-in users had no
+   * record at all, so there was nowhere for their progress to go.
+   *
+   * THREE STEPS, IN THIS ORDER, AND THE ORDER IS THE SAFETY PROPERTY:
+   *
+   *   1. ALREADY LINKED — a record carrying this uid. Returns it and writes
+   *      nothing. This is the common path on every sign-in after the first, and
+   *      it is what stops a second record appearing for the same person.
+   *   2. CLAIMABLE — an UNLINKED record whose number matches. This is an
+   *      administrator having registered the person in advance, which is the
+   *      whole point of the roster, so the existing record wins over a new one
+   *      and keeps the classrooms already attached to it.
+   *   3. CREATE — only when neither found anything.
+   *
+   * IT WILL NEVER STEAL A LINKED RECORD. Step 2 goes through isUnlinkedMatch,
+   * which refuses a record that already carries someone's uid. Numbers get
+   * reassigned, and claiming a linked record would hand one teacher another's
+   * classrooms.
+   *
+   * WHAT A CREATED RECORD IS NOT. It carries no institution and no classrooms,
+   * because nobody registered it against one. It exists so the account has a
+   * place to write, not to imply approval — `isRegisteredTeacher` is what decides
+   * that, and it is unaffected by this. An administrator attaching classrooms
+   * later updates this same record rather than making a second.
+   *
+   * BEST EFFORT AT THE CALL SITE. A failure here must not cost anybody their
+   * sign-in; the login page swallows it and the teacher simply has no record yet,
+   * which is the state everything downstream already handles.
+   */
+  async ensureRecordForSignedInUser(identity: {
+    uid: string;
+    phoneNumber?: string;
+    countryCode?: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<string | null> {
+    const uid = (identity.uid ?? '').trim();
+
+    if (!uid) {
+      return null;
+    }
+
+    // 1. Already linked. One narrow query, and the common case.
+    const linked = await getDocs(
+      query(activeTeachersCollection(), where('teacherMeta.uid', '==', uid), limit(1))
+    );
+
+    if (!linked.empty) {
+      return linked.docs[0].id;
+    }
+
+    const digits = toSubscriberDigits(identity.phoneNumber ?? '');
+
+    // 2. An unlinked record an administrator registered in advance.
+    if (digits.length >= 10) {
+      const claimed = await this.linkSignedInUid(digits, uid);
+
+      if (claimed > 0) {
+        const after = await getDocs(
+          query(activeTeachersCollection(), where('teacherMeta.uid', '==', uid), limit(1))
+        );
+
+        if (!after.empty) {
+          return after.docs[0].id;
+        }
+      }
+    }
+
+    // 3. Nothing to claim. Give the account a record of its own.
+    const created = await this.create({
+      teacherMeta: {
+        countryCode: identity.countryCode ?? '',
+        email: (identity.email ?? '').trim(),
+        firstName: (identity.firstName ?? '').trim(),
+        lastName: (identity.lastName ?? '').trim(),
+        fullNameLowerCase: '',
+        phone: digits,
+        phoneNumber: digits,
+        uid
+      },
+      classrooms: {}
+    } as TeacherDraft);
+
+    return created.docId;
+  }
+
+  /**
    * Whether an administrator has already registered this person as a teacher.
    *
    * WHAT IT IS FOR. Being in `teachers` IS the approval. An administrator put

@@ -302,6 +302,9 @@ export class Login implements OnDestroy {
 
     try {
       await this.auth.loginWithGoogle();
+      // SAME BOOKKEEPING AS THE OTP PATH. Omitting it here is what left every
+      // Google account without a teacher record.
+      await this.linkTeacherRecord();
       await this.router.navigate(['/dashboard']);
     } catch (error) {
       this.errorMessage.set(this.auth.describeError(error));
@@ -430,18 +433,60 @@ export class Login implements OnDestroy {
    * counts and a Resend button that never appears.
    */
   /**
-   * Fills in teacherMeta.uid on the record an admin registered for this number.
+   * Makes sure this session has a teacher record: links one, or creates one.
    *
    * AFTER the session exists, because the uid being recorded is this session's.
    *
-   * SWALLOWED ON FAILURE, deliberately. This is bookkeeping that links a record to
-   * an account; a refused write or a dropped network must not turn a successful
-   * sign-in into an error the teacher can do nothing about. The next sign-in tries
-   * again, since the field is only filled when blank.
+   * IT USED TO ONLY LINK, and only on the OTP path. That left two holes. A number
+   * matching no registered record stayed unlinked forever, and Google sign-in
+   * never called this at all — it cannot link by number, because Google supplies
+   * no number. On the dev database that had stranded 7 of 13 accounts with no
+   * teacher record, which is where a teacher's completion, activity progress and
+   * submissions now have to be written.
+   *
+   * WHAT IT DOES NOT DO IS DECIDE ACCESS. Having a record is not approval;
+   * `isRegisteredTeacher` still answers that, and a record created here carries
+   * no institution and no classrooms to be approved for.
+   *
+   * SWALLOWED ON FAILURE, deliberately and unchanged. This is bookkeeping; a
+   * refused write or a dropped network must not turn a successful sign-in into an
+   * error the teacher can do nothing about. The next sign-in tries again, and
+   * every step is idempotent.
    */
   private async linkTeacherRecord(): Promise<void> {
+    /*
+     * EVERY LINE IS INSIDE THE TRY, including reading the uid.
+     *
+     * It was not, briefly, and that was a real defect rather than a test
+     * inconvenience: anything that threw while GATHERING the identity escaped
+     * this method, and since the verify path awaits it, a successful sign-in
+     * would have stopped before navigating and left the teacher on the login
+     * screen with no error. Best-effort means the whole of it.
+     */
     try {
-      await this.teachers.linkSignedInUid(this.phoneNumber(), this.auth.currentUid() ?? '');
+      const uid = this.auth.currentUid();
+
+      if (!uid) {
+        return;
+      }
+
+      /*
+       * THE PHONE PATH KNOWS THE NUMBER FROM THE FORM, not from the auth record —
+       * that is the number the administrator would have registered. Google gives
+       * an email and a display name and no number, so both are passed and
+       * whichever is present is used.
+       */
+      const user = this.auth.currentUser;
+      const [firstName = '', ...rest] = (user?.displayName ?? '').trim().split(/\s+/);
+
+      await this.teachers.ensureRecordForSignedInUser({
+        uid,
+        phoneNumber: this.phoneNumber() || user?.phoneNumber || '',
+        countryCode: this.countryCode(),
+        email: user?.email ?? '',
+        firstName,
+        lastName: rest.join(' ')
+      });
     } catch (error) {
       console.error('Signed in, but could not link the teacher record to this account.', error);
     }
