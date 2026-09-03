@@ -11,9 +11,9 @@ import {
 
 import { db } from '../core/firebase';
 import {
+  allAssignments,
   assignmentDoc,
   newAssignmentDoc,
-  ownedAssignments,
   ownedTrashAssignments,
   trashAssignmentDoc
 } from '../core/firestore-paths';
@@ -148,21 +148,33 @@ export class AssignmentService {
   private auth = inject(AuthService);
 
   /**
-   * The signed-in teacher's assignments, newest first.
+   * EVERY live assignment, newest first, whoever created it.
    *
-   * FILTERED BY ownerId, which production's equivalent is not: its
-   * getAllAssignmentsLimited reads the whole collection. This app's rules require
-   * the filter — every top-level query here carries it, and the isolation suite
-   * fails a query that does not — so the two cannot be identical here. The
-   * consequence is real and worth knowing: a teacher sees the assignments they
-   * created, not every assignment in the project.
+   * IT USED TO BE FILTERED BY ownerId, and the comment here claimed the rules
+   * required that. THEY DO NOT: `match /Assignments/{assignmentId}` grants
+   * `read: if signedIn()` with no ownership test, so the unfiltered list was
+   * always permitted and the filter was the client's own choice. Production's
+   * `getAllAssignmentsLimited` reads the whole collection, so the filter was the
+   * divergence rather than this.
    *
-   * SORTED IN MEMORY on `updatedAt`, not with orderBy. An orderBy alongside the
-   * ownerId `where` needs a composite index, and the collection is small enough
+   * WHY IT MATTERS IN PRACTICE. An assignment is built by whoever set the
+   * workflow up and answered by whoever teaches the class. Those are routinely
+   * different accounts, and the same person signing in with Google rather than a
+   * phone is enough to make them differ — this app issues a separate uid per
+   * provider. Under the old filter, a workflow's assignment block simply
+   * disappeared for anyone but its author, and the symptom looked like missing
+   * data rather than a boundary.
+   *
+   * SORTED IN MEMORY on `updatedAt`, not with orderBy — unchanged, and now for a
+   * simpler reason: an orderBy would need an index on a collection small enough
    * that the read is the cost rather than the sort.
    */
   async list(): Promise<Assignment[]> {
-    const snapshot = await getDocs(ownedAssignments(this.auth.requireUid()));
+    // requireUid still throws when signed out. The list is not owner-scoped, but
+    // the rules demand a session and failing here is clearer than a refusal.
+    this.auth.requireUid();
+
+    const snapshot = await getDocs(allAssignments());
 
     return snapshot.docs
       .map(document => normaliseAssignment<Assignment>(document.id, document.data()))

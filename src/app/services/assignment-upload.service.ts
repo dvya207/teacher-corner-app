@@ -8,15 +8,33 @@ import { UploadSlot } from '../models/teaching.model';
 import { ConfigurationService } from './configuration.service';
 
 /**
- * PRODUCTION'S OWN STORAGE FOLDER, and the name is inherited rather than chosen.
+ * `teacher_submissions/{uid}/{programmeId}_{assignmentId}_{submissionId}.{ext}`
  *
- * `student_submissions` is where its TEACHER uploads go too — the folder predates
- * the split between the two surfaces and both write into it. Verified against a
- * live file: `student_submissions/0pDZGzHV3IgQyez1NFFtUPVyyol1/BTpRtz4EW001Kfd86uch
- * _RwUzSRxhKpykyWrfX8g8_1.jpg`. Renaming it here would put this app's files
- * somewhere production's own report screens do not look.
+ * A DELIBERATE DIVERGENCE FROM PRODUCTION, and the one place in this app that
+ * takes one. Production's folder is `student_submissions`, and its TEACHER
+ * uploads go in there too — the folder predates the split between the two
+ * surfaces and both write into it. Verified against a live object:
+ * `student_submissions/0pDZGzHV3IgQyez1NFFtUPVyyol1/BTpRtz4EW001Kfd86uch
+ * _RwUzSRxhKpykyWrfX8g8_1.jpg`.
+ *
+ * IT IS RENAMED HERE BECAUSE THIS APP HAS NO STUDENTS. Nothing in this database
+ * models one, every upload is made by the signed-in teacher, and the assignment
+ * report reads teacher submissions rather than production's `Students`
+ * collection. A folder called `student_submissions` holding nothing but teacher
+ * uploads misleads whoever opens the bucket next.
+ *
+ * WHAT THE DIVERGENCE COSTS. Production's own report screens look in
+ * `student_submissions`, so a file written here is not somewhere they would find
+ * it. That cost is already paid: those screens read production's database, not
+ * this one, and this app's report was repointed at teacher submissions for the
+ * same reason.
+ *
+ * THE FIRST SEGMENT IS THE UID, NOT THE TEACHER DOCUMENT ID. Ownership in
+ * Storage is the path — the rules compare it against `request.auth.uid` — and a
+ * file's attribution belongs to the account that uploaded it. Firestore roots on
+ * the teacher record; Storage roots on the account. The two differ on purpose.
  */
-export const SUBMISSION_STORAGE_FOLDER = 'student_submissions';
+export const SUBMISSION_STORAGE_FOLDER = 'teacher_submissions';
 
 /** PRODUCTION'S HARD CEILING, in bytes: `event.size > 3145728`, so 3MB. */
 export const SUBMISSION_MAX_BYTES = 3 * 1024 * 1024;
@@ -24,6 +42,17 @@ export const SUBMISSION_MAX_BYTES = 3 * 1024 * 1024;
 /** Which slot on which assignment, for which unit. */
 export interface UploadTarget {
   uid: string;
+  /**
+   * The TEACHER RECORD's document id — the root the submission is written under.
+   *
+   * SEPARATE FROM [uid], and they are different values. The uid identifies the
+   * ACCOUNT and still stamps `teacherId` and the Storage path; this identifies
+   * the teacher RECORD, which is what production roots submissions on. Resolved
+   * once by the caller rather than looked up here, so one submit costs one query
+   * and not three.
+   */
+  teacherDocId: string;
+
   classroomId: string;
   programmeId: string;
   /** '' outside a workflow, which changes the KEY the record is written under. */
@@ -47,7 +76,7 @@ export interface UploadOutcome {
  *   1. The chosen file is checked against `Configuration/acceptedUploadFormats`
  *      `.formats[uploadFileType.toLowerCase()]` and against a 3MB ceiling.
  *   2. It goes to
- *      `student_submissions/{teacherId}/{programmeId}_{assignmentId}_{submissionId}.{ext}`
+ *      `teacher_submissions/{uid}/{programmeId}_{assignmentId}_{submissionId}.{ext}`
  *      with `customMetadata.original_name` carrying the file's real name.
  *   3. The path is recorded on the SAME summary document the quiz writes to —
  *      `submissions/{classroomId}-{programmeId}` — under a nested key naming the
@@ -68,7 +97,7 @@ export interface UploadOutcome {
  *
  * IT WILL BE DENIED UNTIL THE BUCKET'S RULES GRANT IT. helix-staging-india has one
  * bucket shared between several apps and its live ruleset has no
- * `student_submissions` path. A refusal is reported in words rather than thrown,
+ * `teacher_submissions` path. A refusal is reported in words rather than thrown,
  * the same way ResourceUploadService reports one.
  */
 @Injectable({ providedIn: 'root' })
@@ -162,7 +191,7 @@ export class AssignmentUploadService {
    */
   async storedPath(where: UploadTarget, slot: UploadSlot): Promise<string> {
     const snapshot = await getDoc(
-      submissionSummaryDoc(where.uid, where.classroomId, where.programmeId)
+      submissionSummaryDoc(where.teacherDocId, where.classroomId, where.programmeId)
     );
 
     if (!snapshot.exists()) {
@@ -251,7 +280,7 @@ export class AssignmentUploadService {
     file: File
   ): Promise<void> {
     const summary = submissionSummaryDoc(
-      where.uid,
+      where.teacherDocId,
       where.classroomId,
       where.programmeId
     );
@@ -324,7 +353,7 @@ export class AssignmentUploadService {
    */
   private async attemptsFor(where: UploadTarget): Promise<number> {
     const snapshot = await getDoc(
-      submissionSummaryDoc(where.uid, where.classroomId, where.programmeId)
+      submissionSummaryDoc(where.teacherDocId, where.classroomId, where.programmeId)
     );
 
     if (!snapshot.exists()) {

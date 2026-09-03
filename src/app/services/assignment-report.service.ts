@@ -1,12 +1,11 @@
 import { Injectable } from '@angular/core';
-import { getDoc, getDocs, query, where } from 'firebase/firestore';
+import { getDocs, query, where } from 'firebase/firestore';
 
 import {
-  remoteSubmissionsCollection,
-  studentAuthDoc,
-  studentsCollection,
-  submissionAttemptsCollection
+  activeTeachersCollection,
+  teacherSubmissionAttempts
 } from '../core/firestore-paths';
+import { teacherFullName, teacherMetaFrom } from './teacher.service';
 
 /** One question as a submitted attempt records it. */
 export interface AttemptQuestion {
@@ -233,13 +232,35 @@ export function buildStudentSummary(attempts: StudentAttempt[]): StudentSummaryR
 /**
  * Reads the submissions behind an assignment report.
  *
- * WRITTEN AGAINST PRODUCTION'S SCHEMA, WHICH THIS APP'S DATABASE DOES NOT HAVE.
- * Stated plainly because it changes what the reader should trust: there is no
- * `Students` collection here and no student in this app's model, so every read
- * below returns nothing today and the report comes out empty. The shape was taken
- * from production's own report component rather than invented, so it should work
- * when that data exists — but it has NOT been exercised against real submissions,
- * and the pure functions above are what the tests cover.
+ * IT READS TEACHERS, NOT STUDENTS, AND THAT IS THE WHOLE POINT OF THIS FILE'S
+ * HISTORY. It used to read production's `Students/{id}/remoteSubmissions/...`,
+ * a shape copied faithfully from production's own report component — and one
+ * this database has never contained. There is no `Students` collection here and
+ * no student in this app's model, so every read returned nothing and the report
+ * came out empty every single time.
+ *
+ * IN THIS APP THE TEACHER IS THE ONE WHO SUBMITS. A quiz is answered by the
+ * teacher walking the class through a workflow, and their attempt lands at
+ * `teachers/{docId}/submissions/{classroomId}-{programmeId}/attempts/attempt{N}`.
+ * So the report is pointed there, and it now returns rows.
+ *
+ * THE THREE SHAPES LINE UP ALREADY, which is why this is a repoint rather than a
+ * rewrite:
+ *
+ *   - the scope filter reads a `classrooms` MAP with `programmes` nested inside
+ *     each entry, and a teacher document carries exactly that;
+ *   - `attemptedAssignments` is an array on the teacher document, which is where
+ *     both submission services now write it;
+ *   - an attempt document carries `questions`, the same field the sheets read.
+ *
+ * ONE READ FEWER PER ROW. The name no longer needs `CustomAuthentication`: a
+ * teacher record carries `teacherMeta.firstName` and `lastName` directly.
+ *
+ * "student" IS KEPT IN THE TYPES AND COLUMN HEADINGS. `StudentAttempt`,
+ * `studentId` and the "Student Name" column are what the sheet is called and
+ * what production's own export calls them, and renaming them would change a
+ * deliverable people already read. The identifiers name a ROLE in the report,
+ * not a `Students` document.
  *
  * The reads are the only part that cannot be tested here. Everything that turns
  * submissions into rows is a plain function, which is why they are exported
@@ -264,7 +285,7 @@ export class AssignmentReportService {
 
     const snapshot = await getDocs(
       query(
-        studentsCollection(),
+        activeTeachersCollection(),
         where('attemptedAssignments', 'array-contains', scope.assignmentId)
       )
     );
@@ -281,34 +302,69 @@ export class AssignmentReportService {
    * a student may sit an assignment more than once and the report is about where
    * they ended up, not where they started.
    */
-  async latestAttempt(studentId: string, scope: ReportScope): Promise<AttemptQuestion[]> {
-    const submissions = await getDocs(
-      query(remoteSubmissionsCollection(studentId), where('quizId', '==', scope.assignmentId))
+  async latestAttempt(teacherDocId: string, scope: ReportScope): Promise<AttemptQuestion[]> {
+    /*
+     * THE SUMMARY IS KEYED ON CLASSROOM AND PROGRAMME, NOT ON THE ASSIGNMENT,
+     * which is production's own choice and the reason this cannot simply query by
+     * quiz id the way the Students version did. One summary therefore spans every
+     * quiz set in that classroom and programme, and its attempts have to be
+     * filtered down to the one the report is about.
+     *
+     * WITHOUT BOTH SCOPE IDS THERE IS NO DOCUMENT TO NAME. A report run across a
+     * whole institution cannot address a summary, so it returns nothing rather
+     * than reading every teacher's every classroom.
+     */
+    if (!scope.classroomId || !scope.programmeId) {
+      return [];
+    }
+
+    const attempts = await getDocs(
+      teacherSubmissionAttempts(teacherDocId, scope.classroomId, scope.programmeId)
     );
 
-    for (const submission of submissions.docs) {
-      const attempts = await getDocs(submissionAttemptsCollection(studentId, submission.id));
+    if (attempts.empty) {
+      return [];
+    }
 
-      if (attempts.empty) {
+    /*
+     * NEWEST FIRST, then the first attempt that is actually about THIS
+     * assignment. `id` on the attempt is the quiz's own document id, which is
+     * what production writes and what `attemptedAssignments` collects.
+     */
+    const sorted = [...attempts.docs].sort((a, b) => millis(b.data()) - millis(a.data()));
+
+    for (const attempt of sorted) {
+      const data = attempt.data() as { id?: unknown; questions?: AttemptQuestion[] };
+
+      if (String(data.id ?? '') !== scope.assignmentId) {
         continue;
       }
 
-      const sorted = [...attempts.docs].sort((a, b) => millis(b.data()) - millis(a.data()));
-      const questions = (sorted[0].data() as { questions?: AttemptQuestion[] }).questions;
-
-      if (Array.isArray(questions) && questions.length > 0) {
-        return questions;
+      if (Array.isArray(data.questions) && data.questions.length > 0) {
+        return data.questions;
       }
     }
 
     return [];
   }
 
-  /** The student's display name, from their own record then CustomAuthentication. */
-  async studentName(studentId: string, data: Record<string, unknown>): Promise<string> {
-    const first = String(data['firstName'] ?? '').trim();
-    const last = String(data['lastName'] ?? '').trim();
-    const joined = [first, last].filter(Boolean).join(' ');
+  /**
+   * The name for the row, off the teacher record.
+   *
+   * NO SECOND READ. The Students version fell back to `CustomAuthentication`
+   * because a student document did not reliably carry a name; a teacher record
+   * does, on `teacherMeta`, so the whole report costs one read fewer per row.
+   *
+   * Goes through `teacherMetaFrom` rather than reading `teacherMeta` directly, so
+   * the flat legacy fields identity used to live in are picked up too — the same
+   * reason `pickRegisteredName` does.
+   *
+   * FALLS BACK TO THE ID, never to blank. A row with marks and no label is worse
+   * than a row labelled with an id somebody can look up.
+   */
+  async studentName(teacherDocId: string, data: Record<string, unknown>): Promise<string> {
+    const meta = teacherMetaFrom(data);
+    const joined = teacherFullName(meta.firstName ?? '', meta.lastName ?? '').trim();
 
     if (joined) {
       return joined;
@@ -316,20 +372,7 @@ export class AssignmentReportService {
 
     const named = String(data['name'] ?? data['studentName'] ?? '').trim();
 
-    if (named) {
-      return named;
-    }
-
-    try {
-      const auth = await getDoc(studentAuthDoc(studentId));
-      const authData = (auth.data() ?? {}) as Record<string, unknown>;
-
-      return String(authData['name'] ?? authData['userName'] ?? '').trim() || studentId;
-    } catch {
-      // A missing or unreadable auth record must not fail the whole report; the
-      // id is a usable label and the row still carries the marks.
-      return studentId;
-    }
+    return named || teacherDocId;
   }
 
   /**

@@ -1,4 +1,5 @@
 import {
+  AssignmentReportService,
   AttemptQuestion,
   ReportScope,
   StudentAttempt,
@@ -430,5 +431,45 @@ describe('matchesScope', () => {
     const data = student({ room1: { institutionId: 'inst1', classroomId: 'room1' } });
 
     expect(matchesScope(data, scope({ programmeId: '' }))).toBe(true);
+  });
+});
+
+/**
+ * The row label, now that it comes off a TEACHER record.
+ *
+ * It used to need a second read of `CustomAuthentication` because a student
+ * document did not reliably carry a name. A teacher record does, so this is a
+ * pure function of the document — which is why it is worth testing where the
+ * reads around it are not.
+ */
+describe('studentName reads the teacher record', () => {
+  const service = new AssignmentReportService();
+
+  it('joins the name off teacherMeta', async () => {
+    const name = await service.studentName('t1', {
+      teacherMeta: { firstName: 'Divya', lastName: 'Jain' }
+    });
+
+    expect(name).toBe('Divya Jain');
+  });
+
+  it('picks up the flat legacy fields identity used to live in', async () => {
+    const name = await service.studentName('t1', { firstName: 'Conrad', lastName: 'Fisher' });
+
+    expect(name).toBe('Conrad Fisher');
+  });
+
+  it('copes with a first name and no last', async () => {
+    const name = await service.studentName('t1', { teacherMeta: { firstName: 'Divya' } });
+
+    expect(name).toBe('Divya');
+  });
+
+  it('FALLS BACK TO THE ID, never to blank', async () => {
+    // A row carrying marks and no label is worse than one labelled with an id
+    // somebody can look up.
+    const name = await service.studentName('teacher-doc-1', {});
+
+    expect(name).toBe('teacher-doc-1');
   });
 });

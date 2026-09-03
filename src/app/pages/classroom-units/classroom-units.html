@@ -200,7 +200,7 @@
                 </td>
                 <!-- Zero for the same reason as the card's pill: nothing is
                      recorded, so nothing is claimed. -->
-                <td class="cu-num" [title]="progressTitle">{{ completion }}%</td>
+                <td class="cu-num" [title]="progressTitle">{{ completionFor(unit) }}%</td>
               </tr>
             }
           </tbody>
@@ -253,7 +253,7 @@
                    be invented. -->
               <span class="cu-progress-pill" [title]="progressTitle">
                 <app-icon name="minus" [size]="12" />
-                {{ completion }}%
+                {{ completionFor(unit) }}%
               </span>
             </div>
 
@@ -305,10 +305,10 @@
                 role="progressbar"
                 aria-valuemin="0"
                 aria-valuemax="100"
-                [attr.aria-valuenow]="completion"
+                [attr.aria-valuenow]="completionFor(unit)"
                 [attr.aria-label]="'Completion for ' + unit.name"
               >
-                <span class="cu-track-fill" [style.width.%]="completion"></span>
+                <span class="cu-track-fill" [style.width.%]="completionFor(unit)"></span>
               </span>
 
               <a

@@ -416,9 +416,13 @@ describe('ClassroomWorkflow', () => {
 
     /**
      * TOLD APART FROM AN EMPTY ONE, because the causes differ and so does the
-     * remedy: `AssignmentService.list()` is owner-scoped, so a block pointing at
-     * another teacher's assignment resolves to nothing — which must not read as
-     * "this quiz has no questions yet".
+     * remedy: a block whose assignment has been deleted, or whose id is wrong,
+     * resolves to nothing — which must not read as "this quiz has no questions
+     * yet".
+     *
+     * IT USED TO ALSO MEAN "another teacher's", back when
+     * `AssignmentService.list()` was owner-scoped. It is not any more, so this
+     * state no longer has a benign explanation.
      */
     it('reports a missing assignment distinctly', async () => {
       const { component } = await mount({ assignments: [] });

@@ -112,12 +112,19 @@ export const COLLECTIONS = Object.freeze({
    * STUDENTS AND THEIR SUBMISSIONS — production's names, capitalised as it has
    * them, unlike this app's own lowercase collections.
    *
-   * NEITHER EXISTS IN THIS APP'S DATABASE. They are here because the assignment
-   * report reads them: production stores a student's answers at
-   * `Students/{id}/remoteSubmissions/{id}/attempts/{id}` and the student's display
-   * name in `CustomAuthentication/{id}`. The report is written against those paths
-   * so it works the moment the data does, and naming them here rather than inline
-   * keeps the one place that builds paths authoritative.
+   * NEITHER EXISTS IN THIS APP'S DATABASE, AND NOTHING READS THEM ANY MORE.
+   * They were here because the assignment report was written against production's
+   * shape — `Students/{id}/remoteSubmissions/{id}/attempts/{id}` for the answers,
+   * `CustomAuthentication/{id}` for the name — on the reasoning that it would work
+   * the moment the data existed. The data never did, so the report returned an
+   * empty sheet every time it was run.
+   *
+   * THE REPORT NOW READS TEACHER SUBMISSIONS instead, because in this app the
+   * teacher is the one who submits: see AssignmentReportService. These names are
+   * KEPT rather than deleted so the production shape they describe stays recorded
+   * in the one file that is allowed to know about paths, and so that a future
+   * import of real student data has somewhere to land. Nothing imports them
+   * today; treat an unused warning here as accurate rather than as a mistake.
    */
   /**
    * Workflow templates — production's name, capitalised as it has it.
@@ -832,7 +839,36 @@ export function newAssignmentDoc(): DocumentReference {
   return doc(assignmentsCollection());
 }
 
-/** The signed-in teacher's own assignments. */
+/**
+ * EVERY live assignment, whoever created it.
+ *
+ * UNFILTERED, AND THAT IS DELIBERATE. Every other top-level list in this file is
+ * owner-scoped, because institutions, classrooms and learning units carry
+ * ownership in a field and an unfiltered read of those would be refused. This one
+ * is different on both counts:
+ *
+ *   THE RULES ALREADY ALLOW IT. `match /Assignments/{assignmentId}` grants
+ *   `read: if signedIn()` with no ownership test, so listing the collection is
+ *   permitted and always was — the filter was the client's choice, not the rules'.
+ *
+ *   PRODUCTION DOES THE SAME. Its `getAllAssignmentsLimited` reads the whole
+ *   collection. The owner filter here was the divergence, not this.
+ *
+ * WHAT IT FIXES. An assignment is set by whoever built the workflow and answered
+ * by whoever teaches the class, and those are routinely different accounts — the
+ * same person signing in with Google rather than a phone is enough to make them
+ * differ. Owner-scoping meant a content block pointing at somebody else's
+ * assignment resolved to nothing, and the symptom looked like missing data rather
+ * than a boundary.
+ *
+ * `ownedAssignments` is KEPT below for the trash list, where "mine" is still the
+ * right question: restoring somebody else's deletion is not a thing to offer.
+ */
+export function allAssignments(): Query {
+  return query(assignmentsCollection());
+}
+
+/** The signed-in teacher's own assignments. Used for the trash list. */
 export function ownedAssignments(uid: string): Query {
   assertSafeSegment(uid, 'uid');
 
@@ -903,30 +939,35 @@ export function programmeCounterDoc(uid: string): DocumentReference {
 }
 
 /* ==========================================================================
-   QUIZ SUBMISSIONS — production's own shape, under this app's own root
+   QUIZ SUBMISSIONS — production's own shape, under production's own root
 
-     users/{uid}/submissions/{classroomId}-{programmeId}
-     users/{uid}/submissions/{summaryId}/attempts/attempt{N}
-     users/{uid}/submissions/{summaryId}/submissionMeta/{autoId}
+     teachers/{teacherDocId}/submissions/{classroomId}-{programmeId}
+     teachers/{teacherDocId}/submissions/{summaryId}/attempts/attempt{N}
+     teachers/{teacherDocId}/submissions/{summaryId}/submissionMeta/{autoId}
 
    PRODUCTION'S IS `Teachers/{teacherId}/submissions/…`, read off its own
-   `saveSubmissionFullPayload`, and everything below the root segment is
-   identical: the summary document id is `{classroomId}-{programmeId}`, the
-   attempts hang under `attempts` keyed `attempt1`, `attempt2`, and every
-   submission drops a row in `submissionMeta`. Verified against the live data —
+   `saveSubmissionFullPayload`, and every segment now matches: the summary
+   document id is `{classroomId}-{programmeId}`, the attempts hang under
+   `attempts` keyed `attempt1`, `attempt2`, and every submission drops a row in
+   `submissionMeta`. Verified against the live data —
    `Teachers/aTfHAMn.../submissions/7pUSc6aJveINv25wgV1r-A8MSkCPOgMP7qn8ZdVmu`
    holds attemptsCount 2 with `attempts/attempt1` and `attempts/attempt2`.
 
-   THE ROOT DIFFERS BECAUSE THE IDENTITY DOES. Production keys the signed-in
-   person on `Teachers/{docId}`; this app keys them on `users/{uid}` — the
-   lowercase `teachers` collection here holds teachers REGISTERED AGAINST AN
-   INSTITUTION, which is a different thing and not necessarily the person
-   submitting. `teacherId` is written INSIDE the summary as production writes it,
-   so the payload matches even where the path cannot.
+   THE ROOT USED TO BE `users/{uid}`, AND WHY IT MOVED. It was under `users`
+   because the identities genuinely differed: this app's `teachers` collection
+   holds people REGISTERED AGAINST AN INSTITUTION, which is not necessarily the
+   account submitting, so there was no `teachers/{uid}` to nest under. That gap
+   is now closed at sign-in — `TeacherService.ensureRecordForSignedInUser` links
+   or creates a record for every account — so the teacher document exists for
+   everyone and the root can be production's.
 
-   AND IT NEEDS NO NEW RULES. `users/{uid}/{document=**}` already grants a
-   teacher everything under their own document and nobody else's, which is
-   exactly the isolation a submission wants.
+   IT IS THE TEACHER DOCUMENT ID, NOT THE UID. The two are the same value in
+   production and different here, because a teacher record has an id of its own.
+   Callers resolve it once, through `teacherByLinkedUid`.
+
+   THE UID HAS NOT GONE AWAY. `teacherId` is still written INSIDE the summary as
+   production writes it, and Storage paths still key on the uid — a file's
+   attribution is to the account that uploaded it.
 
    THE SUMMARY IS PER CLASSROOM AND PROGRAMME, NOT PER QUIZ, and that is
    production's own choice rather than a simplification here: `attemptsCount` and
@@ -955,24 +996,24 @@ export function submissionSummaryId(classroomId: string, programmeId: string): s
   return `${classroomId}-${programmeId}`;
 }
 
-/** users/{uid}/submissions/{classroomId}-{programmeId} */
+/** teachers/{teacherDocId}/submissions/{classroomId}-{programmeId} */
 export function submissionSummaryDoc(
-  uid: string,
+  teacherDocId: string,
   classroomId: string,
   programmeId: string
 ): DocumentReference {
-  assertSafeSegment(uid, 'uid');
+  assertSafeSegment(teacherDocId, 'teacher id');
 
   return doc(
     db,
-    COLLECTIONS.users,
-    uid,
+    COLLECTIONS.teachers,
+    teacherDocId,
     SUBMISSIONS_SUBCOLLECTION,
     submissionSummaryId(classroomId, programmeId)
   );
 }
 
-/** users/{uid}/submissions/{summaryId}/attempts/attempt{N} */
+/** teachers/{teacherDocId}/submissions/{summaryId}/attempts/attempt{N} */
 export function submissionAttemptDoc(
   summary: DocumentReference,
   attemptId: string
@@ -982,9 +1023,174 @@ export function submissionAttemptDoc(
   return doc(collection(summary, SUBMISSION_ATTEMPTS_SUBCOLLECTION), attemptId);
 }
 
-/** A fresh users/{uid}/submissions/{summaryId}/submissionMeta row. */
+/**
+ * teachers/{teacherDocId}/submissions/{classroomId}-{programmeId}/attempts
+ *
+ * The whole attempt history for one classroom and programme, which is what the
+ * assignment report reads. NOT the same as `submissionAttemptsCollection` further
+ * down: that one addresses production's `Students/{id}/remoteSubmissions/...`,
+ * a shape this database does not have.
+ */
+export function teacherSubmissionAttempts(
+  teacherDocId: string,
+  classroomId: string,
+  programmeId: string
+): CollectionReference {
+  return collection(
+    submissionSummaryDoc(teacherDocId, classroomId, programmeId),
+    SUBMISSION_ATTEMPTS_SUBCOLLECTION
+  );
+}
+
+/** A fresh teachers/{teacherDocId}/submissions/{summaryId}/submissionMeta row. */
 export function newSubmissionMetaDoc(summary: DocumentReference): DocumentReference {
   return doc(collection(summary, SUBMISSION_META_SUBCOLLECTION));
+}
+
+/* ==========================================================================
+   WORKFLOW COMPLETION — production's own shape, under the teacher document
+
+     teachers/{teacherDocId}/Completion/{learningUnitId}
+        docId      the learning unit id, repeated as a field
+        workflows  { {workflowId}: { completedSteps: number } }
+
+   READ OFF THE LIVE DOCUMENT, not inferred:
+   `Teachers/lVjawPYx8qOjegE3v5cg1yEfbt42/Completion/3BFIIOqg8YRK9hGU7m0r` holds
+   `workflows.JDVvf2ou8GqtVTisKrVF.completedSteps = 7` against a workflow of 7
+   steps, and `workflows.jTaz9koBb39zOTgG60Zv.completedSteps = 3` against one of
+   6. The document id is a LEARNING UNIT id — `3BFIIOqg8YRK9hGU7m0r` is
+   `LearningUnits` code PM05, "Magnetic Pen Stand" — so one document covers every
+   workflow that unit has ever been run under, in a map rather than in rows.
+
+   CAPITALISED, matching production, like `Assignments` and unlike this app's own
+   lowercase collections. Same reason as Assignments: the collection is NEW here
+   with no documents to migrate, so it can start on production's name where
+   `learningUnits` and `workflows` would need a data move to get there.
+
+   UNDER `teachers`, NOT `users`, WHICH IS THE ONE PLACE THIS APP FOLLOWS
+   PRODUCTION'S ROOT. Everything else private to a teacher lives on
+   `users/{uid}` here, because this app's `teachers` collection holds people
+   REGISTERED AGAINST AN INSTITUTION rather than the signed-in account — see the
+   submissions note above. Completion is different: it is progress THROUGH A
+   CLASSROOM'S workflow, and the classroom is reached via the teacher record, not
+   via the login. The join is `teacherMeta.uid`, and it needs a rules `get()`
+   because a rule cannot run a query.
+
+   A TEACHER RECORD IS NOT GUARANTEED. `teacherMeta.uid` is stamped when a teacher
+   signs in against a record someone registered for them; an account with no such
+   record has no document here to write under, and the caller is expected to say
+   so rather than invent one.
+   ========================================================================== */
+
+export const COMPLETION_SUBCOLLECTION = 'Completion';
+
+/** The field on a teacher document holding the linked auth uid. */
+export const TEACHER_LINKED_UID_FIELD = 'teacherMeta.uid';
+
+/**
+ * The teacher record LINKED TO A SIGNED-IN ACCOUNT: teacherMeta.uid == uid.
+ *
+ * NOT `ownerId`. That field holds whoever CREATED the roster record, which is
+ * normally a coordinator registering somebody else — the two are different
+ * people by design, and filtering on it would attribute a teacher's progress to
+ * their administrator. Measured on the dev database: of 13 teacher records 7
+ * carry a linked uid, no uid is claimed by two records, and no record has
+ * `ownerId` equal to its own `teacherMeta.uid`.
+ *
+ * A SINGLE where(), so it needs no composite index and firestore.indexes.json
+ * stays empty — the same constraint `ownedTeachers` above is written to.
+ */
+export function teacherByLinkedUid(uid: string): Query {
+  assertSafeSegment(uid, 'uid');
+
+  return query(
+    activeTeachersCollection(),
+    where(TEACHER_LINKED_UID_FIELD, '==', uid),
+    limit(1)
+  );
+}
+
+/** teachers/{teacherDocId}/Completion/{learningUnitId} */
+export function teacherCompletionDoc(
+  teacherDocId: string,
+  learningUnitId: string
+): DocumentReference {
+  assertSafeSegment(teacherDocId, 'teacher id');
+  assertSafeSegment(learningUnitId, 'learning unit id');
+
+  return doc(
+    db,
+    COLLECTIONS.teachers,
+    teacherDocId,
+    COMPLETION_SUBCOLLECTION,
+    learningUnitId
+  );
+}
+
+/** Every completion row for one teacher: teachers/{teacherDocId}/Completion */
+export function teacherCompletionCollection(teacherDocId: string): CollectionReference {
+  assertSafeSegment(teacherDocId, 'teacher id');
+
+  return collection(db, COLLECTIONS.teachers, teacherDocId, COMPLETION_SUBCOLLECTION);
+}
+
+/* ==========================================================================
+   ACTIVITY PROGRESS — which steps were opened, per classroom and unit
+
+     teachers/{teacherDocId}/activityProgress/{classroomId}_{learningUnitId}
+        teacherId        the account, repeated as a field
+        classroomId      \
+        luId              } the two halves of the id, repeated as fields
+        completedStages  the step indices opened, IN VISIT ORDER
+        updatedAt
+
+   READ OFF THE LIVE DOCUMENTS, not inferred. Production's
+   `Teachers/lVjawPYx.../activityProgress` holds exactly two rows:
+   `2jUYI7m4..._1RZWp4EQ...` with `completedStages: [2]`, and
+   `QIdSntxe..._3BFIIOqg...` with `[0, 1]`. Both ids are `classroomId_luId`,
+   verified by recomposing them from the fields.
+
+   THE SEPARATOR IS AN UNDERSCORE HERE AND A HYPHEN IN `submissions`. That is
+   production's own inconsistency and it is copied rather than tidied, because a
+   row written with the wrong separator is a row its readers cannot find.
+
+   NOT THE SAME NUMBER AS Completion, AND NOT A BUG. `Completion` counts steps
+   per WORKFLOW; this lists step indices per CLASSROOM AND UNIT. Production
+   disagrees with itself on the same unit — `3BFIIOqg8YRK9hGU7m0r` has
+   `Completion` recording 7 and 3 across two workflows while this records two
+   stages — because the two are written by different flows and answer different
+   questions. Anyone reconciling them is comparing the wrong things.
+
+   ORDER IS DATA, NOT NOISE. Production holds `[0,2,1,4,5,3]`, `[1,0]` and
+   `[5,4,3,2,1,0]`, so the array is the sequence steps were opened in,
+   deduplicated, and must not be sorted on write.
+   ========================================================================== */
+
+export const ACTIVITY_PROGRESS_SUBCOLLECTION = 'activityProgress';
+
+/** `{classroomId}_{learningUnitId}` — production's own concatenation. */
+export function activityProgressId(classroomId: string, learningUnitId: string): string {
+  assertSafeSegment(classroomId, 'classroom id');
+  assertSafeSegment(learningUnitId, 'learning unit id');
+
+  return `${classroomId}_${learningUnitId}`;
+}
+
+/** teachers/{teacherDocId}/activityProgress/{classroomId}_{learningUnitId} */
+export function teacherActivityProgressDoc(
+  teacherDocId: string,
+  classroomId: string,
+  learningUnitId: string
+): DocumentReference {
+  assertSafeSegment(teacherDocId, 'teacher id');
+
+  return doc(
+    db,
+    COLLECTIONS.teachers,
+    teacherDocId,
+    ACTIVITY_PROGRESS_SUBCOLLECTION,
+    activityProgressId(classroomId, learningUnitId)
+  );
 }
 
 /* ==========================================================================

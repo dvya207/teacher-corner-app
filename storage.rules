@@ -312,18 +312,26 @@ service firebase.storage {
     }
 
     // ========================================================================
-    // student_submissions — a teacher's uploads against an upload assignment
+    // teacher_submissions — a teacher's uploads against an upload assignment
     // ========================================================================
     //
-    //   student_submissions/{teacherId}/{fileName}
+    //   teacher_submissions/{teacherId}/{fileName}
     //
-    // PRODUCTION'S OWN FOLDER, and the name is inherited rather than chosen: its
-    // TEACHER uploads go here too, alongside the student ones the name refers to.
-    // Verified against a live object,
+    // RENAMED FROM PRODUCTION'S `student_submissions`, and the only place this
+    // app deliberately diverges from production's storage layout. Production
+    // files TEACHER uploads in there alongside student ones — verified against a
+    // live object,
     //   student_submissions/0pDZGzHV3IgQyez1NFFtUPVyyol1/
     //     BTpRtz4EW001Kfd86uch_RwUzSRxhKpykyWrfX8g8_1.jpg
-    // Filing this app's uploads anywhere else would put them where production's
-    // own report screens do not look.
+    // — but this app has no students at all: nothing models one, every upload is
+    // the signed-in teacher's, and its report reads teacher submissions. A folder
+    // named for students holding only teacher files misleads the next reader of
+    // this bucket.
+    //
+    // THE OLD PREFIX IS LEFT IN PLACE BELOW rather than removed, because objects
+    // written before the rename still live under it and their paths are recorded
+    // on submission documents. Read stays open so those keep resolving; write is
+    // closed so nothing new lands there.
     //
     // WRITE YOUR OWN FOLDER ONLY. The first segment is the uploader's uid, so
     // ownership is the PATH — no field to check and no query to filter. One
@@ -349,7 +357,18 @@ service firebase.storage {
     // NO DELETE. A submission is a record of what somebody handed in; replacing it
     // is an overwrite through write, which `versions` on the Firestore document
     // keeps the history of. Nothing in this app deletes one, so nothing is granted.
+    // LEGACY PREFIX — READ ONLY. Objects uploaded before the rename to
+    // `teacher_submissions` still sit here, and their paths are recorded on
+    // submission documents that would otherwise show a broken View. Read stays
+    // open on the same terms as the new folder; WRITE IS CLOSED, so nothing new
+    // can land under a name this app no longer uses. Remove this block once the
+    // remaining objects have been moved or have aged out.
     match /student_submissions/{teacherId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /teacher_submissions/{teacherId}/{fileName} {
       allow read: if request.auth != null;
 
       allow write: if request.auth != null

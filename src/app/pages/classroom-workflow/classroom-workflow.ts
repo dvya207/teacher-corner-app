@@ -48,6 +48,7 @@ import {
 } from '../../models/teaching.model';
 import { AssignmentService } from '../../services/assignment.service';
 import { AuthService } from '../../services/auth.service';
+import { CompletionService, NO_LINKED_TEACHER } from '../../services/completion.service';
 import { ClassroomService } from '../../services/classroom.service';
 import {
   EXTERNAL_RESOURCES_CATEGORY,
@@ -149,6 +150,7 @@ export class ClassroomWorkflow implements OnInit {
   private pageContext = inject(PageContextService);
   private config = inject(ConfigurationService);
   private auth = inject(AuthService);
+  private completion = inject(CompletionService);
   private sanitizer = inject(DomSanitizer);
 
   readonly classroomId = signal('');
@@ -234,11 +236,16 @@ export class ClassroomWorkflow implements OnInit {
    * document. Read once, lazily, and only when a step actually carries an
    * assignment block: most do not.
    *
-   * OWNER-SCOPED, WHICH IS A REAL LIMIT. `AssignmentService.list()` returns the
-   * caller's own assignments, so a block pointing at somebody else's resolves to
-   * nothing and the pane falls back to what the block itself carries. Stated here
-   * rather than hidden because the symptom — an assignment with no instructions —
-   * looks like missing data instead of a permission boundary.
+   * NO LONGER OWNER-SCOPED. `AssignmentService.list()` used to return only the
+   * caller's own assignments, so a block pointing at somebody else's resolved to
+   * nothing and the pane fell back to what the block itself carried — an
+   * assignment with no instructions, which looked like missing data rather than a
+   * boundary. It now reads every assignment, which the rules always permitted, so
+   * a block resolves for whoever opens it regardless of who built it.
+   *
+   * AN UNRESOLVED BLOCK IS THEREFORE A REAL ABSENCE NOW: the assignment has been
+   * deleted, or the id on the block is wrong. It is no longer explained by the
+   * reader being the wrong person.
    */
   readonly assignments = signal<Assignment[]>([]);
   private assignmentsRequested = false;
@@ -308,9 +315,13 @@ export class ClassroomWorkflow implements OnInit {
    * Whether the assignment could not be resolved at all.
    *
    * TOLD APART FROM "an assignment with no questions", because the causes differ
-   * and so does what to do about it: an unresolved assignment is usually somebody
-   * else's — `AssignmentService.list()` is owner-scoped — while an empty one is a
-   * quiz nobody has added questions to yet.
+   * and so does what to do about it: an unresolved assignment has been deleted or
+   * the block's id is wrong, while an empty one is a quiz nobody has added
+   * questions to yet.
+   *
+   * IT USED TO MEAN "somebody else's", back when the list was owner-scoped. That
+   * cause is gone, so this state is now genuinely rare and worth investigating
+   * rather than shrugging at.
    */
   readonly assignmentMissing = computed(() => {
     const content = this.openContent();
@@ -387,9 +398,32 @@ export class ClassroomWorkflow implements OnInit {
     this.playing.set(false);
   }
 
+  /**
+   * The teacher record everything private to this teacher is written under.
+   *
+   * THROWS RATHER THAN RETURNING A BLANK. Every submission root is
+   * `teachers/{teacherDocId}/...`, and an empty id would build
+   * `teachers//submissions/...`, which is not this teacher's data and may not be
+   * anybody's. Sign-in now links or creates a record for every account, so this
+   * failing means the resolve did not happen or was refused, and in both cases
+   * refusing to write is the only safe answer.
+   */
+  private requireTeacherDocId(): string {
+    const teacherDocId = this.teacherDocId();
+
+    if (!teacherDocId) {
+      throw new Error(
+        'This account is not linked to a teacher record, so nothing can be saved against it.'
+      );
+    }
+
+    return teacherDocId;
+  }
+
   private submissionTarget(): SubmissionTarget {
     return {
       uid: this.auth.requireUid(),
+      teacherDocId: this.requireTeacherDocId(),
       classroomId: this.classroomId(),
       programmeId: this.programmeId(),
       workflowId: this.workflow()?.docId ?? ''
@@ -893,6 +927,7 @@ export class ClassroomWorkflow implements OnInit {
         return;
       }
 
+      await this.resolveTeacherRecord();
       await this.loadTemplates(classroom);
       await this.loadUnitResources(classroom);
 
@@ -932,6 +967,7 @@ export class ClassroomWorkflow implements OnInit {
 
         if (stored) {
           this.adopt(stored);
+          await this.loadCompletion();
 
           return;
         }
@@ -1041,6 +1077,161 @@ export class ClassroomWorkflow implements OnInit {
     // The step may carry an assignment block, whose instructions and slots live
     // on the assignment document rather than on the block.
     void this.loadAssignments();
+
+    this.recordProgress(index);
+  }
+
+  /**
+   * The teacher record this account is linked to, resolved once per load.
+   *
+   * Null until [load] has run, and STAYS null for an account with no record —
+   * see [completionError], which is what the reader is told instead.
+   */
+  private readonly teacherDocId = signal<string | null>(null);
+
+  /**
+   * Why progress is not being recorded, when it is not.
+   *
+   * SHOWN RATHER THAN SWALLOWED, but it does not block the stepper. An account
+   * with no teacher record can still read every step; what it cannot do is have
+   * that reading counted, and silently dropping the write would leave a teacher
+   * believing a finished unit had been recorded. Navigation is not the thing at
+   * fault, so it is not the thing to break.
+   */
+  readonly completionError = signal('');
+
+  /** How far this workflow has been recorded as reaching, for the step rail. */
+  readonly completedSteps = signal(0);
+
+  /** Which step indices have been opened, in the order they were opened. */
+  readonly completedStages = signal<number[]>([]);
+
+  /**
+   * Resolves the teacher record and reads back what has already been recorded.
+   *
+   * Failures here never reach [error]: that banner means the workflow could not
+   * be loaded, and it can be.
+   */
+  /**
+   * Finds the teacher record for this session. RUN EARLY, BEFORE THE WORKFLOW.
+   *
+   * It used to run only after a workflow was adopted, which was fine while the
+   * id was needed for progress alone. It is not fine now: submissions, uploads
+   * and forms all root on the teacher document too, and a unit with no workflow
+   * still has assignments to submit. Resolving here means the id is present for
+   * every path on the page, not just the one that steps.
+   */
+  private async resolveTeacherRecord(): Promise<void> {
+    this.completionError.set('');
+    this.teacherDocId.set(null);
+
+    const uid = this.auth.currentUid();
+
+    if (!uid) return;
+
+    try {
+      this.teacherDocId.set(await this.completion.teacherDocIdFor(uid));
+    } catch (error) {
+      this.completionError.set(
+        (error as Error)?.message === NO_LINKED_TEACHER
+          ? 'This account is not linked to a teacher record, so progress and ' +
+              'submissions cannot be saved. Sign out and back in, or ask whoever ' +
+              'registered you to link it.'
+          : 'Your progress could not be recorded just now.'
+      );
+    }
+  }
+
+  private async loadCompletion(): Promise<void> {
+    this.completedSteps.set(0);
+    this.completedStages.set([]);
+
+    const teacherDocId = this.teacherDocId();
+
+    if (!teacherDocId) return;
+
+    try {
+      const workflowId = this.workflow()?.docId ?? '';
+
+      if (workflowId && this.unitId()) {
+        const stored = await this.completion.completionFor(teacherDocId, this.unitId());
+
+        this.completedSteps.set(stored[workflowId] ?? 0);
+
+        /*
+         * OPENING THE WORKFLOW IS REACHING ITS FIRST STEP, so the step showing
+         * on arrival counts. Without this a teacher who reads step 1 of 7 and
+         * leaves is recorded as having reached nothing, which is not what the
+         * rail beside them showed. The write is skipped when it would not raise
+         * the stored number, so a second visit costs a read and no write.
+         */
+        this.recordProgress(this.currentIndex());
+      }
+    } catch {
+      this.completionError.set('Your progress could not be recorded just now.');
+    }
+  }
+
+  /**
+   * Records the furthest step reached, if there is anywhere to record it.
+   *
+   * FIRE AND FORGET, and deliberately not awaited by [selectStep]: the pane must
+   * paint the moment the step is clicked, and a round trip in front of that would
+   * make every step feel slow to serve a number the reader is not waiting on.
+   */
+  private recordProgress(index: number): void {
+    const teacherDocId = this.teacherDocId();
+    const workflowId = this.workflow()?.docId ?? '';
+    const learningUnitId = this.unitId();
+    const stepCount = this.steps().length;
+
+    if (!teacherDocId || !workflowId || !learningUnitId || stepCount === 0) {
+      return;
+    }
+
+    void this.completion
+      .recordFurthestStep({
+        teacherDocId,
+        learningUnitId,
+        workflowId,
+        reachedIndex: index,
+        stepCount
+      })
+      .then(stored => this.completedSteps.set(stored))
+      .catch(() =>
+        this.completionError.set('Your progress could not be recorded just now.')
+      );
+
+    /*
+     * TWO RECORDS, WRITTEN TOGETHER AND FAILING SEPARATELY. Production keeps a
+     * count per workflow and a list of opened step indices per classroom and
+     * unit, and neither can be derived from the other. They are not chained: one
+     * failing must not suppress the other, because a half-written pair is still
+     * better than none and the two are read by different screens.
+     *
+     * teacherId IS THE AUTH UID, matching what this app already writes into
+     * `submissions.teacherId`. Production puts its Teachers document id here,
+     * which happens to BE the uid there; in this app the teacher record has an
+     * id of its own and the two differ. This is the one field where the choice
+     * shows, and it is made here rather than inside the service so it is visible.
+     */
+    const uid = this.auth.currentUid();
+
+    if (uid) {
+      void this.completion
+        .recordVisitedStage({
+          teacherDocId,
+          teacherId: uid,
+          classroomId: this.classroomId(),
+          learningUnitId,
+          stageIndex: index,
+          stepCount
+        })
+        .then(stages => this.completedStages.set(stages))
+        .catch(() =>
+          this.completionError.set('Your progress could not be recorded just now.')
+        );
+    }
   }
 
   previous(): void {
@@ -1129,13 +1320,18 @@ export class ClassroomWorkflow implements OnInit {
   private uploadTarget(): UploadTarget | null {
     const assignmentId = this.openContent()?.assignmentId ?? '';
     const uid = this.auth.currentUid();
+    const teacherDocId = this.teacherDocId();
 
-    if (!assignmentId || !uid) {
+    // NULL RATHER THAN A THROW, matching what this builder already did for a
+    // missing uid: its callers treat null as "no upload slot here" and render
+    // accordingly, where a throw would break the pane.
+    if (!assignmentId || !uid || !teacherDocId) {
       return null;
     }
 
     return {
       uid,
+      teacherDocId,
       classroomId: this.classroomId(),
       programmeId: this.programmeId(),
       workflowId: this.workflow()?.docId ?? '',
@@ -1251,13 +1447,17 @@ export class ClassroomWorkflow implements OnInit {
   private formTarget(): FormSubmissionTarget | null {
     const assignment = this.openAssignment();
     const uid = this.auth.currentUid();
+    const teacherDocId = this.teacherDocId();
 
-    if (!uid || assignment?.type !== 'FORM') {
+    // Same null-not-throw reasoning as uploadTarget: the caller renders around
+    // a null rather than failing.
+    if (!uid || !teacherDocId || assignment?.type !== 'FORM') {
       return null;
     }
 
     return {
       uid,
+      teacherDocId,
       classroomId: this.classroomId(),
       programmeId: this.programmeId(),
       workflowId: this.workflow()?.docId ?? '',

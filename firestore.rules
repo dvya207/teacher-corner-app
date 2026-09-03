@@ -426,6 +426,96 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // Teachers — WORKFLOW COMPLETION
+    // ========================================================================
+    //
+    //   teachers/{teacherId}/Completion/{learningUnitId}
+    //
+    // Production's own shape and production's own root, which is the ONE place
+    // this app nests private teacher data under `teachers` rather than under
+    // `users`. Completion is progress through a CLASSROOM's workflow, and the
+    // classroom is reached through the teacher record.
+    //
+    // THE OWNER IS teacherMeta.uid, NOT ownerId. `ownerId` is whoever registered
+    // the record — normally a coordinator acting for somebody else — so granting
+    // on it would let an administrator write progress as their teachers and stop
+    // the teacher writing their own. `teacherMeta.uid` is stamped when the
+    // teacher themselves signs in against the record.
+    //
+    // A get() IS UNAVOIDABLE HERE. Every other rule in this file decides from
+    // the path or from the incoming document; this one has to consult the PARENT,
+    // because the owning uid lives on the teacher record and a rule cannot run a
+    // query. That is one extra document read per evaluation, billed to whoever
+    // is writing.
+    //
+    // NO LIST, and no rule on the collection itself: a teacher reads their own
+    // rows through this same match, and nothing needs to enumerate another
+    // teacher's progress.
+    match /teachers/{teacherId}/Completion/{learningUnitId} {
+      allow read, write: if signedIn()
+        && get(/databases/$(database)/documents/teachers/$(teacherId))
+             .data.teacherMeta.uid == request.auth.uid;
+    }
+
+    // ========================================================================
+    // Teachers — ACTIVITY PROGRESS
+    // ========================================================================
+    //
+    //   teachers/{teacherId}/activityProgress/{stageId}
+    //
+    // Same owner test as Completion above, and same reasoning: the owning uid is
+    // teacherMeta.uid on the PARENT, not ownerId, so the rule has to get() it.
+    //
+    // A SEPARATE MATCH RATHER THAN A {document=**} WILDCARD over the teacher.
+    // A recursive grant would also cover every subcollection anybody adds later,
+    // including ones that should not be client-writable, and the two that exist
+    // are cheap to name.
+    match /teachers/{teacherId}/activityProgress/{stageId} {
+      allow read, write: if signedIn()
+        && get(/databases/$(database)/documents/teachers/$(teacherId))
+             .data.teacherMeta.uid == request.auth.uid;
+    }
+
+    // ========================================================================
+    // Teachers — SUBMISSIONS
+    // ========================================================================
+    //
+    //   teachers/{teacherId}/submissions/{summaryId}
+    //   teachers/{teacherId}/submissions/{summaryId}/attempts/{attemptId}
+    //   teachers/{teacherId}/submissions/{summaryId}/submissionMeta/{metaId}
+    //
+    // Moved here from users/{uid}/submissions, which needed no rule of its own
+    // because users/{uid}/{document=**} already covered it. This root does not
+    // have that luxury: the owning uid is teacherMeta.uid on the PARENT, so each
+    // level needs the same get() the two blocks above use.
+    //
+    // THE NESTED LEVELS ARE NAMED, not swept up in a wildcard. A submission is
+    // three documents in one transaction — summary, attempt, meta — and all three
+    // must be writable together or a submit half-lands. Naming them keeps that
+    // explicit and keeps any future subcollection out.
+    //
+    // WRITE, NOT CREATE-ONLY. An attempt is set() inside a transaction that also
+    // increments attemptsCount on the summary, so the summary is updated rather
+    // than created after the first submit.
+    match /teachers/{teacherId}/submissions/{summaryId} {
+      allow read, write: if signedIn()
+        && get(/databases/$(database)/documents/teachers/$(teacherId))
+             .data.teacherMeta.uid == request.auth.uid;
+    }
+
+    match /teachers/{teacherId}/submissions/{summaryId}/attempts/{attemptId} {
+      allow read, write: if signedIn()
+        && get(/databases/$(database)/documents/teachers/$(teacherId))
+             .data.teacherMeta.uid == request.auth.uid;
+    }
+
+    match /teachers/{teacherId}/submissions/{summaryId}/submissionMeta/{metaId} {
+      allow read, write: if signedIn()
+        && get(/databases/$(database)/documents/teachers/$(teacherId))
+             .data.teacherMeta.uid == request.auth.uid;
+    }
+
+    // ========================================================================
     // Teachers — DELETED
     // ========================================================================
     //

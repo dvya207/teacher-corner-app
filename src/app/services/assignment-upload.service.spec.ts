@@ -52,6 +52,9 @@ function slot(overrides: Partial<UploadSlot> = {}): UploadSlot {
 function target(overrides: Partial<UploadTarget> = {}): UploadTarget {
   return {
     uid: 'teacher-1',
+    // The teacher RECORD's id, distinct from the uid: submissions root on the
+    // record, while Storage paths and teacherId still key on the account.
+    teacherDocId: 'teacher-doc-1',
     classroomId: 'class-1',
     programmeId: 'prog-1',
     workflowId: 'wf-1',
@@ -233,40 +236,74 @@ describe('AssignmentUploadService', () => {
   describe('where the file is filed', () => {
 
     /**
-     * PRODUCTION'S OWN PATH FORMAT, and this is the test that matters most: its
-     * screens compute the same string to find a submission, so a different shape
-     * uploads successfully to somewhere nothing looks. Checked against a live
-     * object — `student_submissions/0pDZ…/BTpRtz4EW001Kfd86uch_RwUzSRxhKpykyWrfX8g8_1.jpg`
-     * — which is folder / uid / programme _ assignment _ slot . ext.
+     * PRODUCTION'S PATH FORMAT UNDER THIS APP'S OWN FOLDER, and this is the test
+     * that matters most: the shape after the folder is what a reader computes to
+     * find a submission, so getting it wrong uploads successfully to somewhere
+     * nothing looks. Checked against a live production object —
+     * `student_submissions/0pDZ…/BTpRtz4EW001Kfd86uch_RwUzSRxhKpykyWrfX8g8_1.jpg`
+     * — which is folder / uid / programme _ assignment _ slot . ext. Everything
+     * after the folder is copied from it verbatim.
      */
-    it('builds production\'s path', () => {
+    it('builds production\'s path shape', () => {
       const path = service().pathFor(target(), slot({ submissionId: 3 }), 'photo.jpg');
 
-      expect(path).toBe('student_submissions/teacher-1/prog-1_asg-1_3.jpg');
+      expect(path).toBe('teacher_submissions/teacher-1/prog-1_asg-1_3.jpg');
     });
 
-    it('keeps production\'s folder name', () => {
-      expect(SUBMISSION_STORAGE_FOLDER).toBe('student_submissions');
+    /**
+     * THE FOLDER IS RENAMED, DELIBERATELY, and pinned so the divergence stays a
+     * decision rather than drift.
+     *
+     * Production calls it `student_submissions` and files teacher uploads there
+     * alongside student ones. This app has no students — nothing models one and
+     * every upload is the signed-in teacher's — so a folder named for students
+     * holding only teacher files misleads whoever opens the bucket. The cost is
+     * that production's own report screens would not find these files, and that
+     * cost is already paid: those screens read production's database, not this
+     * one.
+     */
+    it('files under teacher_submissions, NOT production\'s student_submissions', () => {
+      expect(SUBMISSION_STORAGE_FOLDER).toBe('teacher_submissions');
+    });
+
+    /**
+     * THE FIRST SEGMENT IS THE UID, NOT THE TEACHER DOCUMENT ID.
+     *
+     * Firestore roots a submission on the teacher record; Storage roots it on the
+     * account, because the storage rule compares the first segment against
+     * `request.auth.uid` and a file's attribution belongs to whoever uploaded it.
+     * The two ids are different values in this app, so this is worth pinning:
+     * using the record id here would make every upload fail the rule.
+     */
+    it('keys the folder on the UID, not the teacher record id', () => {
+      const path = service().pathFor(
+        target({ uid: 'auth-uid-9', teacherDocId: 'teacher-doc-1' }),
+        slot({ submissionId: 1 }),
+        'photo.jpg'
+      );
+
+      expect(path).toBe('teacher_submissions/auth-uid-9/prog-1_asg-1_1.jpg');
+      expect(path).not.toContain('teacher-doc-1');
     });
 
     /** THE EXTENSION IS LOWERCASED, so one slot cannot hold both .JPG and .jpg. */
     it('lowercases the extension', () => {
       expect(service().pathFor(target(), slot(), 'PHOTO.JPG')).toBe(
-        'student_submissions/teacher-1/prog-1_asg-1_1.jpg'
+        'teacher_submissions/teacher-1/prog-1_asg-1_1.jpg'
       );
     });
 
     /** The last dot wins, so a dotted name does not lose its real extension. */
     it('uses the last extension of a dotted name', () => {
       expect(service().pathFor(target(), slot(), 'my.holiday.photo.png')).toBe(
-        'student_submissions/teacher-1/prog-1_asg-1_1.png'
+        'teacher_submissions/teacher-1/prog-1_asg-1_1.png'
       );
     });
 
     /** No extension, no trailing dot — a path ending in '.' is not a filename. */
     it('leaves no trailing dot for a file with no extension', () => {
       expect(service().pathFor(target(), slot(), 'README')).toBe(
-        'student_submissions/teacher-1/prog-1_asg-1_1'
+        'teacher_submissions/teacher-1/prog-1_asg-1_1'
       );
     });
 

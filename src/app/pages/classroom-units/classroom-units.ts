@@ -22,6 +22,12 @@ import {
 import { ClassroomService } from '../../services/classroom.service';
 import { ConfigurationService } from '../../services/configuration.service';
 import { LearningUnitService } from '../../services/learning-unit.service';
+import { AuthService } from '../../services/auth.service';
+import {
+  CompletionService,
+  WorkflowCompletion,
+  completionPercent
+} from '../../services/completion.service';
 import { PageContextService } from '../../services/page-context.service';
 import { ProgrammeService } from '../../services/programme.service';
 import { ResourceLinkService } from '../../services/resource-link.service';
@@ -51,6 +57,16 @@ export interface ClassroomUnit {
   scheduled: string;
   /** 'TACtivity', 'MuT' — the badge on the thumbnail, and what the filter picks. */
   type: string;
+  /**
+   * How many steps this unit's workflow has, or 0 when it has none.
+   *
+   * The denominator of the completion figure. Comes off the same workflow read
+   * that supplies [workflowMinutes], so tracking progress costs no extra round
+   * trip.
+   */
+  stepCount: number;
+  /** The workflow this class runs for the unit, or '' when it has not started one. */
+  workflowId: string;
 }
 
 /**
@@ -97,6 +113,8 @@ export class ClassroomUnits implements OnInit {
   private workflows = inject(WorkflowService);
   private config = inject(ConfigurationService);
   private pageContext = inject(PageContextService);
+  private auth = inject(AuthService);
+  private completion = inject(CompletionService);
 
   readonly classroom = signal<Classroom | null>(null);
   readonly units = signal<ClassroomUnit[]>([]);
@@ -150,23 +168,21 @@ export class ClassroomUnits implements OnInit {
   }
 
   /**
-   * Completion, in percent. ZERO, for every unit, and not as a placeholder.
+   * Completion is now TRACKED, per unit — see [completionFor] below.
    *
-   * Production computes this from student submissions against the unit's
-   * workflow. This app records neither — a classroom carries a student COUNTER
-   * and no students, and there is no workflow to progress through — so nothing
-   * has been recorded and zero is the true answer. A number chosen to look
-   * plausible would be worse than the honest one, and would be indistinguishable
-   * from real data to whoever read it next.
+   * It used to be a hardcoded zero, on the honest grounds that this app recorded
+   * no progress to derive it from. It does now: the stepper writes the furthest
+   * step reached to `teachers/{teacherDocId}/Completion/{learningUnitId}` in
+   * production's own shape, and this page divides that by the workflow's step
+   * count.
    *
-   * A constant rather than a computed, because there is nothing to derive it
-   * from. When submissions exist it becomes a per-unit lookup, and the card
-   * already reads it per unit.
+   * IT IS THIS TEACHER'S PROGRESS, NOT THE CLASS'S, which is a real difference
+   * from production: production computes completion from STUDENT submissions
+   * against the unit, and this app has a student counter and no students. What is
+   * shown is how far the signed-in teacher has walked the workflow.
    */
-  readonly completion = 0;
-
   readonly progressTitle =
-    'Completion is not tracked in this app: it needs student submissions, which are not recorded here.';
+    'How far through this unit\u2019s workflow you have got, from the steps you have opened.';
 
   /**
    * Whether this unit already has a workflow, from the CLASSROOM'S OWN ENTRY.
@@ -412,7 +428,9 @@ export class ClassroomUnits implements OnInit {
           workflowMinutes: 0,
           imagePath: unit.learningUnitPreviewImage || unit.learningUnitImage || '',
           scheduled: scheduleLabel(programme, unit.docId),
-          type: unit.type
+          type: unit.type,
+          stepCount: 0,
+          workflowId: ''
         }))
     );
 
@@ -452,26 +470,91 @@ export class ClassroomUnits implements OnInit {
         try {
           const workflow = await this.workflows.get(entry.workflowId);
 
+          const steps = workflow?.workflowSteps ?? [];
+
           return {
             learningUnitId: entry.learningUnitId,
-            minutes: workflowMinutes(workflow?.workflowSteps ?? [])
+            minutes: workflowMinutes(steps),
+            stepCount: steps.length,
+            workflowId: entry.workflowId
           };
         } catch {
           /* A refused or missing workflow leaves the card on the unit's own
              time, which is what it is already showing. */
-          return { learningUnitId: entry.learningUnitId, minutes: 0 };
+          return {
+            learningUnitId: entry.learningUnitId,
+            minutes: 0,
+            stepCount: 0,
+            workflowId: ''
+          };
         }
       })
     );
 
-    const byUnit = new Map(totals.map(total => [total.learningUnitId, total.minutes]));
+    const byUnit = new Map(totals.map(total => [total.learningUnitId, total]));
 
     this.units.update(units =>
-      units.map(unit => ({
-        ...unit,
-        workflowMinutes: byUnit.get(unit.docId) ?? 0
-      }))
+      units.map(unit => {
+        const total = byUnit.get(unit.docId);
+
+        return {
+          ...unit,
+          workflowMinutes: total?.minutes ?? 0,
+          stepCount: total?.stepCount ?? 0,
+          workflowId: total?.workflowId ?? ''
+        };
+      })
     );
+
+    await this.loadCompletion();
+  }
+
+  /**
+   * What this teacher has been recorded as completing, keyed by learning unit.
+   *
+   * ONE READ FOR THE WHOLE PAGE. The collection holds a document per unit this
+   * teacher has started, so a programme of six units costs one read rather than
+   * six, and units never started are simply absent.
+   */
+  private readonly completionByUnit = signal<Record<string, WorkflowCompletion>>({});
+
+  private async loadCompletion(): Promise<void> {
+    const uid = this.auth.currentUid();
+
+    if (!uid) {
+      return;
+    }
+
+    try {
+      const teacherDocId = await this.completion.teacherDocIdFor(uid);
+
+      this.completionByUnit.set(await this.completion.allCompletion(teacherDocId));
+    } catch {
+      /*
+       * LEFT AT ZERO, AND NOT ANNOUNCED HERE. An account with no teacher record
+       * gets told so on the stepper, which is the screen that would otherwise
+       * record progress; repeating it on a read-only list would be noise on a
+       * page the reader cannot act from.
+       */
+      this.completionByUnit.set({});
+    }
+  }
+
+  /**
+   * Completion for one unit, in percent.
+   *
+   * ZERO IS NOW A REAL ANSWER RATHER THAN THE ONLY ANSWER. It means one of three
+   * things, all of them honestly zero: the unit has no workflow, the workflow has
+   * no steps, or this teacher has not opened it.
+   */
+  completionFor(unit: ClassroomUnit): number {
+    if (!unit.workflowId || unit.stepCount <= 0) {
+      return 0;
+    }
+
+    const recorded = this.completionByUnit()[unit.docId]?.[unit.workflowId] ?? 0;
+
+    return completionPercent(recorded, unit.stepCount);
   }
 
   /**

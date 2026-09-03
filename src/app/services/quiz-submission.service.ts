@@ -8,10 +8,10 @@ import {
 
 import { db } from '../core/firebase';
 import {
+  activeTeacherDoc,
   newSubmissionMetaDoc,
   submissionAttemptDoc,
   submissionSummaryDoc,
-  userProfileDoc
 } from '../core/firestore-paths';
 import { QuizAssignment, QuizQuestion } from '../models/teaching.model';
 import { stripUndefined } from './workflow-template.service';
@@ -24,6 +24,17 @@ import { stripUndefined } from './workflow-template.service';
  */
 export interface SubmissionTarget {
   uid: string;
+  /**
+   * The TEACHER RECORD's document id — the root the submission is written under.
+   *
+   * SEPARATE FROM [uid], and they are different values. The uid identifies the
+   * ACCOUNT and still stamps `teacherId` and the Storage path; this identifies
+   * the teacher RECORD, which is what production roots submissions on. Resolved
+   * once by the caller rather than looked up here, so one submit costs one query
+   * and not three.
+   */
+  teacherDocId: string;
+
   classroomId: string;
   programmeId: string;
   /** '' where the quiz is opened outside a workflow. Written as null, as production does. */
@@ -118,7 +129,11 @@ export class QuizSubmissionService {
     payload: AttemptPayload,
     maxAttempts: number
   ): Promise<SubmissionResult> {
-    const summary = submissionSummaryDoc(where.uid, where.classroomId, where.programmeId);
+    const summary = submissionSummaryDoc(
+      where.teacherDocId,
+      where.classroomId,
+      where.programmeId
+    );
 
     const result = await runTransaction(db, async transaction => {
       const snapshot = await transaction.get(summary);
@@ -210,7 +225,7 @@ export class QuizSubmissionService {
      */
     try {
       await setDoc(
-        userProfileDoc(where.uid),
+        activeTeacherDoc(where.teacherDocId),
         { attemptedAssignments: arrayUnion(payload.id) },
         { merge: true }
       );

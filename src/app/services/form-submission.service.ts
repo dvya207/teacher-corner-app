@@ -7,7 +7,7 @@ import {
 } from 'firebase/firestore';
 
 import { db } from '../core/firebase';
-import { submissionSummaryDoc, userProfileDoc } from '../core/firestore-paths';
+import { activeTeacherDoc, submissionSummaryDoc } from '../core/firestore-paths';
 import { FormQuestion } from '../models/teaching.model';
 import { ConfigurationService } from './configuration.service';
 import { stripUndefined } from './workflow-template.service';
@@ -15,6 +15,17 @@ import { stripUndefined } from './workflow-template.service';
 /** Where a form submission belongs. Same keying as an upload. */
 export interface FormSubmissionTarget {
   uid: string;
+  /**
+   * The TEACHER RECORD's document id — the root the submission is written under.
+   *
+   * SEPARATE FROM [uid], and they are different values. The uid identifies the
+   * ACCOUNT and still stamps `teacherId` and the Storage path; this identifies
+   * the teacher RECORD, which is what production roots submissions on. Resolved
+   * once by the caller rather than looked up here, so one submit costs one query
+   * and not three.
+   */
+  teacherDocId: string;
+
   classroomId: string;
   programmeId: string;
   /** '' outside a workflow, which changes the KEY the record hangs under. */
@@ -103,7 +114,7 @@ export class FormSubmissionService {
    */
   async save(where: FormSubmissionTarget, answers: FormAnswers): Promise<number> {
     const summary = submissionSummaryDoc(
-      where.uid,
+      where.teacherDocId,
       where.classroomId,
       where.programmeId
     );
@@ -177,7 +188,7 @@ export class FormSubmissionService {
      */
     try {
       await setDoc(
-        userProfileDoc(where.uid),
+        activeTeacherDoc(where.teacherDocId),
         { attemptedAssignments: arrayUnion(answers.id) },
         { merge: true }
       );
