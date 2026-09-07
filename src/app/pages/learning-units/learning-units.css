@@ -167,7 +167,13 @@
 }
 
 .pill {
-  padding: 7px 16px;
+  /* inline-flex so the count badge sits on the label's baseline row. The right
+     padding is tighter than the left: the badge carries its own inner padding,
+     and 16px on both sides left the chip looking adrift from its own pill. */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px 7px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
   background: var(--white);
@@ -193,6 +199,32 @@
   border-color: var(--accent-500);
   color: var(--accent-500);
   font-weight: 600;
+}
+
+/* ---- Count badge --------------------------------------------------------
+   The number production shows inside each pill: a chip of its own rather than
+   bare text after the label, so "Draft 659" cannot be misread as one phrase.
+   Bolder and a step smaller than the label, which keeps the digits legible
+   while leaving the label the louder half. */
+
+.pill-count {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--ink-100);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  color: var(--ink-500);
+}
+
+/* On the active pill the chip has to read against --tint-blue rather than
+   white, so --ink-100 disappears into it. Mixed from --accent-500 instead of
+   a sampled hex, so the chip tracks the accent if the palette moves: 30% over
+   white lands on production's own #b9e3ff. */
+.pill.is-active .pill-count {
+  background: color-mix(in srgb, var(--accent-500) 30%, var(--white));
+  color: var(--accent-800);
 }
 
 .toolbar-right {
@@ -690,54 +722,41 @@
    against the inactive half sitting next to it, and a gap between them loses
    that comparison. */
 
-.view-toggle {
-  display: inline-flex;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--ink-050);
-}
-
-.vt-btn {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 26px;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--ink-500);
-  transition: background 0.15s var(--ease), color 0.15s var(--ease),
-              box-shadow 0.15s var(--ease);
-}
-
-.vt-btn:hover {
-  color: var(--ink-900);
-}
-
-.vt-btn.is-on {
-  background: var(--white);
-  color: var(--accent-600);
-  box-shadow: var(--shadow-sm);
-}
+/* .view-toggle and .vt-btn WERE HERE and are now in styles.css.
+   The classroom page's action strip needs the same control, and a component
+   stylesheet is scoped — a second copy there would be two sets of rules to keep
+   in step, which is how .visually-hidden ended up defined in exactly one
+   component and missing everywhere else. */
 
 /* ==========================================================================
    Card view
    ==========================================================================
-   auto-fill rather than a fixed column count, so the grid reflows with the
-   sidebar collapsed instead of needing a breakpoint per width. 244px is the
-   narrowest a card can be while the code badge, a two-line name and three
-   badges all still fit without wrapping the badge row. */
+   Three per row at a fixed count rather than auto-fill: on a wide screen
+   auto-fill packed five or six narrow cards into a row where production shows
+   three wide ones, and the artwork is the card, so a wider column reads better
+   than more of them. 244px is the narrowest a card can be while the code
+   badge, a two-line name and three badges all still fit without wrapping the
+   badge row, so below 900px three would fall under that and the count steps
+   down to two, then to one.
+
+   No side padding and no width cap: the grid is a sibling of the toolbar
+   panel, not a child of it, so its own edges ARE the panel's edges and the
+   outer two cards line up with them at every width. The 16px gap and the 18px
+   above are production's, measured off it. */
 
 .lu-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(244px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* 18px, production's own gap. The columns already matched at three across;
+     this and the banner height below were the two numbers that did not. */
   gap: 18px;
-  padding: 18px;
+  margin-top: 18px;
 }
 
 .lu-card {
   display: flex;
   flex-direction: column;
+  cursor: pointer;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--white);
@@ -763,14 +782,58 @@
   position: relative;
   display: grid;
   place-items: center;
-  height: 132px;
+  /*
+   * 180px, which is production's .card-img-area verbatim — not a guess at
+   * "bigger". At 132px the artwork was the smallest part of a card whose whole
+   * job is to be recognised by its artwork, and three across in the same
+   * container width made the cards read as thumbnails rather than as tiles.
+   *
+   * The width was never the problem: both grids are three equal columns, so a
+   * card here has always been the same width as production's. Only the height
+   * differed, which is why these looked small without looking narrow.
+   */
+  height: 180px;
+  /* REQUIRED once an image lives in here. The image fills the banner and the
+     card's top corners are rounded, so without this it squares them off and
+     spills past the card's edge. */
+  overflow: hidden;
+}
+
+/*
+ * THE UNIT'S UPLOADED IMAGE.
+ *
+ * COVER, NOT CONTAIN, and this is the whole answer to "the images are not
+ * fitting". The stored file is whatever was uploaded — usually the full-size
+ * original, since this app has no resize step — so its aspect ratio almost never
+ * matches this 180px banner. `contain` would letterbox it, leaving bands of
+ * gradient down the sides that read as a broken layout; leaving it unsized lets
+ * it overflow the banner entirely. `cover` fills the banner and crops the
+ * overhang, which is what production does and the only fit that looks deliberate
+ * at every aspect ratio.
+ *
+ * `position: absolute; inset: 0` rather than a plain block, because the banner is
+ * a centring grid: as a grid item the image would be sized by its own intrinsic
+ * dimensions and stretch the banner instead of filling it.
+ */
+.card-banner-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 /* The code over the artwork, as production shows it. A translucent slab rather
    than plain text: the gradients run light in places and unbacked white text
    disappears on the amber one. */
 .card-banner-code {
+  /* POSITIONED, so it paints above the image.
+     .card-banner-img is absolutely positioned and this is a static grid item, and
+     a positioned element paints over a static sibling regardless of DOM order —
+     so without this the image covers the code completely. */
+  position: relative;
   padding: 5px 12px;
+  transition: opacity 0.15s var(--ease);
   border-radius: var(--radius-sm);
   background: rgb(17 24 39 / 55%);
   font-size: 13px;
@@ -779,22 +842,59 @@
   color: #fff;
 }
 
-.card-actions {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: flex;
-  gap: 6px;
-  opacity: 0;
-  transition: opacity 0.15s var(--ease);
+/* Over a photograph the slab has to work harder than over a gradient: a
+   photograph can be light, dark and busy within the same 180px, where a gradient
+   is at least predictable. Denser fill and a shadow to lift it off the image. */
+.card-banner-code.over-image {
+  background: rgb(17 24 39 / 68%);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 25%);
 }
 
-/* Revealed on hover AND on focus-within — a keyboard user tabs straight to
-   these buttons, at which point hover has never fired and the actions would
-   otherwise be invisible while focused. */
+/* Centred over the whole banner rather than tucked into its top right corner,
+   which is where production puts the pair. inset: 0 makes this element both the
+   thing that centres the buttons and the surface the dim is painted on, so the
+   open state needs no second overlay div.
+
+   pointer-events has to follow opacity: an invisible sheet over the entire
+   banner would otherwise swallow every click meant for the card, and its two
+   buttons would still be clickable while unseen. */
+.card-actions {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s var(--ease), background 0.15s var(--ease);
+}
+
+/* Revealed on hover, on focus-within — a keyboard user tabs straight to these
+   buttons, at which point hover has never fired and the actions would otherwise
+   be invisible while focused — and on the click that latches .is-open. */
 .lu-card:hover .card-actions,
-.lu-card:focus-within .card-actions {
+.lu-card:focus-within .card-actions,
+.lu-card.is-open .card-actions {
   opacity: 1;
+  pointer-events: auto;
+}
+
+/* The dim belongs to the clicked state alone. Hover leaves the artwork alone,
+   as production's does; a latched card has to look held open rather than merely
+   hovered, and dimming it is also what makes two white buttons legible over
+   artwork that could be any colour. 45%, measured off the screenshot: the
+   banner there comes back at 0.547 of its undimmed value. */
+.lu-card.is-open .card-actions {
+  background: rgb(0 0 0 / 45%);
+}
+
+/* The code badge sits dead centre too, so it would read through the buttons.
+   Out of the way whenever they are showing. */
+.lu-card:hover .card-banner-code,
+.lu-card:focus-within .card-banner-code,
+.lu-card.is-open .card-banner-code {
+  opacity: 0;
 }
 
 .card-act {
@@ -825,7 +925,12 @@
   flex: 1;
   flex-direction: column;
   gap: 5px;
-  padding: 13px 15px 15px;
+  /* 10px at the bottom, not 15px. The badges are the last thing in the card and
+     sit on `margin-top: auto`, so the space under them was reading as an empty
+     strip rather than as breathing room — the row already has 20px of grid gap
+     below it doing that job. Sides stay 15px: they align with the banner's own
+     optical edge and with the table view's first column. */
+  padding: 12px 15px 10px;
 }
 
 .card-code {
@@ -856,7 +961,10 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-top: auto;
-  padding-top: 8px;
+  /* Trimmed with the padding below it. This is the gap to the NAME, and the
+     name already reserves a second line it usually does not use, so 8px on top
+     of that read as a double gap. */
+  padding-top: 6px;
 }
 
 .cb {
@@ -907,9 +1015,14 @@
   color: var(--text-muted);
 }
 
+@media (max-width: 900px) {
+  .lu-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 560px) {
   .lu-grid {
     grid-template-columns: 1fr;
-    padding: 14px;
   }
 }

@@ -4,13 +4,18 @@ import {
   deleteDoc,
   deleteField,
   getDocs,
+  limit,
+  query,
   runTransaction,
   serverTimestamp,
   setDoc,
-  updateDoc
+  updateDoc,
+  where,
+  writeBatch
 } from 'firebase/firestore';
 
 import { db } from '../core/firebase';
+import { toSubscriberDigits } from '../data/institution-options';
 import {
   activeTeacherDoc,
   newActiveTeacherDoc,
@@ -368,10 +373,14 @@ export function stripTeacherTrashMetadata(
  *
  * DELIBERATELY THE SAME SERVICE AS InstitutionService, method for method. Two
  * collections that behave differently for no reason are worse than two that
- * behave identically, and every non-obvious decision here — the ownerId filter,
- * the client-allocated id, serverTimestamp over new Date, delete-as-a-move,
- * the transaction — is explained at length in institution.service.ts. What
- * follows notes only what differs.
+ * behave identically, and every non-obvious decision here — the client-allocated
+ * id, serverTimestamp over new Date, delete-as-a-move, the transaction — is
+ * explained at length in institution.service.ts. What follows notes only what
+ * differs.
+ *
+ * The ownerId filter is no longer among them: reads authorise on authentication
+ * alone in both services. ownerId is still written on create, and the two are
+ * easy to confuse. See [list].
  *
  * NO FIREBASE AUTH USER IS CREATED. A Teacher document is a record ABOUT a
  * person, not an identity they can sign in with. Auth is per-PROJECT, so minting
@@ -379,6 +388,101 @@ export function stripTeacherTrashMetadata(
  * well. The email is stored regardless, so an invite flow can be added
  * later without reshaping a single document.
  */
+/**
+ * Whether this teacher record is the signed-in person's, and still unclaimed.
+ *
+ * EXPORTED AND TESTED DIRECTLY, for the reason `supersededRequestKeys` is: this
+ * rule GRANTS AN IDENTITY. It decides which stored record a Firebase account
+ * becomes, so it has to be visible and pinned rather than buried in a filter
+ * inside a write.
+ *
+ * TWO CONDITIONS, both necessary:
+ *
+ *   - THE NUMBERS MATCH once both sides are normalised. Comparing the raw
+ *     strings meant any formatting difference silently prevented linking, and a
+ *     teacher stayed unlinked forever with nothing in the UI to explain it.
+ *   - THE RECORD CARRIES NO UID. Numbers are recycled, so claiming a record that
+ *     already belongs to an account would hand one teacher another's classrooms.
+ *     Only a blank is filled; a record already holding THIS uid needs no write
+ *     and is not a match either.
+ *
+ * [digits] is expected to be already normalised by the caller, which is why it
+ * is not normalised again here: the caller checks its length before querying.
+ */
+/**
+ * The first usable name among a set of teacher documents.
+ *
+ * Split out of [TeacherService.registeredName] so the rule can be tested without
+ * a Firestore double, the way isUnlinkedMatch above already is. What reaches the
+ * database is then a query and a loop, and the part that makes a decision is
+ * visible on its own.
+ *
+ * DEACTIVATED RECORDS ARE SKIPPED, matching the sign-in gate: `setActive(false)`
+ * is how an administrator withdraws a teacher, and a withdrawn record should not
+ * supply an identity. Absent is active, because `create` does not write the field
+ * and every record predating it would otherwise read as withdrawn.
+ *
+ * A BLANK NAME IS SKIPPED RATHER THAN RETURNED, so a half-filled record does not
+ * shadow a complete one later in the list.
+ *
+ * Goes through teacherMetaFrom rather than reading `teacherMeta` directly, so the
+ * flat legacy fields identity used to live in are picked up too.
+ */
+export function pickRegisteredName(
+  documents: Record<string, unknown>[]
+): { firstName: string; lastName: string } | null {
+  for (const data of documents) {
+    if ((data as { active?: boolean }).active === false) {
+      continue;
+    }
+
+    const meta = teacherMetaFrom(data);
+    const firstName = (meta.firstName ?? '').trim();
+
+    if (firstName) {
+      return { firstName, lastName: (meta.lastName ?? '').trim() };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Whether a record's stored number IS this number, however it was written down.
+ *
+ * BOTH SIDES NORMALISED. The stored value is not trustworthy as a literal: the
+ * wizard, an import and production have each written `+919481635184`,
+ * `094816 35184` and `9481635184` for the same person. A Firestore equality
+ * query compares the raw stored string, so it silently misses every form but the
+ * one it was given — which is exactly the bug linkSignedInUid was fixed for, and
+ * why anything matching on a number has to come through here.
+ *
+ * A NUMBER SHORTER THAN TEN DIGITS NEVER MATCHES. A partial value must not claim
+ * a record.
+ */
+export function matchesStoredNumber(
+  meta: Partial<TeacherMeta>,
+  digits: string
+): boolean {
+  if (digits.length < 10) {
+    return false;
+  }
+
+  return toSubscriberDigits(meta.phoneNumber ?? meta.phone ?? '') === digits;
+}
+
+export function isUnlinkedMatch(
+  meta: Partial<TeacherMeta>,
+  digits: string
+): boolean {
+  /*
+   * ALREADY LINKED IS NOT A MATCH, and that is the safety property. Numbers get
+   * reassigned, so claiming a record that already belongs to an account would
+   * hand one teacher another's classrooms.
+   */
+  return matchesStoredNumber(meta, digits) && !meta.uid;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -387,12 +491,20 @@ export class TeacherService {
   private auth = inject(AuthService);
 
   /**
-   * Every LIVE teacher the signed-in admin owns, newest first.
+   * Every LIVE teacher IN THE DATABASE, newest first. NOT the caller's own.
+   *
+   * THIS IS NOT OWNER-SCOPED, and said plainly because the comment here used to
+   * claim it was. The rules authorise on authentication alone — see the
+   * commented-out ownsExisting() in firestore.rules — so an unfiltered list is
+   * permitted and this returns every teacher any administrator has registered.
+   * ownerId is still stamped on create; nothing reads it back.
+   *
+   * ownedTeachers() in core/firestore-paths.ts is the owner-filtered version and
+   * has no callers. It is the restore path, not a description of this.
    *
    * No "not deleted" filter, because deleted rows are not in this collection at
-   * all. Not filtered by institution either — see ownedTeachers(): a second
-   * where() would need a composite index, and callers narrow client-side on a
-   * result that is already owner-scoped.
+   * all. Not filtered by institution either: a second where() would need a
+   * composite index, and callers narrow client-side.
    */
   async list(): Promise<Teacher[]> {
     const snapshot = await getDocs(activeTeachersCollection());
@@ -403,7 +515,11 @@ export class TeacherService {
       .sort((a, b) => (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0));
   }
 
-  /** The teachers of ONE institution, filtered client-side on the owner-scoped list. */
+  /**
+   * The teachers of ONE institution, filtered client-side on [list].
+   *
+   * Which is every teacher in the database, not the caller's own — see [list].
+   */
   async listForInstitution(institutionId: string): Promise<Teacher[]> {
     const all = await this.list();
 
@@ -614,19 +730,32 @@ export class TeacherService {
    * must not cost anybody their sign-in — see the call site in the login page.
    */
   async linkSignedInUid(phoneNumber: string, uid: string): Promise<number> {
-    const digits = (phoneNumber ?? '').trim();
+    /*
+     * BOTH SIDES ARE NORMALISED, and that is a fix rather than tidying.
+     *
+     * This used to compare the caller's string against the stored field with
+     * `===`. Any difference in formatting therefore meant no link at all, and
+     * silently: a stored `+919481635184` or `094816 35184` never matched a
+     * ten-digit login value, so that teacher signed in and stayed unlinked
+     * forever, with nothing in the UI to say why.
+     *
+     * toSubscriberDigits is the same helper the wizard and every institution form
+     * use, so all three ends of this now agree on what a number is.
+     */
+    const digits = toSubscriberDigits(phoneNumber ?? '');
 
-    if (!digits || !uid) {
+    if (digits.length < 10 || !uid) {
       return 0;
     }
 
     const snapshot = await getDocs(activeTeachersCollection());
 
-    const unlinked = snapshot.docs.filter(document => {
-      const meta = (document.data()['teacherMeta'] ?? {}) as Partial<TeacherMeta>;
-
-      return (meta.phoneNumber ?? meta.phone ?? '') === digits && !meta.uid;
-    });
+    const unlinked = snapshot.docs.filter(document =>
+      isUnlinkedMatch(
+        (document.data()['teacherMeta'] ?? {}) as Partial<TeacherMeta>,
+        digits
+      )
+    );
 
     await Promise.all(
       unlinked.map(document =>
@@ -641,6 +770,399 @@ export class TeacherService {
     );
 
     return unlinked.length;
+  }
+
+  /**
+   * Guarantees the signed-in account HAS a teacher record, and returns its id.
+   *
+   * WHY THIS EXISTS. Everything a teacher accumulates — workflow completion,
+   * activity progress, submissions — now hangs off `teachers/{docId}`, which is
+   * production's own root. Production never needs this method because its
+   * `Teachers/{uid}` IS the account: signing in and having a record are the same
+   * event there. Here they are two, and measured on the dev database more than
+   * half the accounts had fallen through the gap: 7 of 13 signed-in users had no
+   * record at all, so there was nowhere for their progress to go.
+   *
+   * THREE STEPS, IN THIS ORDER, AND THE ORDER IS THE SAFETY PROPERTY:
+   *
+   *   1. ALREADY LINKED — a record carrying this uid. Returns it and writes
+   *      nothing. This is the common path on every sign-in after the first, and
+   *      it is what stops a second record appearing for the same person.
+   *   2. CLAIMABLE — an UNLINKED record whose number matches. This is an
+   *      administrator having registered the person in advance, which is the
+   *      whole point of the roster, so the existing record wins over a new one
+   *      and keeps the classrooms already attached to it.
+   *   3. CREATE — only when neither found anything.
+   *
+   * IT WILL NEVER STEAL A LINKED RECORD. Step 2 goes through isUnlinkedMatch,
+   * which refuses a record that already carries someone's uid. Numbers get
+   * reassigned, and claiming a linked record would hand one teacher another's
+   * classrooms.
+   *
+   * WHAT A CREATED RECORD IS NOT. It carries no institution and no classrooms,
+   * because nobody registered it against one. It exists so the account has a
+   * place to write, not to imply approval — `isRegisteredTeacher` is what decides
+   * that, and it is unaffected by this. An administrator attaching classrooms
+   * later updates this same record rather than making a second.
+   *
+   * BEST EFFORT AT THE CALL SITE. A failure here must not cost anybody their
+   * sign-in; the login page swallows it and the teacher simply has no record yet,
+   * which is the state everything downstream already handles.
+   */
+  async ensureRecordForSignedInUser(identity: {
+    uid: string;
+    phoneNumber?: string;
+    countryCode?: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<string | null> {
+    const uid = (identity.uid ?? '').trim();
+
+    if (!uid) {
+      return null;
+    }
+
+    // 1. Already linked. One narrow query, and the common case.
+    const linked = await getDocs(
+      query(activeTeachersCollection(), where('teacherMeta.uid', '==', uid), limit(1))
+    );
+
+    if (!linked.empty) {
+      return linked.docs[0].id;
+    }
+
+    const digits = toSubscriberDigits(identity.phoneNumber ?? '');
+
+    // 2. An unlinked record an administrator registered in advance.
+    if (digits.length >= 10) {
+      const claimed = await this.linkSignedInUid(digits, uid);
+
+      if (claimed > 0) {
+        const after = await getDocs(
+          query(activeTeachersCollection(), where('teacherMeta.uid', '==', uid), limit(1))
+        );
+
+        if (!after.empty) {
+          return after.docs[0].id;
+        }
+      }
+    }
+
+    // 3. Nothing to claim. Give the account a record of its own.
+    const created = await this.create({
+      teacherMeta: {
+        countryCode: identity.countryCode ?? '',
+        email: (identity.email ?? '').trim(),
+        firstName: (identity.firstName ?? '').trim(),
+        lastName: (identity.lastName ?? '').trim(),
+        fullNameLowerCase: '',
+        phone: digits,
+        phoneNumber: digits,
+        uid
+      },
+      classrooms: {}
+    } as TeacherDraft);
+
+    return created.docId;
+  }
+
+  /**
+   * Whether an administrator has already registered this person as a teacher.
+   *
+   * WHAT IT IS FOR. Being in `teachers` IS the approval. An administrator put
+   * that record there deliberately, with a school and a class on it, so sending
+   * that person through the self-registration form and then an approval queue
+   * asks them to apply for something they have already been granted. `gate()`
+   * uses this to let them straight through to the dashboard.
+   *
+   * BY UID **OR** BY NUMBER, and both are needed. `linkSignedInUid` stamps the
+   * uid, but it runs AFTER the session exists, and the route guard that calls
+   * this can run before it — on a first sign-in there is nothing stamped yet.
+   * The number is what the administrator actually entered, so it is the key that
+   * is always present.
+   *
+   * DEACTIVATED RECORDS DO NOT COUNT. `setActive(false)` is how an administrator
+   * withdraws a teacher, and a withdrawn teacher should not be waved past the
+   * gate. Absent is treated as active, because `create` does not write the field
+   * and every existing record predates it.
+   *
+   * Two narrow queries rather than reading the collection: this is on the path
+   * into the shell, and `linkSignedInUid` already pays for a full read elsewhere.
+   */
+  async isRegisteredTeacher(uid: string, phoneDigits: string): Promise<boolean> {
+    const lookups = [
+      ...(uid ? [where('teacherMeta.uid', '==', uid)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phoneNumber', '==', phoneDigits)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phone', '==', phoneDigits)] : [])
+    ];
+
+    for (const clause of lookups) {
+      const snapshot = await getDocs(
+        query(activeTeachersCollection(), clause, limit(5))
+      );
+
+      const usable = snapshot.docs.some(document => {
+        const data = document.data() as { active?: boolean };
+        return data.active !== false;
+      });
+
+      if (usable) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * The name an administrator recorded for this person in `teachers`.
+   *
+   * WHY THIS EXISTS. Someone the Set Up Wizard registered has never filled in the
+   * self-registration form, so `users/{uid}` carries no name for them and the
+   * topbar fell back to 'Teacher' forever. The name they should be greeted by was
+   * in `teachers/{docId}` under `teacherMeta` the whole time, typed by the
+   * administrator who registered them, and nothing ever read it for display.
+   *
+   * BY UID **OR** BY NUMBER, for the same reason isRegisteredTeacher is: on a
+   * first sign-in `linkSignedInUid` may not have stamped the uid yet, and the
+   * number is what the administrator actually entered.
+   *
+   * DEACTIVATED RECORDS DO NOT COUNT, matching the gate. A withdrawn teacher
+   * should not be waved past it, and should not supply an identity either.
+   *
+   * FIRST USABLE MATCH WINS. One person can hold several teacher records, one per
+   * class they teach, which is exactly what assigning a registered teacher to
+   * another class creates. Those records carry the same person's name; if they
+   * ever disagree, the records are what need correcting rather than this method
+   * arbitrating between them.
+   *
+   * Returns null rather than a blank pair, so a caller cannot mistake "no record"
+   * for "a record whose name is empty".
+   */
+  async registeredName(
+    uid: string,
+    phoneDigits: string
+  ): Promise<{ firstName: string; lastName: string } | null> {
+    const lookups = [
+      ...(uid ? [where('teacherMeta.uid', '==', uid)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phoneNumber', '==', phoneDigits)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phone', '==', phoneDigits)] : [])
+    ];
+
+    for (const clause of lookups) {
+      const snapshot = await getDocs(
+        query(activeTeachersCollection(), clause, limit(5))
+      );
+
+      const found = pickRegisteredName(
+        snapshot.docs.map(document => document.data() as Record<string, unknown>)
+      );
+
+      if (found) {
+        return found;
+      }
+    }
+
+    /*
+     * FALLBACK: a normalised scan, because the queries above cannot do one.
+     *
+     * A Firestore equality clause compares the RAW stored string, so
+     * `teacherMeta.phoneNumber == '9481635184'` misses a record that stored
+     * `+919481635184` — which is the same defect linkSignedInUid was fixed for,
+     * and those records demonstrably exist.
+     *
+     * IT MATTERS HERE PARTICULARLY BECAUSE OF ORDERING. recordSignIn runs inside
+     * loginWithToken, BEFORE the login page calls linkSignedInUid, so on a first
+     * sign-in there is no teacherMeta.uid stamped yet and the uid clause above
+     * cannot help. Without this the teacher would be greeted as 'Teacher' on the
+     * one sign-in where the greeting is a first impression, and only get their
+     * name on the second.
+     *
+     * ONE FULL READ, and only when the narrow queries found nothing AND the
+     * caller has no name yet, which is once per account. linkSignedInUid already
+     * reads this whole collection on every single sign-in, so this is not a new
+     * order of cost.
+     */
+    if (phoneDigits.length >= 10) {
+      const snapshot = await getDocs(activeTeachersCollection());
+
+      return pickRegisteredName(
+        snapshot.docs
+          .map(document => document.data() as Record<string, unknown>)
+          .filter(data => matchesStoredNumber(teacherMetaFrom(data), phoneDigits))
+      );
+    }
+
+    return null;
+  }
+
+  /**
+   * Every class allotted to one person, across every teacher document they hold.
+   *
+   * WHY A UNION AND NOT ONE READ. Assigning a registered teacher to another class
+   * creates ANOTHER teacher document for the same person — see the note on
+   * registeredName — so a single document holds only part of what they teach. A
+   * teacher with classes at two schools has two records, and reading either one
+   * alone would drop a whole institution off their dashboard.
+   *
+   * MATCHED THE WAY THE GATE MATCHES: by uid, then by either spelling of the
+   * stored number. On a first sign-in `linkSignedInUid` may not have stamped the
+   * uid yet, and the number is what the administrator actually typed.
+   *
+   * DEDUPLICATED BY classroomId. Two records for the same person can name the
+   * same class — nothing stops an administrator assigning it twice — and a
+   * dashboard that showed it twice would look broken rather than tolerant.
+   *
+   * DEACTIVATED RECORDS DO NOT COUNT, matching isRegisteredTeacher: a withdrawn
+   * teacher is not shown classes they no longer teach. The per-classroom
+   * `activeStatus` flag is left alone and rendered, because production shows an
+   * inactive class greyed rather than hiding it.
+   *
+   * A DENIED READ RETURNS NOTHING, as every reader in this app does — the
+   * dashboard's empty state is the honest rendering of "nothing to show".
+   */
+  async allottedClassrooms(uid: string, phoneDigits: string): Promise<TeacherClassroom[]> {
+    const clauses = [
+      ...(uid ? [where('teacherMeta.uid', '==', uid)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phoneNumber', '==', phoneDigits)] : []),
+      ...(phoneDigits ? [where('teacherMeta.phone', '==', phoneDigits)] : [])
+    ];
+
+    if (clauses.length === 0) {
+      return [];
+    }
+
+    const byClassroom = new Map<string, TeacherClassroom>();
+
+    for (const clause of clauses) {
+      let snapshot;
+
+      try {
+        snapshot = await getDocs(query(activeTeachersCollection(), clause));
+      } catch {
+        continue;
+      }
+
+      for (const document of snapshot.docs) {
+        const data = document.data() as { active?: boolean; classrooms?: unknown };
+
+        if (data.active === false) {
+          continue;
+        }
+
+        const classrooms = data.classrooms;
+
+        if (!classrooms || typeof classrooms !== 'object') {
+          continue;
+        }
+
+        for (const [key, value] of Object.entries(classrooms as Record<string, unknown>)) {
+          // normaliseTeacherClassroom already falls back to the MAP KEY for
+          // classroomId, which is where the id actually lives — the field inside
+          // the entry repeats it, and an older entry may not carry it at all.
+          const entry = normaliseTeacherClassroom(key, (value ?? {}) as Partial<TeacherClassroom>);
+
+          // First one wins: the records carry the same class, so arbitrating
+          // between copies would be inventing a rule the data does not have.
+          if (entry.classroomId && !byClassroom.has(entry.classroomId)) {
+            byClassroom.set(entry.classroomId, entry);
+          }
+        }
+      }
+    }
+
+    return [...byClassroom.values()];
+  }
+
+  /**
+   * Removes one classroom from every teacher document that lists it.
+   *
+   * WHY THIS EXISTS. Deleting a classroom moved the classroom document to the
+   * trash and nothing else — but the dashboard cards and the sidebar tree are
+   * built from `teachers/{id}.classrooms`, not from the classrooms collection.
+   * So a deleted class stayed on both surfaces indefinitely, and no amount of
+   * re-reading fixed it: the data itself still said the teacher taught it.
+   *
+   * RETURNS WHAT IT REMOVED, so a restore can put it back exactly. The entry is
+   * denormalised — name, grade, section, institution, programmes — and none of
+   * that can be reconstructed from the classroom document alone.
+   *
+   * A DOTTED DELETE per document: `classrooms.{id}` removes one key and leaves
+   * every sibling untouched, where writing the map back wholesale would drop any
+   * class attached between this read and this write.
+   */
+  async detachClassroom(
+    classroomId: string
+  ): Promise<{ teacherDocId: string; entry: TeacherClassroom }[]> {
+    if (!classroomId) {
+      return [];
+    }
+
+    let snapshot;
+
+    try {
+      snapshot = await getDocs(activeTeachersCollection());
+    } catch {
+      return [];
+    }
+
+    const removed: { teacherDocId: string; entry: TeacherClassroom }[] = [];
+    const batch = writeBatch(db);
+
+    for (const document of snapshot.docs) {
+      const classrooms = (document.data() as { classrooms?: Record<string, unknown> })
+        .classrooms;
+
+      if (!classrooms || !(classroomId in classrooms)) {
+        continue;
+      }
+
+      removed.push({
+        teacherDocId: document.id,
+        entry: normaliseTeacherClassroom(
+          classroomId,
+          (classrooms[classroomId] ?? {}) as Partial<TeacherClassroom>
+        )
+      });
+
+      batch.update(activeTeacherDoc(document.id), {
+        [`classrooms.${classroomId}`]: deleteField(),
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    if (removed.length > 0) {
+      await batch.commit();
+    }
+
+    return removed;
+  }
+
+  /**
+   * Puts detached classroom entries back. The mirror of detachClassroom.
+   *
+   * Takes what that returned rather than rebuilding it, for the reason given
+   * there: the entry carries denormalised fields the classroom document does not
+   * hold, so a reconstruction would quietly lose the programmes attached to it.
+   */
+  async reattachClassrooms(
+    links: readonly { teacherDocId: string; entry: TeacherClassroom }[]
+  ): Promise<void> {
+    if (links.length === 0) {
+      return;
+    }
+
+    const batch = writeBatch(db);
+
+    for (const link of links) {
+      batch.update(activeTeacherDoc(link.teacherDocId), {
+        [`classrooms.${link.entry.classroomId}`]: link.entry,
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    await batch.commit();
   }
 
   /** Saves an edit. Ownership and school membership are not editable here. */

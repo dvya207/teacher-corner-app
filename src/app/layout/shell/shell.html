@@ -50,13 +50,93 @@
         </a>
       }
 
+      <!-- ==============================================================
+           INSTITUTIONS — the signed-in teacher's own schools and classes
+
+           Production's own sidebar group, between Dashboard and Admin: a
+           collapsible item listing the schools this person teaches at, each
+           expanding to the classes they teach there.
+
+           BUTTONS, NOT LINKS, for the two levels that only toggle. A row that
+           expands a list is not a destination, and an <a> with no href is
+           unreachable from a keyboard. Only the class rows navigate.
+           ============================================================== -->
+      @if (allotment().length > 0) {
+        <button
+          type="button"
+          class="nav-item nav-group"
+          [class.is-open]="institutionsOpen()"
+          [attr.aria-expanded]="institutionsOpen()"
+          (click)="toggleInstitutions()"
+        >
+          <app-icon name="bank" [size]="19" />
+          <span class="nav-label">Institutions</span>
+          <app-icon
+            class="nav-chevron"
+            [name]="institutionsOpen() ? 'chevron-down' : 'chevron-left'"
+            [size]="15"
+          />
+        </button>
+
+        @if (institutionsOpen()) {
+          <div class="nav-tree">
+            @for (school of allotment(); track schoolKey(school)) {
+              <button
+                type="button"
+                class="nav-school"
+                [class.is-open]="isSchoolOpen(school)"
+                [attr.aria-expanded]="isSchoolOpen(school)"
+                [title]="school.institutionName"
+                (click)="toggleSchool(school)"
+              >
+                <app-icon name="bank" [size]="17" />
+                <span class="nav-label">{{ school.institutionName }}</span>
+                <app-icon
+                  class="nav-chevron"
+                  [name]="isSchoolOpen(school) ? 'chevron-down' : 'chevron-left'"
+                  [size]="14"
+                />
+              </button>
+
+              @if (isSchoolOpen(school)) {
+                <div class="nav-classes">
+                  @for (classroom of school.classrooms; track classroom.classroomId) {
+                    <!-- The one row that navigates. Classrooms is where a class
+                         is actually opened, so the tree leads there rather than
+                         being a display of names that cannot be acted on. -->
+                    <a
+                      class="nav-class"
+                      [routerLink]="['/institutions', 'classroom', classroom.classroomId]"
+                      [queryParams]="{ programmeId: firstProgrammeId(classroom) }"
+                      routerLinkActive="is-active"
+                      [routerLinkActiveOptions]="{ exact: true }"
+                      [title]="classroom.classroomName || classLabel(classroom)"
+                    >
+                      <app-icon name="classroom" [size]="16" />
+                      <span class="nav-label">{{ classLabel(classroom) }}</span>
+                    </a>
+                  }
+                </div>
+              }
+            }
+          </div>
+        }
+      }
+
       <p class="nav-section">Admin</p>
 
       @for (item of adminNav; track item.path) {
+        <!-- EXACT matching. It was prefix, on the reasoning that "a future
+             /classrooms/:id should keep Classrooms lit" — and that route now
+             lives at /institutions/classroom/:id instead, so the only thing
+             prefix matching still did was light the Institutions TABLE while
+             looking at one class, alongside that class's own row in the tree.
+             Every route in this app is flat, so exact is the honest rule. -->
         <a
           class="nav-item"
           [routerLink]="item.path"
           routerLinkActive="is-active"
+          [routerLinkActiveOptions]="{ exact: true }"
           [title]="item.label"
         >
           <app-icon [name]="item.icon" [size]="19" />
@@ -87,6 +167,15 @@
 
       <nav class="breadcrumb" aria-label="Breadcrumb">
         <a routerLink="/dashboard">{{ crumbRoot() }}</a>
+
+        <!-- THE MIDDLE SEGMENTS, however many a page sets. Production's
+             classroom crumb is institution › class › programme, and its workflow
+             stepper adds the learning unit — four in all, which is why this is a
+             list rather than the single segment it started as. -->
+        @for (segment of crumbTrail(); track $index) {
+          <span class="crumb-sep" aria-hidden="true">›</span>
+          <span>{{ segment }}</span>
+        }
         <span class="crumb-sep" aria-hidden="true">›</span>
         <span class="crumb-current" aria-current="page">{{ pageTitle() }}</span>
       </nav>
@@ -179,7 +268,7 @@
                 <span class="ud-head-copy">
                   <strong>{{ displayName() }}</strong>
                   <span>Signed in as</span>
-                  <span class="ud-identity">{{ userIdentity }}</span>
+                  <span class="ud-identity">{{ userIdentity() }}</span>
                 </span>
               </div>
 
@@ -207,6 +296,11 @@
       </div>
     </header>
 
+    <!-- NO IMPERSONATION BANNER. Removed on instruction. The session still
+         carries `impersonated` / `impersonatedBy` claims and every attempt is
+         still audited server-side, so the record of who borrowed whose account is
+         intact; what is gone is the on-screen notice, which means an impersonated
+         session is now visually indistinguishable from the teacher's own. -->
     <main class="content">
       <router-outlet />
     </main>
@@ -216,6 +310,5 @@
 @if (profileOpen()) {
   <app-update-profile
     (closed)="closeProfile()"
-    (saved)="onProfileSaved($event)"
   />
 }

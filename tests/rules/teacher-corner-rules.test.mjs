@@ -106,6 +106,19 @@ const learningUnit = ownerId => ({
   totalTime: 45
 });
 
+/**
+ * A resource document. NO ownerId, and that is the collection's shape: this
+ * document's owner is the unit it points at, which is why its rule grants every
+ * signed-in user read rather than filtering on a field.
+ */
+const learningUnitResource = () => ({
+  learningUnitDocId: ALICE_UNIT,
+  learningUnitId: 'TA-PT12-EN-V22',
+  maturity: 'Gold',
+  type: 'TACtivity',
+  resources: { video: { tacVideoUrl: 'https://example.com/v' } }
+});
+
 const programme = ownerId => ({
   ownerId,
   programmeName: 'Test School Oak 26-27 Grade 7 - Science',
@@ -1130,6 +1143,114 @@ describe('trash subcollection — deleted learning units', () => {
     );
     await assertFails(
       setDoc(doc(alice, 'learningUnits/trash/DeletedProgrammes/x'), learningUnit(ALICE))
+    );
+  });
+});
+
+describe('learning unit resources — active', () => {
+  const RESOURCE = 'lu-resource-1';
+
+  it('lets any signed-in user read, create, update and delete one', async () => {
+    await testEnv.clearFirestore();
+    await assertSucceeds(
+      setDoc(doc(alice, `learningUnitResources/${RESOURCE}`), learningUnitResource())
+    );
+    await assertSucceeds(getDoc(doc(bob, `learningUnitResources/${RESOURCE}`)));
+    await assertSucceeds(
+      updateDoc(doc(bob, `learningUnitResources/${RESOURCE}`), { maturity: 'Platinum' })
+    );
+    await assertSucceeds(deleteDoc(doc(bob, `learningUnitResources/${RESOURCE}`)));
+  });
+
+  it('allows the by-unit query the editor actually runs', async () => {
+    await testEnv.clearFirestore();
+    await assertSucceeds(
+      getDocs(query(
+        collection(alice, 'learningUnitResources'),
+        where('learningUnitDocId', '==', ALICE_UNIT)
+      ))
+    );
+  });
+
+  it('denies a signed-out client entirely', async () => {
+    await testEnv.clearFirestore();
+    await assertFails(getDoc(doc(anon, `learningUnitResources/${RESOURCE}`)));
+    await assertFails(
+      setDoc(doc(anon, 'learningUnitResources/x'), learningUnitResource())
+    );
+  });
+
+  /* The container document now exists in this collection, so the id is reserved
+     here exactly as it is in the four collections that had a trash before. */
+  it('refuses one created with the reserved id `trash`', async () => {
+    await testEnv.clearFirestore();
+    await assertFails(
+      setDoc(doc(alice, 'learningUnitResources/trash'), learningUnitResource())
+    );
+  });
+});
+
+describe('trash subcollection — deleted learning unit resources', () => {
+  const TRASH = 'learningUnitResources/trash/DeletedLearningUnitResources';
+  const RESOURCE = 'lu-resource-1';
+
+  it('lets any signed-in user move one into the trash', async () => {
+    await testEnv.clearFirestore();
+    await assertSucceeds(
+      setDoc(doc(alice, `${TRASH}/${RESOURCE}`), { ...learningUnitResource(), trashAt: 'now' })
+    );
+    await assertSucceeds(
+      setDoc(doc(bob, `${TRASH}/other`), { ...learningUnitResource(), trashAt: 'now' })
+    );
+  });
+
+  it('lets any signed-in user read and delete a trashed one (restore, purge)', async () => {
+    await testEnv.clearFirestore();
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(), `${TRASH}/${RESOURCE}`),
+        { ...learningUnitResource(), trashAt: 'now' });
+    });
+
+    await assertSucceeds(getDoc(doc(bob, `${TRASH}/${RESOURCE}`)));
+    await assertSucceeds(deleteDoc(doc(bob, `${TRASH}/${RESOURCE}`)));
+  });
+
+  it('denies UPDATE, so nothing can be edited while it sits in the trash', async () => {
+    await testEnv.clearFirestore();
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(), `${TRASH}/${RESOURCE}`),
+        { ...learningUnitResource(), trashAt: 'now' });
+    });
+
+    await assertFails(updateDoc(doc(alice, `${TRASH}/${RESOURCE}`), { maturity: 'Diamond' }));
+  });
+
+  it('allows the unfiltered list, and the by-unit query restore runs', async () => {
+    await testEnv.clearFirestore();
+    await assertSucceeds(getDocs(collection(alice, TRASH)));
+    await assertSucceeds(
+      getDocs(query(collection(alice, TRASH), where('learningUnitDocId', '==', ALICE_UNIT)))
+    );
+  });
+
+  it('denies a signed-out client entirely', async () => {
+    await testEnv.clearFirestore();
+    await assertFails(getDocs(collection(anon, TRASH)));
+    await assertFails(
+      setDoc(doc(anon, `${TRASH}/x`), { ...learningUnitResource(), trashAt: 'now' })
+    );
+  });
+
+  /* Both segments pinned, as with the five trashes above. */
+  it('refuses an invented container, and another collection\'s trash name', async () => {
+    await testEnv.clearFirestore();
+    await assertFails(
+      setDoc(doc(alice, `learningUnitResources/anything/DeletedLearningUnitResources/x`),
+        learningUnitResource())
+    );
+    await assertFails(
+      setDoc(doc(alice, 'learningUnitResources/trash/DeletedLearningUnits/x'),
+        learningUnitResource())
     );
   });
 });

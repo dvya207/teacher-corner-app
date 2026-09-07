@@ -140,16 +140,21 @@ export class InstitutionService {
   private auth = inject(AuthService);
 
   /**
-   * Every LIVE institution the signed-in teacher owns.
+   * Every LIVE institution IN THE DATABASE. NOT the caller's own.
+   *
+   * THIS IS NOT OWNER-SCOPED. The comment here used to say it was, and described
+   * an ownerId filter this method does not apply. Ownership enforcement was
+   * turned off deliberately: every rule now authorises on authentication alone,
+   * so an unfiltered list is provably permitted and no filter is required to get
+   * past the rules. ownerId is still stamped on create; nothing reads it back.
+   *
+   * ownedActiveInstitutions() in core/firestore-paths.ts is the owner-filtered
+   * version and has no callers. Together with the commented-out ownsExisting()
+   * in firestore.rules it is the restore path, should ownership come back.
    *
    * No "not deleted" filter, because deleted rows are not in this collection at
    * all. That is the point of moving them rather than flagging them: a query
    * cannot forget to exclude what is not there.
-   *
-   * ownedByUser() applies the ownerId filter, which is required rather than
-   * tidy: this is a top-level collection whose rule reads resource.data, and
-   * Firestore rejects any query it cannot prove will return only permitted
-   * documents.
    */
   async list(): Promise<Institution[]> {
     const snapshot = await getDocs(activeInstitutionsCollection());

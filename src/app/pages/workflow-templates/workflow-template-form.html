@@ -1,0 +1,218 @@
+<!-- A FULL PAGE, not a dialog, which is what production has: its create view
+     fills the viewport with a Back button at the top left and no shell around it.
+     A template is built over several minutes across a rail and a step editor, and
+     a modal that size is a page wearing a costume. -->
+<div class="wt-page">
+
+  <!-- BACK ALONE, no heading. Production's page has no title text: the Back
+       button is the whole of its header, and the rail says what this is. -->
+  <header class="wt-page-head">
+    <button type="button" class="wt-back" (click)="close()">
+      <app-icon name="chevron-left" [size]="16" />
+      Back
+    </button>
+  </header>
+
+  <div class="wt-card">
+
+    <div class="wt-body">
+
+      <!-- ================================================================
+           The rail — what DEFINES the template, and it SWAPS on the mode
+
+           DEFAULT collects Learning Unit Type, Maturity and Subject and derives
+           the name from the three; CUSTOM types the name and collects neither.
+           Both write all four fields — the ones the mode does not ask for go out
+           as the empty string, which is what production's own documents carry.
+           ================================================================ -->
+      <aside class="wt-rail">
+
+        <div class="field">
+          <label for="wt-mode">Template Mode</label>
+          <!-- The one select on this rail that is never blank: a template is
+               always one mode or the other, so it has no "Select" option. -->
+          <select id="wt-mode" (change)="templateMode.set(valueOf($event))">
+            @for (mode of modes; track mode.code) {
+              <option [value]="mode.code" [selected]="mode.code === templateMode()">{{ mode.label }}</option>
+            }
+          </select>
+        </div>
+
+        @if (isDefaultMode()) {
+
+          <!-- DEFAULT MODE'S THREE, two to a row as production has them. The
+               name is DERIVED from these, so there is no name field here. -->
+          <div class="wt-rail-grid">
+            <div class="field">
+              <label for="wt-lu">Learning Unit Type <span class="req">*</span></label>
+              <select id="wt-lu" (change)="learningUnitType.set(valueOf($event))">
+                <option value="" [selected]="learningUnitType() === ''">Select</option>
+                @for (entry of learningUnitTypes; track entry.code) {
+                  <option [value]="entry.code" [selected]="entry.code === learningUnitType()">
+                    {{ entry.name }}
+                  </option>
+                }
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="wt-maturity">Maturity <span class="req">*</span></label>
+              <select id="wt-maturity" (change)="maturity.set(valueOf($event))">
+                <option value="" [selected]="maturity() === ''">Select</option>
+                @for (entry of maturities; track entry) {
+                  <option [value]="entry" [selected]="entry === maturity()">{{ entry }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <!-- SUBJECT IS FULL WIDTH, on its own. In the two-up grid it sat as a
+               half-width control with an empty cell beside it, which reads as a
+               field whose partner failed to render. -->
+          <div class="field">
+            <label for="wt-subject">Subject <span class="req">*</span></label>
+            <!-- THE CODE IS THE VALUE, the NAME is what gets stored. -->
+            <select id="wt-subject" (change)="subject.set(valueOf($event))">
+              <option value="" [selected]="subject() === ''">Select</option>
+              @for (entry of subjects(); track entry.code) {
+                <option [value]="entry.code" [selected]="entry.code === subject()">
+                  {{ entry.name }}
+                </option>
+              }
+            </select>
+          </div>
+
+          <!-- WHAT IT WILL BE CALLED. The default rail has no name field, so
+               without this the reader does not learn the name until it is saved. -->
+          <p class="wt-derived">
+            <span>Template Name</span>
+            <strong>{{ storedName() }}</strong>
+          </p>
+
+        } @else {
+
+          <!-- CUSTOM MODE TYPES ITS NAME. Production's custom templates are
+               called things like 'Baseline Assessement' — no derivation to do. -->
+          <div class="field">
+            <label for="wt-name">Enter Template Name <span class="req">*</span></label>
+            <input
+              id="wt-name"
+              type="text"
+              autocomplete="off"
+              placeholder="Enter template name"
+              [value]="templateName()"
+              (input)="templateName.set(valueOf($event))"
+            />
+          </div>
+        }
+
+        <div class="field">
+          <label for="wt-type">Workflow Type <span class="req">*</span></label>
+          <select id="wt-type" (change)="workflowType.set(valueOf($event))">
+            <option value="" [selected]="workflowType() === ''">Select</option>
+            @for (entry of workflowTypes(); track entry.code) {
+              <option [value]="entry.code" [selected]="entry.code === workflowType()">{{ entry.label }}</option>
+            }
+          </select>
+        </div>
+
+        @if (blockedReason()) {
+          <p class="wt-blocked">
+            <app-icon name="minus" [size]="14" />
+            <span>{{ blockedReason() }}</span>
+          </p>
+        }
+
+        @if (error()) {
+          <p class="wt-error" role="alert">{{ error() }}</p>
+        }
+
+        <!-- ================================================================
+             TWO BUTTONS IN TWO PLACES, which is production's arrangement and not
+             a duplication to tidy away.
+
+             Before there are steps, the button sits UNDER THE FIELDS and OPENS
+             THE STEP DIALOG rather than saving. Once there are steps it sits
+             BELOW THEM, under Add More, and saves — because a button that commits
+             a list belongs after the list, not above it. Production renders these
+             as two elements behind `createWfTemplateButton` and
+             `saveWfTemplateButton`; one button that moved would be the same thing
+             with a harder-to-read template.
+             ================================================================ -->
+        @if (!showSteps()) {
+          <button
+            type="button"
+            class="btn btn-primary btn-save wt-save"
+            [disabled]="!railValid() || saving()"
+            (click)="beginSteps()"
+          >
+            {{ saveLabel() }}
+          </button>
+        }
+
+        <!-- ================================================================
+             The steps — IN THE RAIL, UNDER THE FIELDS, which is where
+             production puts them.
+
+             They were in a panel to the right of the rail. Production has no
+             right panel at all: its steps are a numbered timeline directly
+             beneath the form, and the space beside it is where the step dialog
+             opens. Two columns also meant a wide empty half whenever a template
+             had no steps yet.
+             ================================================================ -->
+        @if (showSteps() && steps().length > 0) {
+          <!-- THE SHARED LADDER. The classroom stepper draws the same one, so it
+               is a component rather than a second copy of this markup — the two
+               had already begun to diverge in wording before it was extracted.
+               No `selectable`: this form has no current step to navigate to. -->
+          <app-workflow-timeline
+            [steps]="steps()"
+            (edited)="editStep($event)"
+            (removed)="removeStep($event)"
+          />
+
+          <!-- Production's dashed, tinted band under the list. -->
+          <button type="button" class="wt-add-more" (click)="addStep()">
+            Add More Workflow Step
+            <app-icon name="plus-circle" [size]="17" />
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-primary btn-save wt-save"
+            [disabled]="!railValid() || saving()"
+            (click)="save()"
+          >
+            {{ saving() ? 'Saving…' : saveLabel() }}
+          </button>
+        }
+      </aside>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================================
+     The step editor — NOW A SHARED COMPONENT.
+
+     It was 390 lines of markup here. The classroom stepper needs the identical
+     dialog, so it moved to components/workflow-step-dialog rather than being
+     copied: a form this size is a second place for the field rules to drift.
+
+     THE PATCHES COME BACK AND THIS PAGE APPLIES THEM. The dialog owns the rules
+     for changing one step; the list belongs to whoever opened it, which is what
+     lets this form hold an unsaved draft and the stepper hold a loaded document
+     without the dialog knowing the difference.
+     ====================================================================== -->
+@if (openStep() !== null) {
+  @if (openStepValue(); as step) {
+    <app-workflow-step-dialog
+      [step]="step"
+      [templateMode]="templateMode()"
+      (stepChanged)="patchStep(openStep()!, $event)"
+      (contentChanged)="patchContent(openStep()!, $event.index, $event.patch)"
+      (contentAdded)="addContent(openStep()!)"
+      (contentRemoved)="removeContent(openStep()!, $event)"
+      (closed)="closeStepDialog()"
+    />
+  }
+}

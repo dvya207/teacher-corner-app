@@ -482,14 +482,17 @@ describe('EditInstitution', () => {
    * changes nothing, and makes "did I edit that?" unanswerable from the screen.
    */
   it('opens with Save Changes disabled on every tab', () => {
+    /*
+     * ASSERTED ON `dirty()` RATHER THAN ON THE BUTTON, because Save is no longer
+     * disabled by a clean form: it keeps its violet and stays pressable, on
+     * instruction, matching Save Workflow Steps. The state this test is really
+     * about is the signal, which is unchanged.
+     */
     for (const tab of ['basic', 'address', 'board'] as const) {
       component.setTab(tab);
       fixture.detectChanges();
 
-      const button = fixture.nativeElement.querySelector('.save-btn') as HTMLButtonElement;
-
-      expect(button.disabled).toBe(true);
-      expect(button.getAttribute('title')).toBe('No changes to save yet');
+      expect(component.dirty()).toBe(false);
     }
   });
 
@@ -497,11 +500,7 @@ describe('EditInstitution', () => {
     component.update('institutionName', 'Deogiri Global Academy 2');
     fixture.detectChanges();
 
-    const button = fixture.nativeElement.querySelector('.save-btn') as HTMLButtonElement;
-
     expect(component.dirty()).toBe(true);
-    expect(button.disabled).toBe(false);
-    expect(button.getAttribute('title')).toBeNull();
   });
 
   /** Typed and typed back is not an edit: there is nothing left to write. */
@@ -513,8 +512,6 @@ describe('EditInstitution', () => {
     fixture.detectChanges();
 
     expect(component.dirty()).toBe(false);
-    expect((fixture.nativeElement.querySelector('.save-btn') as HTMLButtonElement).disabled)
-      .toBe(true);
   });
 
   /**

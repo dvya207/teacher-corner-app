@@ -202,8 +202,8 @@
       <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
       <button
         type="button"
-        class="btn btn-primary save-btn"
-        [disabled]="!dirty() || saving()"
+        class="btn btn-primary btn-save save-btn"
+        [disabled]="saving()"
         (click)="save()"
       >
         {{ saving() ? 'Saving…' : 'Save Changes' }}

@@ -118,6 +118,78 @@ describe('OTPVerifications is closed to every client', () => {
   });
 });
 
+/**
+ * The audit log, which is closed for a DIFFERENT reason from the challenge store
+ * above — and why this block lives here rather than with the data collections.
+ *
+ * OTPVerifications is closed because reading it breaks authentication.
+ * ImpersonationAudit is closed because it is the record of who borrowed whose
+ * account: a client that can write here forges or erases that record, and a
+ * client that can read it learns which colleagues had support visits, from whom,
+ * and against which phone number. Both are denied to AUTHENTICATED callers too,
+ * which is the assertion worth having — the collection would otherwise be
+ * readable by every teacher in the project.
+ */
+describe('ImpersonationAudit is closed to every client', () => {
+
+  const ENTRY = 'ImpersonationAudit/entry-1';
+  const COUNTER = 'ImpersonationAudit/attempts_alice-uid';
+
+  /** Seeded with rules off, as the Admin SDK writes it: a missing document is
+   *  denied too, so without this the read tests would pass vacuously. */
+  before(async () => {
+    await testEnv.clearFirestore();
+    await testEnv.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(), ENTRY), {
+        callerUid: 'admin-uid',
+        callerEmail: 'admin@example.com',
+        via: 'claim',
+        outcome: 'allowed',
+        targetPhone: '+919999999999',
+        targetUid: 'teacher-uid'
+      });
+      await setDoc(doc(ctx.firestore(), COUNTER), { failures: 4 });
+    });
+  });
+
+  it('denies an anonymous read of an audit entry', async () => {
+    await assertFails(getDoc(doc(anon, ENTRY)));
+  });
+
+  /** Every signed-in teacher would otherwise see who was impersonated. */
+  it('denies an AUTHENTICATED read of an audit entry', async () => {
+    await assertFails(getDoc(doc(alice, ENTRY)));
+  });
+
+  it('denies listing the collection', async () => {
+    await assertFails(getDocs(collection(alice, 'ImpersonationAudit')));
+  });
+
+  /** A forged entry naming somebody else is worse than no log at all. */
+  it('denies an authenticated client writing an entry', async () => {
+    await assertFails(
+      setDoc(doc(alice, 'ImpersonationAudit/forged'), { outcome: 'allowed' })
+    );
+  });
+
+  it('denies an authenticated client editing an existing entry', async () => {
+    await assertFails(updateDoc(doc(alice, ENTRY), { outcome: 'denied-not-admin' }));
+  });
+
+  it('denies an authenticated client deleting an entry', async () => {
+    await assertFails(deleteDoc(doc(alice, ENTRY)));
+  });
+
+  /**
+   * THE THROTTLE. The wrong-passcode counter shares this collection, so a client
+   * able to reset it removes the only limit on walking the eight-digit passcode.
+   */
+  it('denies resetting the wrong-passcode counter', async () => {
+    await assertFails(updateDoc(doc(alice, COUNTER), { failures: 0 }));
+    await assertFails(deleteDoc(doc(alice, COUNTER)));
+  });
+});
+
 describe('Configuration is readable by any signed-in user and writable by none', () => {
 
   before(async () => {

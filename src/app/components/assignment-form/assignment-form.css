@@ -1,0 +1,327 @@
+/* ==========================================================================
+   A FORM assignment inside a workflow step.
+
+   PRODUCTION'S LAYOUT: a white card, a centred "Instructions" heading in the
+   brand colour, the instruction line under it, then the questions with a field
+   each, then a centred Submit.
+   ========================================================================== */
+
+.af-card {
+  padding: 26px 30px 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.af-head {
+  margin-bottom: 26px;
+  text-align: center;
+}
+
+/*
+ * BOTH LINES IN THE BRAND COLOUR AND CENTRED, which is production's — its heading
+ * and its instruction line are both `text-center text-primary-500`. A left-aligned
+ * dark heading would read as a section title rather than as the form's preamble.
+ */
+.af-title {
+  margin: 0 0 6px;
+  font-size: 19px;
+  font-weight: 650;
+  color: var(--accent-600);
+}
+
+.af-instructions {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--accent-600);
+}
+
+/* --------------------------------------------------------------------------
+   The questions
+   -------------------------------------------------------------------------- */
+
+.af-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.af-question {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/*
+ * A LOCKED QUESTION IS DIMMED, BUT ITS TEXT IS NOT. The reader still has to be
+ * able to READ a question they cannot yet answer — that is how they know what is
+ * coming — so only the field fades.
+ */
+.af-question.is-locked .af-input,
+.af-question.is-locked .af-stars {
+  opacity: 0.55;
+}
+
+.af-label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink-900);
+}
+
+.af-label-no {
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.af-label-text {
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------------------
+   The fields
+   -------------------------------------------------------------------------- */
+
+/*
+ * FULL WIDTH, WITH NO CAP. Production's fields are `w-full` inside the card and
+ * that is what they should be: a 720px cap left every answer box stopping short of
+ * the card's right edge, which reads as a half-drawn field rather than as a
+ * measured column. The card's own padding is what sets the margin.
+ */
+.af-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-400);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink-800);
+}
+
+.af-input:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/*
+ * THE PLACEHOLDER IS THE QUESTION'S `prompt` — an example answer, not a label —
+ * so it is deliberately lighter than the value that will replace it. Production's
+ * screenshot shows exactly this: grey example text inside every empty field.
+ */
+.af-input::placeholder {
+  color: var(--ink-400);
+}
+
+.af-input:disabled {
+  background: var(--ink-050);
+  cursor: not-allowed;
+}
+
+.af-textarea {
+  resize: vertical;
+}
+
+.af-select {
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------------------
+   Option lists, for the checkBoxGroup and radioGroup types
+
+   ONE SET OF RULES FOR BOTH CONTROLS. A checkbox group and a radio group differ
+   only in how many may be picked, and drawing them differently would suggest
+   some other difference. The markup swaps the input's `type` and its container's
+   `role`; nothing here needs to know which it got, and `:has()` reaches the
+   input either way.
+   -------------------------------------------------------------------------- */
+
+/*
+ * ONE PER ROW, not wrapped inline. Option text here is a whole phrase written by
+ * whoever built the form ("The class ran out of time"), so laying them out in a
+ * row puts a ragged, hard-to-scan block in front of a reader who has to check
+ * several of them.
+ */
+.af-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/*
+ * THE WHOLE ROW IS THE TARGET, because it is a <label> wrapping both the box and
+ * its text. A 13px checkbox is a poor tap target on a phone, and the text beside
+ * it is the part a reader aims at.
+ */
+.af-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-400);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink-800);
+  cursor: pointer;
+}
+
+.af-check.is-on {
+  border-color: var(--accent-500);
+  background: var(--ink-050);
+}
+
+.af-check input {
+  /* Nudged down so the box sits on the first line of a wrapping label rather
+     than centred against the whole block. */
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.af-check:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+
+.af-check:has(input:disabled) {
+  background: var(--ink-050);
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   The star rating
+   -------------------------------------------------------------------------- */
+
+.af-stars {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/*
+ * FILLED STARS, via the icon's own `filled` input rather than a rule here.
+ *
+ * THIS WAS A CSS RULE AND IT DID NOTHING. `.af-star app-icon svg path { fill:
+ * currentColor }` cannot match: emulated encapsulation stamps the ICON
+ * component's attribute on that path, not this component's, so the stars
+ * rendered hollow on screen while the stylesheet looked right.
+ */
+.af-star {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--ink-300);
+  cursor: pointer;
+  transition: color 0.12s var(--ease), transform 0.12s var(--ease);
+}
+
+.af-star:hover:not(:disabled) {
+  transform: scale(1.12);
+}
+
+.af-star.is-lit {
+  color: var(--warning);
+}
+
+.af-star:disabled {
+  cursor: not-allowed;
+}
+
+.af-star-value {
+  margin-left: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-500);
+}
+
+/* --------------------------------------------------------------------------
+   Notes, and the footer
+   -------------------------------------------------------------------------- */
+
+.af-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.af-centred {
+  text-align: center;
+}
+
+.af-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.af-submit {
+  min-width: 180px;
+  padding: 12px 28px;
+  border-radius: var(--radius-full);
+  background: var(--accent-500);
+  box-shadow: var(--shadow-btn);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--white);
+  cursor: pointer;
+}
+
+.af-submit:hover:not(:disabled) {
+  background: var(--accent-600);
+}
+
+.af-submit:disabled {
+  background: var(--ink-200);
+  box-shadow: none;
+  color: var(--ink-500);
+  cursor: not-allowed;
+}
+
+.af-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--tint-green);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-green);
+}
+
+.af-error {
+  margin: 0;
+  max-width: 560px;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--danger);
+}
+
+@media (max-width: 720px) {
+  .af-card {
+    padding: 20px 18px 24px;
+  }
+}
+
+/* The submissions-left line, once there are none. Amber rather than red: the
+   form is spent, not broken. */
+.af-note.is-spent {
+  padding: 9px 14px;
+  border-radius: var(--radius-md);
+  background: var(--tint-amber);
+  font-weight: 600;
+  color: var(--on-amber);
+}

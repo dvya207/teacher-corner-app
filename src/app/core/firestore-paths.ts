@@ -72,12 +72,97 @@ export const COLLECTIONS = Object.freeze({
   programmes: 'programmes',
   /** The learning units a programme is built from. */
   learningUnits: 'learningUnits',
+  /**
+   * A template instantiated for one learning unit in one classroom.
+   *
+   * Production names it `Workflows`; lowercase here for the same reason
+   * `learningUnits` is — this app's own collections are lowercase, and they
+   * should flip together on the day production's names are adopted.
+   */
+  workflows: 'workflows',
+  /**
+   * The uploaded files a learning unit is made of, one document per maturity
+   * rung. Production names it `LearningUnitResources`; lowercase here for the
+   * same reason `learningUnits` is — this app's four other collections are
+   * lowercase, and the pair should flip together on the day production's names
+   * are adopted.
+   */
+  learningUnitResources: 'learningUnitResources',
+  /**
+   * Grade-dependent resource files, one document per board.
+   *
+   * A slot the schema marks grade-dependent does not hold one file: it holds one
+   * per board and grade. Those cannot live on the rung's resource document,
+   * which has room for a single path per slot, so they get a collection.
+   */
+  boardGradeResources: 'boardGradeResources',
   /** Teachers registered against an institution. NOT the signed-in user — see the model. */
-  teachers: 'teachers'
+  teachers: 'teachers',
+  /**
+   * Quizzes, uploads and forms a classroom can be set.
+   *
+   * CAPITALISED, matching production, unlike `learningUnits` beside it. The
+   * difference is not an oversight: this collection is NEW here and has no
+   * existing documents to migrate, so it can start on production's own name,
+   * where the other two would need a data move to get there.
+   */
+  assignments: 'Assignments',
+
+  /*
+   * STUDENTS AND THEIR SUBMISSIONS — production's names, capitalised as it has
+   * them, unlike this app's own lowercase collections.
+   *
+   * NEITHER EXISTS IN THIS APP'S DATABASE, AND NOTHING READS THEM ANY MORE.
+   * They were here because the assignment report was written against production's
+   * shape — `Students/{id}/remoteSubmissions/{id}/attempts/{id}` for the answers,
+   * `CustomAuthentication/{id}` for the name — on the reasoning that it would work
+   * the moment the data existed. The data never did, so the report returned an
+   * empty sheet every time it was run.
+   *
+   * THE REPORT NOW READS TEACHER SUBMISSIONS instead, because in this app the
+   * teacher is the one who submits: see AssignmentReportService. These names are
+   * KEPT rather than deleted so the production shape they describe stays recorded
+   * in the one file that is allowed to know about paths, and so that a future
+   * import of real student data has somewhere to land. Nothing imports them
+   * today; treat an unused warning here as accurate rather than as a mistake.
+   */
+  /**
+   * Workflow templates — production's name, capitalised as it has it.
+   *
+   * Its trash is `WorkflowTemplates/--trash--/DeletedWorkflowTemplates`, the same
+   * shape as the other five, and the container document exists there.
+   */
+  workflowTemplates: 'WorkflowTemplates',
+
+  students: 'Students',
+  customAuthentication: 'CustomAuthentication',
+  /** Option vocabularies every dropdown reads. Capitalised, as production has it. */
+  configuration: 'Configuration'
 });
 
 /** The field carrying ownership on institution documents. */
 export const OWNER_FIELD = 'ownerId';
+
+/**
+ * The option vocabularies: Configuration
+ *
+ * THE ONE COLLECTION HERE THAT IS NOT ANYONE'S DATA. Countries, boards, grades,
+ * sections and the rest — what every dropdown renders. The rules grant read to
+ * any signed-in user and refuse client writes outright, because one write to a
+ * list changes what every OTHER teacher can select. Editing goes through the
+ * console or scripts/seed-configuration.mjs, both on the Admin SDK.
+ *
+ * NO OWNER FILTER, and that is not an oversight. Every other top-level query
+ * here carries one because the rule reads resource.data and Firestore rejects a
+ * list it cannot prove is fully permitted. This collection's rule is a flat
+ * `read: if signedIn()`, so an unfiltered list IS provably permitted.
+ *
+ * It reached this file late: it was the last path in the app still built inline
+ * from `db`, which the isolation test exists to catch.
+ */
+export function configurationCollection(): CollectionReference {
+  return collection(db, COLLECTIONS.configuration);
+}
 
 
 function assertSafeSegment(segment: string, label: string): void {
@@ -427,6 +512,152 @@ export function ownedTrashLearningUnits(uid: string): Query {
 }
 
 /* ==========================================================================
+   Learning unit resources
+
+     learningUnitResources/{resourceId}                          ← ACTIVE
+     learningUnitResources/trash/DeletedLearningUnitResources/{resourceId}  ← DELETED
+
+   A TRASH, the same shape the other five collections use. Production has none
+   here — a resource document belonged to a unit, and deleting the unit was what
+   disposed of it — but that left every deleted unit's resource documents sitting
+   in the live collection with nothing pointing at them, which no screen could
+   show and no query could distinguish from a resource in use. Deleted resources
+   now go where every other deleted thing in this app goes, and can come back.
+
+   THE SENTINEL. `trash` is a real document path in this collection now, so a
+   resource whose own document id is the string 'trash' would collide with the
+   container. learningUnitResourceDoc rejects it, as the other four do.
+
+   FLAT, not a subcollection of the unit. Production keeps it top-level and
+   joins on `learningUnitDocId`, which is also what lets one query answer "every
+   resource document at Gold" across units — a collection-group query would be
+   the only way to serve that from a nested shape.
+
+   ONE DOCUMENT PER MATURITY RUNG. A unit at Gold has a Silver document and a
+   Gold one, because the ladder is cumulative; see LEARNING_UNIT_MATURITY_LADDER
+   and the resource schema for which slots each rung carries.
+   ========================================================================== */
+
+/** Every learning unit resource document: learningUnitResources */
+export function learningUnitResourcesCollection(): CollectionReference {
+  return collection(db, COLLECTIONS.learningUnitResources);
+}
+
+/** One resource document: learningUnitResources/{docId} */
+export function learningUnitResourceDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'document id');
+  assertNotTrashSentinel(docId);
+
+  return doc(learningUnitResourcesCollection(), docId);
+}
+
+export const LEARNING_UNIT_RESOURCE_TRASH_SUBCOLLECTION = 'DeletedLearningUnitResources';
+
+/** learningUnitResources/trash — a container document, no fields of its own. */
+function learningUnitResourceTrashContainer(): DocumentReference {
+  return doc(db, COLLECTIONS.learningUnitResources, TRASH_DOC);
+}
+
+/**
+ * DELETED resource documents:
+ * learningUnitResources/trash/DeletedLearningUnitResources
+ */
+export function trashLearningUnitResourcesCollection(): CollectionReference {
+  return collection(
+    learningUnitResourceTrashContainer(),
+    LEARNING_UNIT_RESOURCE_TRASH_SUBCOLLECTION
+  );
+}
+
+/** One deleted resource document. SAME id as the active document it came from. */
+export function trashLearningUnitResourceDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'document id');
+
+  return doc(trashLearningUnitResourcesCollection(), docId);
+}
+
+/**
+ * Every DELETED resource document belonging to one learning unit.
+ *
+ * The mirror of resourcesForLearningUnit, on the same field, so restoring a
+ * unit can find exactly what was trashed with it.
+ */
+export function trashedResourcesForLearningUnit(learningUnitDocId: string): Query {
+  assertSafeSegment(learningUnitDocId, 'learning unit document id');
+
+  return query(
+    trashLearningUnitResourcesCollection(),
+    where('learningUnitDocId', '==', learningUnitDocId)
+  );
+}
+
+/** A fresh resource reference with a generated id, so the id is known before the write. */
+export function newLearningUnitResourceDoc(): DocumentReference {
+  return doc(learningUnitResourcesCollection());
+}
+
+/**
+ * Every resource document belonging to one learning unit.
+ *
+ * Filtered on learningUnitDocId — the unit's document id, NOT its readable
+ * learningUnitId — because that is the one of the two that cannot change.
+ */
+export function resourcesForLearningUnit(learningUnitDocId: string): Query {
+  assertSafeSegment(learningUnitDocId, 'learning unit document id');
+
+  return query(
+    learningUnitResourcesCollection(),
+    where('learningUnitDocId', '==', learningUnitDocId)
+  );
+}
+
+/* ==========================================================================
+   Board and grade resources
+
+     boardGradeResources/{docId}
+
+   ONE DOCUMENT PER BOARD, with the grades as keys inside it. Production's own
+   shape: a document carries learningUnitDocId, maturity, category, subCategory
+   and board, and a `resources` map keyed grade_01 … grade_10 holding the path
+   for each grade.
+
+   WHY NOT ONE PER BOARD AND GRADE. Because the same file usually covers several
+   grades, and a document per pair would multiply by ten what is really one
+   decision — which is also why the picker takes several grades at once.
+
+   FLAT, and joined on learningUnitDocId, for the reason learningUnitResources is:
+   a nested shape would need a collection-group query to answer anything across
+   units.
+   ========================================================================== */
+
+/** Every board-and-grade resource document: boardGradeResources */
+export function boardGradeResourcesCollection(): CollectionReference {
+  return collection(db, COLLECTIONS.boardGradeResources);
+}
+
+/** One of them: boardGradeResources/{docId} */
+export function boardGradeResourceDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'document id');
+
+  return doc(boardGradeResourcesCollection(), docId);
+}
+
+/** A fresh one with a generated id. */
+export function newBoardGradeResourceDoc(): DocumentReference {
+  return doc(boardGradeResourcesCollection());
+}
+
+/** Everything filed against one learning unit, across every board and slot. */
+export function boardGradeResourcesForUnit(learningUnitDocId: string): Query {
+  assertSafeSegment(learningUnitDocId, 'learning unit document id');
+
+  return query(
+    boardGradeResourcesCollection(),
+    where('learningUnitDocId', '==', learningUnitDocId)
+  );
+}
+
+/* ==========================================================================
    Teachers — the SAME shape a fifth time
 
      teachers/{teacherId}                          ← ACTIVE
@@ -481,6 +712,174 @@ export function trashTeacherDoc(docId: string): DocumentReference {
 /** A fresh active-teacher reference with a generated id. */
 export function newActiveTeacherDoc(): DocumentReference {
   return doc(activeTeachersCollection());
+}
+
+/* ==========================================================================
+   ASSIGNMENTS — quizzes, uploads and forms
+   ==========================================================================
+
+   Assignments/{docId}
+   Assignments/--trash--/DeletedAssignments/{docId}
+
+   TWO DEPARTURES FROM THE FIVE COLLECTIONS ABOVE, both to match production
+   rather than this app's own habits, because this collection is new and can
+   simply start in the right place:
+
+     1. The collection is CAPITALISED — see COLLECTIONS.assignments.
+
+     2. The trash container is '--trash--', NOT 'trash'. Production's own
+        service reads
+          Assignments/--trash--/DeletedAssignments
+        and a container document by a different name would put this app's
+        deletions somewhere production would never look for them.
+
+   The dashed sentinel is also safer than the bare word: 'trash' is a plausible
+   document id for a real row, which is why every collection above needs an
+   assertNotTrashSentinel guard on writes. '--trash--' is not a name anything
+   would generate — but the guard is applied anyway, because "unlikely" is not
+   the same as "cannot".
+   ========================================================================== */
+
+/** The trash container's id in the Assignments collection. Production's. */
+/**
+ * '--trash--', the container id PRODUCTION uses.
+ *
+ * TWO SPELLINGS LIVE IN THIS FILE, deliberately. `TRASH_DOC` is 'trash', this
+ * app's own choice for the five collections it owns outright. '--trash--' is
+ * production's, and the two collections that MIRROR one of its own — Assignments
+ * and WorkflowTemplates — have to use its spelling or their deleted rows land
+ * somewhere production's own tooling cannot see.
+ */
+export const PRODUCTION_TRASH_DOC = '--trash--';
+
+/**
+ * The same id, under the name the assignments paths were written with.
+ *
+ * Kept as an alias rather than renamed at every call site: it is referenced by
+ * the rules commentary and by tests that pin the spelling, and a rename would
+ * churn those for no behavioural gain. New code should use
+ * PRODUCTION_TRASH_DOC, which does not claim to be assignment-specific.
+ */
+export const ASSIGNMENT_TRASH_DOC = PRODUCTION_TRASH_DOC;
+
+/** Subcollection holding deleted assignments. Production's name. */
+export const ASSIGNMENT_TRASH_SUBCOLLECTION = 'DeletedAssignments';
+
+/**
+ * EVERY RESERVED ID IN THE Assignments COLLECTION, not just the trash.
+ *
+ * Production's collection holds FOUR documents that are not assignments, and only
+ * one of them was named here before:
+ *
+ *   --trash--                the container for deleted rows
+ *   --schema--               a field reference for a quiz
+ *   ---quizzer_schema---     a worked quiz with all five question types
+ *   --default_assignments--  the default upload slots
+ *
+ * NOTE THE THREE DASHES on `---quizzer_schema---` and two on the rest. Not a typo
+ * to tidy: the id is what a read looks up, so a "corrected" spelling addresses a
+ * document that does not exist.
+ *
+ * WHY THEY NEED NAMING. They do not reach the table — `ownedAssignments` filters
+ * on `ownerId` and none of them has that field, so Firestore excludes them from
+ * the query outright. What they DO need is protection from being written over: a
+ * create addressed at one of these ids would replace a reference document with an
+ * assignment, and the trash container was the only id the rules refused.
+ *
+ * THE LAST THREE ARE REFERENCE DATA, NOT SCHEMA THIS APP OBEYS. `--schema--` and
+ * `---quizzer_schema---` name a quiz's question array `questionsSchema` and carry
+ * `name` and `type` fields on every question; across 174 questions in 37 real
+ * production quizzes those three appear ZERO times. The live data is what this app
+ * matches. See the note at the top of assignment.service.spec.ts.
+ */
+export const ASSIGNMENT_RESERVED_DOCS = Object.freeze([
+  ASSIGNMENT_TRASH_DOC,
+  '--schema--',
+  '---quizzer_schema---',
+  '--default_assignments--'
+] as const);
+
+/** ACTIVE assignments: Assignments */
+export function assignmentsCollection(): CollectionReference {
+  return collection(db, COLLECTIONS.assignments);
+}
+
+/** Assignments/--trash-- — a container document, no fields of its own. */
+function assignmentTrashContainer(): DocumentReference {
+  return doc(db, COLLECTIONS.assignments, ASSIGNMENT_TRASH_DOC);
+}
+
+/** DELETED assignments: Assignments/--trash--/DeletedAssignments */
+export function trashAssignmentsCollection(): CollectionReference {
+  return collection(assignmentTrashContainer(), ASSIGNMENT_TRASH_SUBCOLLECTION);
+}
+
+/** One active assignment: Assignments/{docId} */
+export function assignmentDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'document id');
+
+  if (docId === ASSIGNMENT_TRASH_DOC) {
+    throw new Error(
+      `'${ASSIGNMENT_TRASH_DOC}' is the trash container, not an assignment.`
+    );
+  }
+
+  return doc(assignmentsCollection(), docId);
+}
+
+/** One deleted assignment. SAME id as the active document it came from. */
+export function trashAssignmentDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'document id');
+
+  return doc(trashAssignmentsCollection(), docId);
+}
+
+/** A fresh assignment reference with a generated id. */
+export function newAssignmentDoc(): DocumentReference {
+  return doc(assignmentsCollection());
+}
+
+/**
+ * EVERY live assignment, whoever created it.
+ *
+ * UNFILTERED, AND THAT IS DELIBERATE. Every other top-level list in this file is
+ * owner-scoped, because institutions, classrooms and learning units carry
+ * ownership in a field and an unfiltered read of those would be refused. This one
+ * is different on both counts:
+ *
+ *   THE RULES ALREADY ALLOW IT. `match /Assignments/{assignmentId}` grants
+ *   `read: if signedIn()` with no ownership test, so listing the collection is
+ *   permitted and always was — the filter was the client's choice, not the rules'.
+ *
+ *   PRODUCTION DOES THE SAME. Its `getAllAssignmentsLimited` reads the whole
+ *   collection. The owner filter here was the divergence, not this.
+ *
+ * WHAT IT FIXES. An assignment is set by whoever built the workflow and answered
+ * by whoever teaches the class, and those are routinely different accounts — the
+ * same person signing in with Google rather than a phone is enough to make them
+ * differ. Owner-scoping meant a content block pointing at somebody else's
+ * assignment resolved to nothing, and the symptom looked like missing data rather
+ * than a boundary.
+ *
+ * `ownedAssignments` is KEPT below for the trash list, where "mine" is still the
+ * right question: restoring somebody else's deletion is not a thing to offer.
+ */
+export function allAssignments(): Query {
+  return query(assignmentsCollection());
+}
+
+/** The signed-in teacher's own assignments. Used for the trash list. */
+export function ownedAssignments(uid: string): Query {
+  assertSafeSegment(uid, 'uid');
+
+  return query(assignmentsCollection(), where(OWNER_FIELD, '==', uid));
+}
+
+/** The signed-in teacher's own DELETED assignments. */
+export function ownedTrashAssignments(uid: string): Query {
+  assertSafeSegment(uid, 'uid');
+
+  return query(trashAssignmentsCollection(), where(OWNER_FIELD, '==', uid));
 }
 
 /**
@@ -540,6 +939,261 @@ export function programmeCounterDoc(uid: string): DocumentReference {
 }
 
 /* ==========================================================================
+   QUIZ SUBMISSIONS — production's own shape, under production's own root
+
+     teachers/{teacherDocId}/submissions/{classroomId}-{programmeId}
+     teachers/{teacherDocId}/submissions/{summaryId}/attempts/attempt{N}
+     teachers/{teacherDocId}/submissions/{summaryId}/submissionMeta/{autoId}
+
+   PRODUCTION'S IS `Teachers/{teacherId}/submissions/…`, read off its own
+   `saveSubmissionFullPayload`, and every segment now matches: the summary
+   document id is `{classroomId}-{programmeId}`, the attempts hang under
+   `attempts` keyed `attempt1`, `attempt2`, and every submission drops a row in
+   `submissionMeta`. Verified against the live data —
+   `Teachers/aTfHAMn.../submissions/7pUSc6aJveINv25wgV1r-A8MSkCPOgMP7qn8ZdVmu`
+   holds attemptsCount 2 with `attempts/attempt1` and `attempts/attempt2`.
+
+   THE ROOT USED TO BE `users/{uid}`, AND WHY IT MOVED. It was under `users`
+   because the identities genuinely differed: this app's `teachers` collection
+   holds people REGISTERED AGAINST AN INSTITUTION, which is not necessarily the
+   account submitting, so there was no `teachers/{uid}` to nest under. That gap
+   is now closed at sign-in — `TeacherService.ensureRecordForSignedInUser` links
+   or creates a record for every account — so the teacher document exists for
+   everyone and the root can be production's.
+
+   IT IS THE TEACHER DOCUMENT ID, NOT THE UID. The two are the same value in
+   production and different here, because a teacher record has an id of its own.
+   Callers resolve it once, through `teacherByLinkedUid`.
+
+   THE UID HAS NOT GONE AWAY. `teacherId` is still written INSIDE the summary as
+   production writes it, and Storage paths still key on the uid — a file's
+   attribution is to the account that uploaded it.
+
+   THE SUMMARY IS PER CLASSROOM AND PROGRAMME, NOT PER QUIZ, and that is
+   production's own choice rather than a simplification here: `attemptsCount` and
+   the allowed-submissions cap therefore span every quiz in that classroom and
+   programme. Measured: of its summary documents holding more than one attempt,
+   each held attempts for a single quiz, so the difference has not bitten in
+   practice — but it is the shape, and copying it is what keeps a submission
+   written here readable by its own report screens.
+   ========================================================================== */
+
+export const SUBMISSIONS_SUBCOLLECTION = 'submissions';
+export const SUBMISSION_ATTEMPTS_SUBCOLLECTION = 'attempts';
+export const SUBMISSION_META_SUBCOLLECTION = 'submissionMeta';
+
+/**
+ * The summary document id: `{classroomId}-{programmeId}`.
+ *
+ * PRODUCTION'S OWN CONCATENATION, hyphen included. Built here rather than at the
+ * call site so the one place that knows the format is the one place that names
+ * the path.
+ */
+export function submissionSummaryId(classroomId: string, programmeId: string): string {
+  assertSafeSegment(classroomId, 'classroom id');
+  assertSafeSegment(programmeId, 'programme id');
+
+  return `${classroomId}-${programmeId}`;
+}
+
+/** teachers/{teacherDocId}/submissions/{classroomId}-{programmeId} */
+export function submissionSummaryDoc(
+  teacherDocId: string,
+  classroomId: string,
+  programmeId: string
+): DocumentReference {
+  assertSafeSegment(teacherDocId, 'teacher id');
+
+  return doc(
+    db,
+    COLLECTIONS.teachers,
+    teacherDocId,
+    SUBMISSIONS_SUBCOLLECTION,
+    submissionSummaryId(classroomId, programmeId)
+  );
+}
+
+/** teachers/{teacherDocId}/submissions/{summaryId}/attempts/attempt{N} */
+export function submissionAttemptDoc(
+  summary: DocumentReference,
+  attemptId: string
+): DocumentReference {
+  assertSafeSegment(attemptId, 'attempt id');
+
+  return doc(collection(summary, SUBMISSION_ATTEMPTS_SUBCOLLECTION), attemptId);
+}
+
+/**
+ * teachers/{teacherDocId}/submissions/{classroomId}-{programmeId}/attempts
+ *
+ * The whole attempt history for one classroom and programme, which is what the
+ * assignment report reads. NOT the same as `submissionAttemptsCollection` further
+ * down: that one addresses production's `Students/{id}/remoteSubmissions/...`,
+ * a shape this database does not have.
+ */
+export function teacherSubmissionAttempts(
+  teacherDocId: string,
+  classroomId: string,
+  programmeId: string
+): CollectionReference {
+  return collection(
+    submissionSummaryDoc(teacherDocId, classroomId, programmeId),
+    SUBMISSION_ATTEMPTS_SUBCOLLECTION
+  );
+}
+
+/** A fresh teachers/{teacherDocId}/submissions/{summaryId}/submissionMeta row. */
+export function newSubmissionMetaDoc(summary: DocumentReference): DocumentReference {
+  return doc(collection(summary, SUBMISSION_META_SUBCOLLECTION));
+}
+
+/* ==========================================================================
+   WORKFLOW COMPLETION — production's own shape, under the teacher document
+
+     teachers/{teacherDocId}/Completion/{learningUnitId}
+        docId      the learning unit id, repeated as a field
+        workflows  { {workflowId}: { completedSteps: number } }
+
+   READ OFF THE LIVE DOCUMENT, not inferred:
+   `Teachers/lVjawPYx8qOjegE3v5cg1yEfbt42/Completion/3BFIIOqg8YRK9hGU7m0r` holds
+   `workflows.JDVvf2ou8GqtVTisKrVF.completedSteps = 7` against a workflow of 7
+   steps, and `workflows.jTaz9koBb39zOTgG60Zv.completedSteps = 3` against one of
+   6. The document id is a LEARNING UNIT id — `3BFIIOqg8YRK9hGU7m0r` is
+   `LearningUnits` code PM05, "Magnetic Pen Stand" — so one document covers every
+   workflow that unit has ever been run under, in a map rather than in rows.
+
+   CAPITALISED, matching production, like `Assignments` and unlike this app's own
+   lowercase collections. Same reason as Assignments: the collection is NEW here
+   with no documents to migrate, so it can start on production's name where
+   `learningUnits` and `workflows` would need a data move to get there.
+
+   UNDER `teachers`, NOT `users`, WHICH IS THE ONE PLACE THIS APP FOLLOWS
+   PRODUCTION'S ROOT. Everything else private to a teacher lives on
+   `users/{uid}` here, because this app's `teachers` collection holds people
+   REGISTERED AGAINST AN INSTITUTION rather than the signed-in account — see the
+   submissions note above. Completion is different: it is progress THROUGH A
+   CLASSROOM'S workflow, and the classroom is reached via the teacher record, not
+   via the login. The join is `teacherMeta.uid`, and it needs a rules `get()`
+   because a rule cannot run a query.
+
+   A TEACHER RECORD IS NOT GUARANTEED. `teacherMeta.uid` is stamped when a teacher
+   signs in against a record someone registered for them; an account with no such
+   record has no document here to write under, and the caller is expected to say
+   so rather than invent one.
+   ========================================================================== */
+
+export const COMPLETION_SUBCOLLECTION = 'Completion';
+
+/** The field on a teacher document holding the linked auth uid. */
+export const TEACHER_LINKED_UID_FIELD = 'teacherMeta.uid';
+
+/**
+ * The teacher record LINKED TO A SIGNED-IN ACCOUNT: teacherMeta.uid == uid.
+ *
+ * NOT `ownerId`. That field holds whoever CREATED the roster record, which is
+ * normally a coordinator registering somebody else — the two are different
+ * people by design, and filtering on it would attribute a teacher's progress to
+ * their administrator. Measured on the dev database: of 13 teacher records 7
+ * carry a linked uid, no uid is claimed by two records, and no record has
+ * `ownerId` equal to its own `teacherMeta.uid`.
+ *
+ * A SINGLE where(), so it needs no composite index and firestore.indexes.json
+ * stays empty — the same constraint `ownedTeachers` above is written to.
+ */
+export function teacherByLinkedUid(uid: string): Query {
+  assertSafeSegment(uid, 'uid');
+
+  return query(
+    activeTeachersCollection(),
+    where(TEACHER_LINKED_UID_FIELD, '==', uid),
+    limit(1)
+  );
+}
+
+/** teachers/{teacherDocId}/Completion/{learningUnitId} */
+export function teacherCompletionDoc(
+  teacherDocId: string,
+  learningUnitId: string
+): DocumentReference {
+  assertSafeSegment(teacherDocId, 'teacher id');
+  assertSafeSegment(learningUnitId, 'learning unit id');
+
+  return doc(
+    db,
+    COLLECTIONS.teachers,
+    teacherDocId,
+    COMPLETION_SUBCOLLECTION,
+    learningUnitId
+  );
+}
+
+/** Every completion row for one teacher: teachers/{teacherDocId}/Completion */
+export function teacherCompletionCollection(teacherDocId: string): CollectionReference {
+  assertSafeSegment(teacherDocId, 'teacher id');
+
+  return collection(db, COLLECTIONS.teachers, teacherDocId, COMPLETION_SUBCOLLECTION);
+}
+
+/* ==========================================================================
+   ACTIVITY PROGRESS — which steps were opened, per classroom and unit
+
+     teachers/{teacherDocId}/activityProgress/{classroomId}_{learningUnitId}
+        teacherId        the account, repeated as a field
+        classroomId      \
+        luId              } the two halves of the id, repeated as fields
+        completedStages  the step indices opened, IN VISIT ORDER
+        updatedAt
+
+   READ OFF THE LIVE DOCUMENTS, not inferred. Production's
+   `Teachers/lVjawPYx.../activityProgress` holds exactly two rows:
+   `2jUYI7m4..._1RZWp4EQ...` with `completedStages: [2]`, and
+   `QIdSntxe..._3BFIIOqg...` with `[0, 1]`. Both ids are `classroomId_luId`,
+   verified by recomposing them from the fields.
+
+   THE SEPARATOR IS AN UNDERSCORE HERE AND A HYPHEN IN `submissions`. That is
+   production's own inconsistency and it is copied rather than tidied, because a
+   row written with the wrong separator is a row its readers cannot find.
+
+   NOT THE SAME NUMBER AS Completion, AND NOT A BUG. `Completion` counts steps
+   per WORKFLOW; this lists step indices per CLASSROOM AND UNIT. Production
+   disagrees with itself on the same unit — `3BFIIOqg8YRK9hGU7m0r` has
+   `Completion` recording 7 and 3 across two workflows while this records two
+   stages — because the two are written by different flows and answer different
+   questions. Anyone reconciling them is comparing the wrong things.
+
+   ORDER IS DATA, NOT NOISE. Production holds `[0,2,1,4,5,3]`, `[1,0]` and
+   `[5,4,3,2,1,0]`, so the array is the sequence steps were opened in,
+   deduplicated, and must not be sorted on write.
+   ========================================================================== */
+
+export const ACTIVITY_PROGRESS_SUBCOLLECTION = 'activityProgress';
+
+/** `{classroomId}_{learningUnitId}` — production's own concatenation. */
+export function activityProgressId(classroomId: string, learningUnitId: string): string {
+  assertSafeSegment(classroomId, 'classroom id');
+  assertSafeSegment(learningUnitId, 'learning unit id');
+
+  return `${classroomId}_${learningUnitId}`;
+}
+
+/** teachers/{teacherDocId}/activityProgress/{classroomId}_{learningUnitId} */
+export function teacherActivityProgressDoc(
+  teacherDocId: string,
+  classroomId: string,
+  learningUnitId: string
+): DocumentReference {
+  assertSafeSegment(teacherDocId, 'teacher id');
+
+  return doc(
+    db,
+    COLLECTIONS.teachers,
+    teacherDocId,
+    ACTIVITY_PROGRESS_SUBCOLLECTION,
+    activityProgressId(classroomId, learningUnitId)
+  );
+}
+
+/* ==========================================================================
    Notifications
 
    PER TEACHER, UNDER THEIR OWN USER DOCUMENT:
@@ -590,6 +1244,266 @@ export function newNotificationDoc(uid: string): DocumentReference {
  */
 export function recentNotifications(uid: string, cap = 50): Query {
   return query(notificationsCollection(uid), orderBy('createdAt', 'desc'), limit(cap));
+}
+
+/* ==========================================================================
+   Workflow templates.
+
+   The same six functions every owned collection here has, and the same trash
+   shape: a '--trash--' container with one named subcollection under it.
+   ========================================================================== */
+
+/** Subcollection holding deleted templates. Production's name. */
+export const WORKFLOW_TEMPLATE_TRASH_SUBCOLLECTION = 'DeletedWorkflowTemplates';
+
+export function workflowTemplatesCollection(): CollectionReference {
+  return collection(db, COLLECTIONS.workflowTemplates);
+}
+
+/** `WorkflowTemplates/--trash--` — a container document, no fields of its own. */
+function workflowTemplateTrashContainer(): DocumentReference {
+  return doc(db, COLLECTIONS.workflowTemplates, PRODUCTION_TRASH_DOC);
+}
+
+export function trashWorkflowTemplatesCollection(): CollectionReference {
+  return collection(
+    workflowTemplateTrashContainer(),
+    WORKFLOW_TEMPLATE_TRASH_SUBCOLLECTION
+  );
+}
+
+/** One live template. Refuses the trash id, as the other collections do. */
+export function workflowTemplateDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'docId');
+
+  if (docId === PRODUCTION_TRASH_DOC) {
+    throw new Error(
+      `'${PRODUCTION_TRASH_DOC}' is the trash container, not a workflow template.`
+    );
+  }
+
+  return doc(workflowTemplatesCollection(), docId);
+}
+
+export function trashWorkflowTemplateDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'docId');
+
+  return doc(trashWorkflowTemplatesCollection(), docId);
+}
+
+/** A fresh template reference with a generated id. */
+export function newWorkflowTemplateDoc(): DocumentReference {
+  return doc(workflowTemplatesCollection());
+}
+
+/* ==========================================================================
+   Workflows — a template INSTANTIATED for one learning unit in one classroom.
+
+   NOT QUERIED AS A COLLECTION, and that is why there is no `allWorkflows()`
+   here. A workflow is reached through the classroom that owns it:
+   `programmes[programmeId].workflowIds[]` holds one entry per learning unit and
+   the entry's `workflowId` is the document id. Listing the collection would
+   return every classroom's workflows with no way to tell whose is whose.
+   ========================================================================== */
+
+/**
+ * The ids in `workflows` that are NOT workflows.
+ *
+ * PRODUCTION'S OWN TWO, read off its collection: `--schema--` is a reference
+ * document describing the shape, and `--trash--` is the container the deleted ones
+ * hang under. Neither is a workflow, and a create addressed at either would
+ * replace a reference document with a row — which is why the rules exclude them
+ * and why nothing here builds a document reference to one by accident.
+ */
+export const WORKFLOW_TRASH_DOC = '--trash--';
+export const WORKFLOW_SCHEMA_DOC = '--schema--';
+
+export const WORKFLOW_RESERVED_DOCS = Object.freeze([
+  WORKFLOW_TRASH_DOC,
+  WORKFLOW_SCHEMA_DOC
+] as const);
+
+/** Production's own name for the subcollection under `--trash--`. */
+export const WORKFLOW_TRASH_SUBCOLLECTION = 'DeletedWorkflows';
+
+/** `workflows` — lowercase, like this app's other five own collections. */
+export function workflowsCollection(): CollectionReference {
+  return collection(db, COLLECTIONS.workflows);
+}
+
+/** `workflows/--trash--` — a container document, no fields of its own. */
+export function workflowTrashContainer(): DocumentReference {
+  return doc(workflowsCollection(), WORKFLOW_TRASH_DOC);
+}
+
+/**
+ * `workflows/--trash--/DeletedWorkflows` — production's own path.
+ *
+ * A SUBCOLLECTION UNDER A SENTINEL DOCUMENT, which is how every trash in this
+ * database is shaped: `Assignments/--trash--/DeletedAssignments`,
+ * `WorkflowTemplates/--trash--/DeletedWorkflowTemplates`. Production has this one
+ * too, and matching it means a workflow deleted here appears where its own console
+ * and tooling look for it.
+ */
+export function trashWorkflowsCollection(): CollectionReference {
+  return collection(workflowTrashContainer(), WORKFLOW_TRASH_SUBCOLLECTION);
+}
+
+/** One trashed workflow. */
+export function trashWorkflowDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'workflow id');
+
+  return doc(trashWorkflowsCollection(), docId);
+}
+
+/**
+ * One workflow, by the id the classroom's entry carries.
+ *
+ * REFUSES A RESERVED ID, as the assignment and template paths do: a classroom
+ * entry holding '--schema--' would otherwise read the reference document as though
+ * it were that unit's workflow, and a write would overwrite it.
+ */
+export function workflowDoc(docId: string): DocumentReference {
+  assertSafeSegment(docId, 'workflow id');
+
+  if ((WORKFLOW_RESERVED_DOCS as readonly string[]).includes(docId)) {
+    throw new Error(`'${docId}' is a reserved workflow id, not a workflow.`);
+  }
+
+  return doc(workflowsCollection(), docId);
+}
+
+/** A fresh workflow reference with a generated id. */
+export function newWorkflowDoc(): DocumentReference {
+  return doc(workflowsCollection());
+}
+
+/* --------------------------------------------------------------------------
+   DELETED STEPS — a second trash, one level down
+
+     workflows/--trash--/DeletedWorkflowSteps/{autoId}
+     WorkflowTemplates/--trash--/DeletedWorkflowTemplateSteps/{autoId}
+
+   WHY A STEP NEEDS ITS OWN TRASH. A step is not a document: it is an entry in
+   the `workflowSteps` array of one, so removing it and saving overwrites the
+   array and the step is gone with no copy anywhere. The whole-document trash
+   above cannot help — the document was not deleted, it was rewritten.
+
+   And a step is worth keeping. It carries its content blocks, their categories,
+   their access levels and durations: several minutes of a teacher's arrangement,
+   discarded by one click on a bin icon in a rail with no undo.
+
+   NOT A PRODUCTION PATH, and said plainly. Production's stepper removes a step
+   from the array and writes; nothing records what was in it. These two
+   subcollections are this app's own, named to sit alongside the trash paths
+   production does have, and additive: nothing in production reads them.
+
+   AUTO-ID, NOT THE STEP'S OWN. A step has no stable id — `workflowStepId`
+   appears in 0 of production's 2593 real steps — and the same step can be
+   removed, re-added and removed again, so a generated id per removal is the only
+   thing that does not collide.
+   -------------------------------------------------------------------------- */
+
+export const WORKFLOW_STEP_TRASH_SUBCOLLECTION = 'DeletedWorkflowSteps';
+export const WORKFLOW_TEMPLATE_STEP_TRASH_SUBCOLLECTION = 'DeletedWorkflowTemplateSteps';
+
+/** `workflows/--trash--/DeletedWorkflowSteps` */
+export function trashWorkflowStepsCollection(): CollectionReference {
+  return collection(workflowTrashContainer(), WORKFLOW_STEP_TRASH_SUBCOLLECTION);
+}
+
+/** A fresh deleted-step reference. */
+export function newTrashWorkflowStepDoc(): DocumentReference {
+  return doc(trashWorkflowStepsCollection());
+}
+
+/** `WorkflowTemplates/--trash--/DeletedWorkflowTemplateSteps` */
+export function trashWorkflowTemplateStepsCollection(): CollectionReference {
+  return collection(
+    workflowTemplateTrashContainer(),
+    WORKFLOW_TEMPLATE_STEP_TRASH_SUBCOLLECTION
+  );
+}
+
+/** A fresh deleted-template-step reference. */
+export function newTrashWorkflowTemplateStepDoc(): DocumentReference {
+  return doc(trashWorkflowTemplateStepsCollection());
+}
+
+/**
+ * EVERY template, not just the caller's — WHICH IS PRODUCTION'S BEHAVIOUR.
+ *
+ * NO OWNER FILTER, and that is the point. Production reads the whole collection
+ * (`afs.collection('WorkflowTemplates')`, no `where`), so all 46 of its templates
+ * are visible to every teacher; a workflow template is a shared blueprint, not
+ * personal data.
+ *
+ * THIS WAS OWNER-SCOPED AND THE SYMPTOM WAS INVISIBLE. A template created while
+ * impersonating one teacher simply did not appear when viewing as another, with no
+ * error and no empty-state distinction — it read as "my save did not work".
+ *
+ * `ownerId` IS STILL WRITTEN on create, for provenance. Nothing filters on it; it
+ * records who built the template, which is worth keeping even when everyone can
+ * see it.
+ */
+export function allWorkflowTemplates(): Query {
+  return query(workflowTemplatesCollection());
+}
+
+/** Every trashed template, for the same reason. */
+export function allTrashWorkflowTemplates(): Query {
+  return query(trashWorkflowTemplatesCollection());
+}
+
+/* ==========================================================================
+   Students and their submissions — the assignment report's sources.
+
+   READ-ONLY FROM THIS APP. It has no student model and writes none of these; the
+   report exports what production's own player records. Every path is built here
+   rather than inline so the one authoritative place still names them, and so a
+   student id cannot be concatenated into a path unchecked.
+   ========================================================================== */
+
+/** `Students` — production's collection, capitalised as it has it. */
+export function studentsCollection(): CollectionReference {
+  return collection(db, COLLECTIONS.students);
+}
+
+/** `CustomAuthentication/{studentId}` — where the student's display name lives. */
+export function studentAuthDoc(studentId: string): DocumentReference {
+  assertSafeSegment(studentId, 'studentId');
+
+  return doc(db, COLLECTIONS.customAuthentication, studentId);
+}
+
+/** `Students/{studentId}/remoteSubmissions` — one per assignment attempted. */
+export function remoteSubmissionsCollection(studentId: string): CollectionReference {
+  assertSafeSegment(studentId, 'studentId');
+
+  return collection(db, COLLECTIONS.students, studentId, 'remoteSubmissions');
+}
+
+/**
+ * `Students/{studentId}/remoteSubmissions/{submissionId}/attempts`.
+ *
+ * A student may attempt an assignment more than once, which is why this is a
+ * collection and not a field: the report reads the LATEST attempt.
+ */
+export function submissionAttemptsCollection(
+  studentId: string,
+  submissionId: string
+): CollectionReference {
+  assertSafeSegment(studentId, 'studentId');
+  assertSafeSegment(submissionId, 'submissionId');
+
+  return collection(
+    db,
+    COLLECTIONS.students,
+    studentId,
+    'remoteSubmissions',
+    submissionId,
+    'attempts'
+  );
 }
 
 /** Exported so the structure tests assert against the real constants. */

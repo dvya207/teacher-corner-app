@@ -1,0 +1,739 @@
+<!-- A FULL PAGE with a rail and a content pane, which is production's stepper:
+     the steps down the left, the current step's content on the right. -->
+<section class="cw-page">
+
+  @if (loading()) {
+    <p class="cw-state">Loading workflow…</p>
+  } @else if (error()) {
+    <p class="cw-state is-error" role="alert">{{ error() }}</p>
+  } @else {
+
+    <div class="cw-body">
+
+      <!-- ================================================================
+           The rail — the steps, and what can be done to them
+           ================================================================ -->
+      <aside class="cw-rail">
+
+        <a class="cw-back" [routerLink]="backLink()" [queryParams]="backQuery()">
+          <app-icon name="chevron-left" [size]="16" />
+          Back to Classroom
+        </a>
+
+        @if (currentStep(); as step) {
+          <!-- THE CURRENT STEP'S NAME AS A PILL, then its description, which is
+               production's own header for this rail. -->
+          <span class="cw-step-pill">{{ step.workflowStepName || 'Untitled step' }}</span>
+
+          @if (step.workflowStepDescription) {
+            <p class="cw-step-note">{{ step.workflowStepDescription }}</p>
+          }
+        }
+
+        @if (steps().length === 0) {
+          <!-- NO WORKFLOW YET. Production's Start: the unit has no steps until a
+               template is applied and saved. Says which of the two it is rather
+               than showing an empty ladder. -->
+          <div class="cw-empty">
+            <span class="cw-empty-icon"><app-icon name="list" [size]="22" /></span>
+            <h3>No workflow yet</h3>
+            <p>
+              Turn on <strong>Select New Template</strong> below and choose one to
+              build this unit's steps — or add one by hand.
+            </p>
+
+            <button type="button" class="cw-add is-inline" (click)="addStep()">
+              Add New Workflow Step
+              <app-icon name="plus-circle" [size]="17" />
+            </button>
+          </div>
+        } @else {
+          <app-workflow-timeline
+            [steps]="steps()"
+            [current]="currentIndex()"
+            [selectable]="true"
+            (selected)="selectStep($event)"
+            (edited)="editStep($event)"
+            (removed)="removeStep($event)"
+          />
+
+          <!-- Production's dashed band, and it opens THE SAME DIALOG the
+               workflow-template form opens — one component, so a step edited here
+               follows identical rules. -->
+          <button type="button" class="cw-add" (click)="addStep()">
+            Add New Workflow Step
+            <app-icon name="plus-circle" [size]="17" />
+          </button>
+        }
+
+        @if (saveError()) {
+          <p class="cw-error" role="alert">{{ saveError() }}</p>
+        }
+
+        <!-- A SAVE THAT WORKED BUT SKIPPED SOMETHING BLANK. Amber rather than red,
+             because nothing failed — and said at all, because silently discarding
+             a half-filled content block is what made a working save look broken. -->
+        @if (saveNotice()) {
+          <p class="cw-save-notice" role="status">{{ saveNotice() }}</p>
+        }
+
+        @if (steps().length > 0) {
+          <!-- ============================================================
+               UNSAVED CHANGES ARE SAID OUT LOUD.
+
+               The steps are a working copy and nothing is written until this
+               button is pressed — deliberate, so a template or a deletion can be
+               reconsidered. But nothing said so, and the result was a real
+               report: steps built in the UI, the page left, the work gone.
+               ============================================================ -->
+          @if (dirty()) {
+            <p class="cw-dirty">
+              <app-icon name="minus" [size]="14" />
+              <span>Unsaved changes. Nothing is stored until you save.</span>
+            </p>
+          }
+
+          <button
+            type="button"
+            class="cw-save"
+            [class.is-dirty]="dirty()"
+            [disabled]="!canSave()"
+            (click)="save()"
+          >
+            {{ saving() ? 'Saving…' : dirty() ? 'Save Workflow Steps •' : 'Saved' }}
+          </button>
+        }
+
+        <!-- ================================================================
+             Select New Template — the toggle, then the dropdown
+
+             THE TOGGLE ONLY REVEALS THE DROPDOWN. The confirmation is on the
+             CHOICE, not here: opening a list to see what is available should not
+             be a destructive act.
+             ================================================================ -->
+        <div class="cw-template">
+          <label class="cw-toggle" for="cw-template-toggle">
+            <span>Select New Template</span>
+            <input
+              id="cw-template-toggle"
+              type="checkbox"
+              class="cw-toggle-input"
+              [checked]="showTemplatePicker()"
+              (change)="toggleTemplatePicker()"
+            />
+            <span class="cw-toggle-track" aria-hidden="true"></span>
+          </label>
+
+          @if (showTemplatePicker()) {
+            <div class="field">
+              <!-- ==========================================================
+                   NO SEPARATE FIELD LABEL, on instruction: three stacked lines
+                   all began with "Select".
+
+                   Production carries all three — the toggle's "Select New
+                   Template", a mat-label "Select the Workflow Template" and a
+                   placeholder "Select a workflow Template" — but Material FLOATS
+                   its label, so the middle one sits inside the field until
+                   something is chosen. Rendered as a plain label above a plain
+                   select, the same three read as repetition.
+
+                   THE TOGGLE ABOVE AND THE PLACEHOLDER BELOW both say what this
+                   is, so the label is the one that goes. `aria-label` keeps the
+                   select named for a screen reader, which a visible label was
+                   also doing.
+                   ========================================================== -->
+              <select
+                id="cw-template"
+                aria-label="Select the workflow template"
+                (change)="chooseTemplate(valueOf($event))"
+              >
+                <!-- DISABLED, so it cannot be chosen — production writes
+                     `<mat-option value="" disabled selected>` for the same
+                     reason. It labels the field; it is not one of the answers. -->
+                <option value="" disabled selected>Select a workflow Template</option>
+                @for (template of templateOptions(); track template.docId) {
+                  <option [value]="template.docId">{{ template.templateName }}</option>
+                }
+              </select>
+
+              @if (templateOptions().length === 0) {
+                <!-- HONEST ABOUT WHY IT IS EMPTY. The list is filtered by the
+                     classroom's type, so "none" usually means none of that type
+                     rather than none at all. -->
+                <p class="cw-note">
+                  No workflow templates for this classroom's type yet.
+                </p>
+              }
+            </div>
+          }
+        </div>
+      </aside>
+
+      <!-- ================================================================
+           The content pane — one tab per content block of the current step
+           ================================================================ -->
+      <section class="cw-content">
+
+        @if (currentStep()) {
+          @if (tabs().length > 0) {
+            <div class="cw-tabs" role="tablist">
+              @for (content of tabs(); track $index; let tabIndex = $index) {
+                <button
+                  type="button"
+                  role="tab"
+                  class="cw-tab"
+                  [class.is-active]="tabIndex === activeTab()"
+                  [attr.aria-selected]="tabIndex === activeTab()"
+                  (click)="selectTab(tabIndex)"
+                >
+                  {{ content.contentName || 'Untitled content' }}
+                </button>
+              }
+            </div>
+          }
+
+          <div class="cw-pane">
+            @if (openContent(); as content) {
+
+              @if (content.contentCategory === 'assignment') {
+                <!-- ==========================================================
+                     AN ASSIGNMENT STEP, which is the ONLY shape that carries a
+                     tile and a detail table.
+
+                     Production's resource tabs — TACtivity Video, Guide,
+                     Material List — show the FILE directly under the tab strip
+                     and nothing else. The pale tile and the Due Date /
+                     Instructions / Assignment rows belong to its assignment
+                     renderer, whose tiles are one per upload slot. Putting them
+                     on a video step was wrong, and its own screenshots show why:
+                     the video sits immediately below the tabs.
+                     ========================================================== -->
+                @if (slots().length > 0) {
+                  <div class="cw-tiles">
+                    @for (slot of slots(); track $index; let slotIndex = $index) {
+                      <button
+                        type="button"
+                        class="cw-tile"
+                        [class.is-active]="slotIndex === activeSlot()"
+                        (click)="selectSlot(slotIndex)"
+                      >
+                        <span class="cw-tile-icon"><app-icon name="edit" [size]="16" /></span>
+                        <span class="cw-tile-name">{{ slot.title || 'Untitled slot' }}</span>
+                      </button>
+                    }
+                  </div>
+                }
+
+                <!-- ==========================================================
+                     THE DUE DATE / INSTRUCTIONS / ASSIGNMENT TABLE.
+
+                     NOT FOR A FORM, and that is production's split rather than a
+                     preference: its UPLOAD renderer draws this table and its FORM
+                     renderer does not — a form gets the centred Instructions
+                     heading inside its own card instead, which says the same thing
+                     in the place the reader is already looking.
+
+                     Rendering both meant a form step showed its instructions
+                     twice, once in a table row and once as the form's own heading,
+                     with a "2 fields" count nobody needs above a form that lists
+                     its two fields immediately below.
+                     ========================================================== -->
+                @if (showAssignmentDetail()) {
+                <div class="cw-detail">
+                  <dl class="cw-rows">
+                    <div class="cw-row">
+                      <dt>Due Date</dt>
+                      <dd>
+                        @if (content.isDueDate && content.assignmentDueDate) {
+                          {{ content.assignmentDueDate.toDate() | date: 'MMM d, y' }}
+                        } @else {
+                          <span class="cw-none">None</span>
+                        }
+                      </dd>
+                    </div>
+
+                    <!-- ========================================================
+                         THE PROSE ROW, WHOSE LABEL AND SOURCE FOLLOW THE TYPE.
+
+                         A FORM carries `instructions`; an UPLOAD carries them on
+                         each SLOT; a QUIZ carries none at all — it has
+                         `backgroundInfo` instead, the case study its questions
+                         refer to. Measured across 500 of production's
+                         assignments: 0 of 37 quizzes have an `instructions`
+                         field. The row used to read that field for everything and
+                         report "None given", which said a teacher had forgotten to
+                         fill in something a quiz never had.
+
+                         HIDDEN ENTIRELY for a quiz with no background, rather than
+                         shown empty.
+                         ======================================================== -->
+                    @if (showInstructionsRow()) {
+                      <div class="cw-row">
+                        <dt>{{ instructionsLabel() }}</dt>
+                        <dd>
+                          @if (backgroundTitle()) {
+                            <p class="cw-bg-title">{{ backgroundTitle() }}</p>
+                          }
+
+                          @if (openInstructions()) {
+                            <!-- HTML, because both an upload slot's instructions
+                                 and a quiz's background come from a rich-text
+                                 editor, and production renders them the same way.
+                                 Authored in this app's own wizard. -->
+                            <div class="cw-html" [innerHTML]="openInstructions()"></div>
+                          } @else if (!backgroundTitle() && backgroundFiles() === 0) {
+                            <span class="cw-none">None given</span>
+                          }
+
+                          @if (backgroundFiles() > 0) {
+                            <p class="cw-none">
+                              {{ backgroundFiles() }} attached
+                              file{{ backgroundFiles() === 1 ? '' : 's' }}, shown when
+                              the quiz runs.
+                            </p>
+                          }
+                        </dd>
+                      </div>
+                    }
+
+                    <div class="cw-row">
+                      <dt>Assignment</dt>
+                      <dd>
+                        <span class="cw-assignment">
+                          <strong>{{ content.assignmentName || 'Not chosen' }}</strong>
+                          @if (content.assignmentType) {
+                            <span class="cw-type">{{ content.assignmentType }}</span>
+                          }
+                          <!-- HOW MANY, not what they are. The card below carries
+                               the quiz itself; this row is the step's summary. -->
+                          @if (quizQuestions().length > 0) {
+                            <span class="cw-count">
+                              {{ quizQuestions().length }} question{{ quizQuestions().length === 1 ? '' : 's' }}
+                              · {{ quizMarks() }} mark{{ quizMarks() === 1 ? '' : 's' }}
+                            </span>
+                          } @else if (formQuestions().length > 0) {
+                            <span class="cw-count">
+                              {{ formQuestions().length }} field{{ formQuestions().length === 1 ? '' : 's' }}
+                            </span>
+                          }
+                        </span>
+
+                        <!-- ====================================================
+                             THE UPLOAD CONTROL — production's blue pill.
+
+                             IT USED TO SAY "Submissions are not recorded in this
+                             app", on the same wrong premise the quiz player had:
+                             that production submits against a STUDENT record.
+                             Its teacher upload writes to the same
+                             `submissions/{classroomId}-{programmeId}` document
+                             the quiz does, keyed by workflow, assignment and
+                             slot. See AssignmentUploadService.
+
+                             A LABEL WRAPPING A HIDDEN INPUT, which is how
+                             production does it and the only way to style a file
+                             picker. The label is the button.
+                             ==================================================== -->
+                        @if (canUpload()) {
+                          <div class="cw-upload">
+                            <label
+                              class="cw-upload-btn"
+                              [class.is-busy]="uploading()"
+                            >
+                              @if (uploading()) {
+                                <span class="cw-spinner" aria-hidden="true"></span>
+                                Uploading…
+                              } @else {
+                                <app-icon
+                                  [name]="uploadedPath() ? 'restore' : 'plus'"
+                                  [size]="16"
+                                />
+                                {{ uploadedPath() ? 'Re-upload' : 'Upload' }}
+                              }
+
+                              <input
+                                type="file"
+                                class="cw-upload-input"
+                                [accept]="uploadAccept()"
+                                [disabled]="uploading()"
+                                (change)="chooseUpload($event)"
+                              />
+                            </label>
+
+                          </div>
+
+                          <!-- NO "PDF (.pdf), up to 3MB" LINE, AND NO "Uploaded."
+                               NOTE. Both are gone on instruction, and production
+                               shows neither: the picker's own `accept` already
+                               limits what can be chosen, the button's label
+                               already says Re-upload once something is stored, and
+                               a refused file names its own type and size limit in
+                               the error below. Three places saying the same thing
+                               was two too many.
+                               -->
+                          @if (uploadError()) {
+                            <p class="cw-upload-error" role="alert">{{ uploadError() }}</p>
+                          }
+                        } @else if (slots().length > 0) {
+                          <!-- A SLOT WITH NO ASSIGNMENT BEHIND IT. The record is
+                               keyed on the assignment id, so there is nowhere to
+                               put a file — said rather than shown as a button that
+                               would fail. -->
+                          <p class="cw-none">
+                            Choose an assignment on this step before uploading.
+                          </p>
+                        }
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+                }
+
+                <!-- ==========================================================
+                     THE ASSIGNMENT'S OWN CONTENT.
+
+                     A content block stores a name and an id, nothing more — so
+                     this reads the assignment document and shows what it actually
+                     IS. Without it the pane named the assignment and stopped,
+                     which read as "the quiz's content is not coming".
+
+                     READ ONLY, and that is the honest shape here rather than a
+                     limitation to apologise for: production's equivalent is a
+                     player that records a student's attempt, and this app records
+                     no submissions. What a teacher wants on this page is to see
+                     what the class is about to be asked.
+                     ========================================================== -->
+                @if (assignmentMissing()) {
+                  <!-- TWO CAUSES, NAMED. The assignment may have been deleted
+                       since the step was built, or it may belong to another
+                       teacher — `AssignmentService.list()` is owner-scoped. Naming
+                       only one of them sends the reader looking in the wrong
+                       place. -->
+                  <p class="cw-none cw-detached">
+                    This step points at an assignment that could not be read: it has
+                    either been deleted, or it belongs to another teacher —
+                    assignments are listed per owner.
+                  </p>
+                } @else if (quizAssignment(); as quiz) {
+                  <!-- ==========================================================
+                       THE QUIZ CARD, which is production's: the quiz's name, who
+                       is about to run it, its duration, and Start Quiz.
+
+                       IT REPLACED A LIST OF THE QUESTIONS. That list showed the
+                       whole quiz on the page — which is the one thing a teacher
+                       must NOT do in front of a class, since the correct answers
+                       were marked on it.
+
+                       NO MANUAL / REMOTE CHOICE. Production asks because its
+                       Remote mode loads the class's student mapping so each
+                       student answers on their own device; this app has no student
+                       records, so Start goes straight into the run rather than
+                       offering a dialog with one working option.
+                       ========================================================== -->
+                  <div class="cw-quiz-card">
+                    <h3>{{ quiz.displayName }}</h3>
+
+                    <p class="cw-quiz-line">
+                      Teacher Name: <span>{{ teacherName() }}</span>
+                    </p>
+
+                    <p class="cw-quiz-line">
+                      Duration: <span>{{ quizDuration() }}</span>
+                    </p>
+
+                    @if (lastOutcome(); as result) {
+                      <p class="cw-none">
+                        Last run: {{ result.answered }} of {{ result.total }} answered@if (result.scorable > 0) {
+                          <span>, {{ result.scored }} of {{ result.scorable }} marks</span>
+                        }@if (result.markable === 0) {
+                          <span> (no correct answers set, so nothing could be marked)</span>
+                        }.@if (submissionNote() && !submissionFailed()) {
+                          <span> {{ submissionNote() }}.</span>
+                        }
+                      </p>
+                    }
+
+                    <button type="button" class="cw-quiz-start" (click)="startQuiz()">
+                      Start Quiz
+                      <app-icon name="arrow-right" [size]="15" />
+                    </button>
+                  </div>
+                } @else if (formQuestions().length > 0) {
+                  <!-- ==========================================================
+                       THE FORM ITSELF — production's, and fillable.
+
+                       THIS WAS A READ-ONLY LIST: each question printed with its
+                       type beside it, which told a teacher what the form WOULD
+                       ask and gave them no way to answer it. A Feedback step
+                       whose feedback cannot be given is a step that does nothing.
+
+                       See AssignmentForm for the layout and the answer-in-order
+                       rule, and FormSubmissionService for what Submit writes.
+                       ========================================================== -->
+                  <app-assignment-form
+                    [questions]="formQuestions()"
+                    [instructions]="formInstructions()"
+                    [submitting]="formSubmitting()"
+                    [submissionNote]="formNote()"
+                    [submissionFailed]="formFailed()"
+                    [clearedAt]="formClearedAt()"
+                    (submitted)="submitForm($event)"
+                  />
+                } @else if (openAssignment() && slots().length === 0) {
+                  <p class="cw-none cw-detached">
+                    This assignment has no questions yet.
+                  </p>
+                }
+
+                <!-- NO PREVIOUS / NEXT STEP PAIR HERE.
+
+                     Production draws one on its assignment renderer, and this
+                     page copied it — but this page also has the centred pager
+                     below, so the assignment tab ended up with TWO ways to move
+                     between steps, one of which showed a dead grey button on the
+                     last step. One pager, at the foot, for every tab.
+                     -->
+              } @else if (openResource().value) {
+                <!-- ==========================================================
+                     THE FILE ITSELF, DIRECTLY UNDER THE TABS.
+
+                     The block names a slot — 'video' plus 'tacVideoUrl' — and the
+                     file lives on the learning unit's resource document for its
+                     maturity. See WorkflowContentResourceService.
+                     ========================================================== -->
+                @switch (openKind()) {
+                  @case ('youtube') {
+                    <div class="cw-embed">
+                      <iframe
+                        [src]="youtubeEmbed()"
+                        title="Video for this step"
+                        loading="lazy"
+                        referrerpolicy="strict-origin-when-cross-origin"
+                        allow="fullscreen; encrypted-media"
+                      ></iframe>
+                    </div>
+                  }
+                  @case ('pdf') {
+                    @if (embeddableUrl()) {
+                      <!-- RENDERED INLINE, as production's Guide and Material
+                           List tabs do — the document, not a link to it. -->
+                      <div class="cw-doc">
+                        <iframe
+                          [src]="embeddableUrl()"
+                          [title]="content.contentName || 'Document for this step'"
+                        ></iframe>
+                      </div>
+                    } @else if (openUrl()) {
+                      <a class="cw-open" [href]="openUrl()" target="_blank" rel="noopener">
+                        <app-icon name="download" [size]="15" />
+                        Open {{ content.contentName || 'this document' }}
+                      </a>
+                    } @else {
+                      <p class="cw-none">{{ urlState() }}</p>
+                    }
+                  }
+                  @case ('image') {
+                    @if (openUrl()) {
+                      <img class="cw-image" [src]="openUrl()" [alt]="content.contentName" />
+                    } @else {
+                      <p class="cw-none">{{ urlState() }}</p>
+                    }
+                  }
+                  @case ('video') {
+                    @if (openUrl()) {
+                      <video class="cw-video" [src]="openUrl()" controls></video>
+                    } @else {
+                      <p class="cw-none">{{ urlState() }}</p>
+                    }
+                  }
+                  @case ('office') {
+                    <!-- NO BROWSER RENDERS A .pptx, .docx OR .xlsx INLINE, so a
+                         link is the only honest option here — and the pane says
+                         WHY rather than leaving a bare Open button. Production's
+                         observation sheets are PDFs, which is why they display;
+                         converting this file is what makes it appear. -->
+                    <div class="cw-office">
+                      @if (openUrl()) {
+                        <a class="cw-open" [href]="openUrl()" target="_blank" rel="noopener">
+                          <app-icon name="download" [size]="15" />
+                          Open {{ content.contentName || 'this file' }}
+                        </a>
+                      } @else {
+                        <p class="cw-none">{{ urlState() }}</p>
+                      }
+
+                      <p class="cw-none">
+                        This is {{ officeKindLabel() }}, which no browser can display
+                        in the page. Upload it as a PDF and it will show here.
+                      </p>
+                    </div>
+                  }
+                  @default {
+                    @if (openUrl()) {
+                      <a class="cw-open" [href]="openUrl()" target="_blank" rel="noopener">
+                        <app-icon name="download" [size]="15" />
+                        Open {{ content.contentName || 'this resource' }}
+                      </a>
+                    } @else {
+                      <p class="cw-none">{{ urlState() }}</p>
+                    }
+                  }
+                }
+
+                <!-- WHERE IT CAME FROM. Four sources are possible, and "which
+                     file am I looking at" is a real question when a slot is board-
+                     and grade-dependent. -->
+                <p class="cw-origin">
+                  {{ originLabel() }}
+                  <span class="cw-slot">{{ openResource().slot }}</span>
+                </p>
+              } @else {
+                <div class="cw-blank">
+                  <span class="cw-empty-icon"><app-icon name="box" [size]="22" /></span>
+                  <h3>{{ content.contentName || 'Untitled content' }}</h3>
+                  <p>
+                    This step names a
+                    <strong>{{ content.contentCategory || 'content' }}</strong>@if (content.contentSubCategory) {
+                      <span> ({{ content.contentSubCategory }})</span>
+                    } resource, but no file is attached to this learning unit
+                    @if (unit()) {
+                      <span>at {{ unit()!.Maturity }} maturity</span>
+                    } yet.
+                  </p>
+                </div>
+              }
+            } @else {
+              <div class="cw-blank">
+                <span class="cw-empty-icon"><app-icon name="box" [size]="22" /></span>
+                <h3>No content on this step</h3>
+                <p>This step has no content blocks.</p>
+              </div>
+            }
+          </div>
+
+          <!-- Production's dark pager, CENTRED below the divider. -->
+          @if (steps().length > 1) {
+            <footer class="cw-pager">
+              <button
+                type="button"
+                class="cw-page-btn"
+                [disabled]="!hasPrevious()"
+                (click)="previous()"
+              >
+                <app-icon name="arrow-right" [size]="15" />
+                Prev
+              </button>
+
+              <span class="cw-page-count">{{ pagerLabel() }}</span>
+
+              <button
+                type="button"
+                class="cw-page-btn"
+                [disabled]="!hasNext()"
+                (click)="next()"
+              >
+                Next
+                <app-icon name="arrow-right" [size]="15" />
+              </button>
+            </footer>
+          }
+        } @else {
+          <div class="cw-blank">
+            <span class="cw-empty-icon"><app-icon name="list" [size]="22" /></span>
+            <h3>Nothing to show yet</h3>
+            <p>Choose a workflow template to build this unit's steps.</p>
+          </div>
+        }
+      </section>
+    </div>
+  }
+</section>
+
+<!-- THE QUIZ PLAYER, over the whole page. Records nothing — see its own note. -->
+@if (playing() && quizAssignment(); as quiz) {
+  <app-quiz-player
+    [quiz]="quiz"
+    [submitting]="submitting()"
+    [submissionNote]="submissionNote()"
+    [submissionFailed]="submissionFailed()"
+    (submitted)="recordOutcome($event)"
+    (closed)="closeQuiz()"
+  />
+}
+
+<!-- ======================================================================
+     The step editor — THE SAME COMPONENT the workflow-template form opens.
+
+     Production shares one dialog between its template builder and its classroom
+     stepper, and so does this: the rules for a step's fields live in one place, so
+     a step created here and one created there cannot drift apart.
+     ====================================================================== -->
+@if (openStep() !== null) {
+  @if (openStepValue(); as step) {
+    <app-workflow-step-dialog
+      [step]="step"
+      [templateMode]="'default'"
+      [categorySlots]="categorySlots()"
+      (stepChanged)="patchStep(openStep()!, $event)"
+      (contentChanged)="patchContent(openStep()!, $event.index, $event.patch)"
+      (contentAdded)="addContent(openStep()!)"
+      (contentRemoved)="removeContent(openStep()!, $event)"
+      (closed)="closeStepDialog()"
+    />
+  }
+}
+
+<!-- APPLYING A TEMPLATE DISCARDS EDITS, so it asks — production's own wording. -->
+@if (pendingTemplateId()) {
+  <app-confirm-dialog
+    heading="Change Workflow Template"
+    [message]="'Apply ' + pendingTemplateName() + ' to this learning unit?'"
+    warning="You have made modifications to the current steps. These changes will be
+             lost if you select a new template."
+    icon="restore"
+    confirmLabel="Yes, apply it"
+    cancelLabel="No, keep my steps"
+    (confirmed)="confirmTemplate()"
+    (cancelled)="cancelTemplate()"
+  />
+}
+
+<!-- ======================================================================
+     FEEDBACK SUBMITTED — the popup after a form write lands.
+
+     A FLOATING PANEL RATHER THAN THE INLINE BANNER the tables use, because it
+     reports something that happened somewhere else on the page: the form has just
+     emptied itself, and a line inside a now-blank card would be the only evidence
+     the answers went anywhere.
+
+     IT SAYS WHAT WAS LOST, TOO. A form keeps no version history, so submitting
+     again overwrites — and an emptied form no longer shows what would be
+     overwritten. This is where that warning lives now.
+     ====================================================================== -->
+@if (popup()) {
+  <!-- The backdrop dismisses on click and Escape dismisses from the keyboard,
+       bound on the host — the same pair ConfirmDialog uses, with the same
+       disables, because a div cannot receive a keydown it never has focus for. -->
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+  <div class="cw-popup-scrim" (click)="dismissPopup()">
+    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+    <div
+      class="cw-popup"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="cw-popup-title"
+      (click)="$event.stopPropagation()"
+    >
+      <span class="cw-popup-icon"><app-icon name="check-circle" [size]="30" /></span>
+
+      <h2 class="cw-popup-title" id="cw-popup-title">{{ popup() }}</h2>
+
+      @if (popupNote()) {
+        <p class="cw-popup-note">{{ popupNote() }}</p>
+      }
+
+      <button type="button" class="cw-popup-btn" (click)="dismissPopup()">
+        Done
+      </button>
+    </div>
+  </div>
+}

@@ -14,9 +14,11 @@ import {
   TrashedClassroom
 } from '../../models/teaching.model';
 import { ClassroomService } from '../../services/classroom.service';
+import { DashboardService } from '../../services/dashboard.service';
 import { InstitutionService } from '../../services/institution.service';
-import { LearningUnitService } from '../../services/learning-unit.service';
+import { LearningUnitService, toPickableUnits } from '../../services/learning-unit.service';
 import { ProgrammeService } from '../../services/programme.service';
+import { AddProgramme } from '../programme/add-programme';
 import { AddClassroom } from './add-classroom';
 import { EditClassroom } from './edit-classroom';
 
@@ -42,13 +44,14 @@ export type ClassroomFilter = 'All' | 'Classrooms' | 'STEM Clubs';
  */
 @Component({
   selector: 'app-classrooms',
-  imports: [DatePipe, Icon, AddClassroom, EditClassroom],
+  imports: [DatePipe, Icon, AddClassroom, AddProgramme, EditClassroom],
   templateUrl: './classrooms.html',
   styleUrl: './classrooms.css'
 })
 export class Classrooms implements OnInit {
 
   private service = inject(ClassroomService);
+  private dashboard = inject(DashboardService);
   private institutionService = inject(InstitutionService);
   private programmeService = inject(ProgrammeService);
   private learningUnitService = inject(LearningUnitService);
@@ -184,6 +187,65 @@ export class Classrooms implements OnInit {
     this.learningUnits.set(learningUnits.status === 'fulfilled' ? learningUnits.value : []);
 
     this.loading.set(false);
+  }
+
+  // ---- The Create Programme wizard, opened from Add Classroom -------------
+
+  /**
+   * Learning units for the wizard's step 3, in the same shape the Programme page
+   * passes.
+   *
+   * `toPickableUnits` is where the LIVE filter and the one-row-per-document rule
+   * live, so calling it here rather than reshaping the list by hand is what keeps
+   * the two entry points offering the same catalogue. A computed, not a second
+   * signal set during load, so it cannot go stale against `learningUnits`.
+   */
+  readonly pickableUnits = computed(() => toPickableUnits(this.learningUnits()));
+
+  /**
+   * The school and grade the wizard is open for, or null when it is closed.
+   *
+   * Holds the SCOPE rather than a boolean, because those two values are the whole
+   * reason the wizard can skip its first step.
+   */
+  readonly programmeWizardScope = signal<{
+    institutionId: string;
+    institutionName: string;
+    grades: string[];
+  } | null>(null);
+
+  openProgrammeWizard(scope: {
+    institutionId: string;
+    institutionName: string;
+    grades: string[];
+  }): void {
+    this.modalError.set('');
+    this.programmeWizardScope.set(scope);
+  }
+
+  closeProgrammeWizard(): void {
+    this.programmeWizardScope.set(null);
+  }
+
+  /**
+   * Creates the programme the wizard built, then closes it.
+   *
+   * ONLY CLOSES ON SUCCESS. createProgramme records its failure in `modalError`,
+   * which the wizard renders, so closing regardless would discard four steps of
+   * input and show the error behind it on a form the user can no longer see.
+   *
+   * Add Classroom stays open throughout, and the created programme reaches its
+   * picker through the `programmes` input — no reload, and the classroom form
+   * keeps everything already filled in.
+   */
+  async createProgrammeFromWizard(draft: ProgrammeDraft): Promise<void> {
+    const before = this.programmes().length;
+
+    await this.createProgramme(draft);
+
+    if (this.programmes().length > before) {
+      this.closeProgrammeWizard();
+    }
   }
 
   // ---- Stats -------------------------------------------------------------
@@ -540,6 +602,18 @@ export class Classrooms implements OnInit {
       this.trashed.update(list => [trashed, ...list]);
       this.flashNotice(`${this.title(target)} moved to Trash`);
 
+      /*
+       * THE DASHBOARD AND THE SIDEBAR, IMMEDIATELY.
+       *
+       * moveToTrash also detaches the class from every teacher who taught it, and
+       * both of those surfaces are built from those teacher documents. Without
+       * this the class stayed on the dashboard cards, in their counts, and in the
+       * sidebar tree until a reload.
+       *
+       * Awaited inside the row action, so a failure lands on the same error
+       * surface as the delete rather than passing silently.
+       */
+      await this.dashboard.refresh();
     });
 
     // Closed either way: on failure the message is on the page behind, and the
@@ -555,6 +629,10 @@ export class Classrooms implements OnInit {
       this.classrooms.update(list => [restored, ...list]);
 
       this.flashNotice(`${this.title(restored)} restored`);
+
+      // The mirror: restore re-attaches the teacher links, so both surfaces get
+      // the class back without a reload.
+      await this.dashboard.refresh();
     });
   }
 

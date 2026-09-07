@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import {
   Timestamp,
   deleteDoc,
+  getDoc,
   getDocs,
   runTransaction,
   serverTimestamp,
@@ -12,6 +13,7 @@ import {
 import { db } from '../core/firebase';
 import {
   activeClassroomDoc,
+  learningUnitDoc,
   newActiveClassroomDoc,
   trashClassroomDoc,
   activeClassroomsCollection,
@@ -22,11 +24,15 @@ import {
   Classroom,
   ClassroomDraft,
   ClassroomProgramme,
+  ClassroomProgrammeWorkflow,
+  LearningUnit,
   Programme,
   TRASH_METADATA_FIELDS,
+  TeacherClassroom,
   TrashedClassroom
 } from '../models/teaching.model';
 import { AuthService } from './auth.service';
+import { TeacherService } from './teacher.service';
 
 /**
  * Fills in fields a stored classroom may predate, and flattens production's
@@ -86,30 +92,164 @@ export function stripTrashMetadata(
 }
 
 /**
- * The four fields a classroom keeps about a programme.
+ * What a classroom keeps about a programme — INCLUDING its allotted learning
+ * units.
  *
- * Exported because both writers need it and they must agree: the Add form
- * attaches programmes at creation and Manage Programmes rewrites them later. If
+ * Exported because every writer needs it and they must agree: the Add form
+ * attaches programmes at creation and the edit dialog rewrites them later. If
  * the two shapes drifted, editing a classroom would silently drop whichever
- * field the other one wrote.
+ * field the other one wrote. add-classroom.ts used to inline these fields rather
+ * than call this, which is exactly that drift; it goes through here now.
  *
- * production's `workflowIds` and `sequentiallyLocked` are deliberately NOT
- * carried. They belong to the learning-unit locking flow, which this app does
- * not have, and writing keys nothing here maintains would leave them stale.
+ * `workflowIds` AND `sequentiallyLocked` ARE NOW WRITTEN. The comment here used
+ * to say they were "deliberately NOT carried" because the locking flow did not
+ * exist. Two things changed: the flow does exist (programme-locking.ts), and the
+ * consequence of not seeding the array was that a classroom stored no record of
+ * which learning units it had been allotted at all — so the locking editor had no
+ * rows to show and nothing downstream could answer "what is this class working
+ * on". Production's structure, verbatim:
+ *
+ *   classrooms/{id}.programmes.{programmeId} = {
+ *     displayName, programmeCode, programmeId, programmeName,
+ *     sequentiallyLocked: false,
+ *     workflowIds: [ { learningUnitId, workflowId, openAt, closeAt,
+ *                      workflowLocked }, … ]
+ *   }
+ *
+ * POSITIONAL AGAINST THE PROGRAMME'S learningUnitsIds, which is production's own
+ * rule and not a convenience: its learning-details form builds this array by
+ * mapping over `learningUnitsIds` index for index and reading the stored entry at
+ * the same index. An array in a different order attaches one unit's dates to
+ * another unit.
+ *
+ * WORKFLOWS THEMSELVES ARE SKIPPED, on instruction. `workflowId` is carried
+ * through when a document already has one and written as '' otherwise; nothing
+ * here creates a workflow document or a template. That mirrors production's own
+ * default (`workflowId: [wf?.workflowId ?? '']`), so a classroom written by this
+ * app is readable by production's forms and vice versa.
+ *
+ * `existing` is the entry ALREADY on the classroom, when there is one. Passing it
+ * preserves per-unit locking across a re-save: without it, re-attaching a
+ * programme — or any edit that rewrites the map — would silently reset every date
+ * and lock on that class to empty.
  */
-export function toClassroomProgramme(programme: Programme): ClassroomProgramme {
+export function toClassroomProgramme(
+  programme: Programme,
+  existing?: ClassroomProgramme,
+  units?: ReadonlyMap<string, LearningUnit>
+): ClassroomProgramme {
+  const stored = existing?.workflowIds ?? [];
+
   return {
     programmeId: programme.programmeId,
     programmeName: programme.programmeName,
     programmeCode: programme.programmeCode,
-    displayName: programme.displayName?.trim() || programme.programmeName
+    displayName: programme.displayName?.trim() || programme.programmeName,
+    sequentiallyLocked: existing?.sequentiallyLocked ?? false,
+    workflowIds: (programme.learningUnitsIds ?? []).map((learningUnitId, index) => {
+      /*
+       * THE ID IS CHECKED, not just the index. A stored entry only carries over
+       * if it is about the same unit: the programme's unit list can change after
+       * the locks were written, and adopting an entry by position alone would
+       * move one unit's dates onto whatever now sits at that index. The same
+       * guard programme-locking.ts applies when it reads these back.
+       */
+      const previous = stored[index];
+      const aligned =
+        previous && (!previous.learningUnitId || previous.learningUnitId === learningUnitId)
+          ? previous
+          : undefined;
+
+      /*
+       * THE SPLIT THAT MATTERS: locking is PRESERVED, description is RE-DERIVED.
+       *
+       * The dates and locks are the classroom's own data and exist nowhere else,
+       * so losing them is unrecoverable. The code, name, type, version and
+       * language are a copy of the catalogue, so re-reading them on every write
+       * is what keeps a renamed or re-versioned unit from going stale here —
+       * carrying the old copy forward would preserve a name the catalogue no
+       * longer has.
+       */
+      const unit = units?.get(learningUnitId);
+
+      return {
+        learningUnitId,
+        workflowId: aligned?.workflowId ?? '',
+        openAt: aligned?.openAt ?? '',
+        closeAt: aligned?.closeAt ?? '',
+        workflowLocked: aligned?.workflowLocked ?? false,
+
+        /*
+         * '' WHEN THE UNIT IS NOT IN THE CATALOGUE, never omitted, and the id is
+         * kept regardless. A unit can be trashed while a classroom still
+         * references it, and a caller can legitimately pass no catalogue at all —
+         * dropping the entry in either case would delete the allotment, which is
+         * a far worse answer than an entry that names an id and no title. Falls
+         * back to whatever the previous entry recorded, so a re-save without a
+         * catalogue does not blank detail that was already there.
+         */
+        learningUnitCode: unit?.learningUnitCode ?? aligned?.learningUnitCode ?? '',
+        learningUnitName:
+          unit?.learningUnitDisplayName?.trim() ||
+          unit?.learningUnitName ||
+          aligned?.learningUnitName ||
+          '',
+        learningUnitType: unit?.type ?? aligned?.learningUnitType ?? '',
+        learningUnitVersion: unit?.version ?? aligned?.learningUnitVersion ?? '',
+        learningUnitIsoCode: unit?.isoCode ?? aligned?.learningUnitIsoCode ?? ''
+      };
+    })
   };
 }
 
-/** The programmes map keyed by id, which is the shape Firestore stores. */
-export function toProgrammeMap(programmes: Programme[]): Record<string, ClassroomProgramme> {
+/**
+ * Indexes a learning-unit catalogue for `toClassroomProgramme`.
+ *
+ * KEYED BOTH WAYS, by `docId` and by `learningUnitId`. This app always stores
+ * docIds in `learningUnitsIds`, but production's own code reads its classroom
+ * entries either way —
+ *
+ *   wfs['learningUnitId'].includes('-') ? … === d.learningUnitId : … === d.docId
+ *
+ * — because the composite form ('TA-AE04-EN-V10') appears in some documents. A
+ * classroom imported from there would otherwise resolve to no unit and be
+ * written back with empty detail.
+ */
+export function indexLearningUnits(
+  units: readonly LearningUnit[]
+): ReadonlyMap<string, LearningUnit> {
+  const index = new Map<string, LearningUnit>();
+
+  for (const unit of units) {
+    if (unit.docId) {
+      index.set(unit.docId, unit);
+    }
+
+    // Second, so a docId collision can never be shadowed by a composite id.
+    if (unit.learningUnitId && !index.has(unit.learningUnitId)) {
+      index.set(unit.learningUnitId, unit);
+    }
+  }
+
+  return index;
+}
+
+/**
+ * The programmes map keyed by id, which is the shape Firestore stores.
+ *
+ * `existing` is the classroom's current map, threaded through so each entry can
+ * keep its own locking. Omitted at creation, where there is nothing to keep.
+ */
+export function toProgrammeMap(
+  programmes: Programme[],
+  existing?: Record<string, ClassroomProgramme>,
+  units?: ReadonlyMap<string, LearningUnit>
+): Record<string, ClassroomProgramme> {
   return Object.fromEntries(
-    programmes.map(programme => [programme.programmeId, toClassroomProgramme(programme)])
+    programmes.map(programme => [
+      programme.programmeId,
+      toClassroomProgramme(programme, existing?.[programme.programmeId], units)
+    ])
   );
 }
 
@@ -119,9 +259,16 @@ export function toProgrammeMap(programmes: Programme[]): Record<string, Classroo
 export class ClassroomService {
 
   private auth = inject(AuthService);
+  private teachers = inject(TeacherService);
 
   /**
-   * Every LIVE classroom the signed-in teacher owns, newest first.
+   * Every LIVE classroom IN THE DATABASE, newest first. NOT the caller's own.
+   *
+   * THIS IS NOT OWNER-SCOPED, despite what this comment used to say. Reads
+   * authorise on authentication alone, so this returns every classroom any
+   * teacher has created. ownerId is still stamped on create; nothing reads it
+   * back. ownedClassrooms() in core/firestore-paths.ts is the filtered version
+   * and has no callers.
    *
    * No "not deleted" filter, because deleted rows are not in this collection at
    * all — that is the point of moving them rather than flagging them.
@@ -135,6 +282,30 @@ export class ClassroomService {
   }
 
   /** Everything in the teacher's classroom trash, most recently deleted first. */
+  /**
+   * One classroom, by id.
+   *
+   * A DIRECT DOCUMENT READ, not a find over list(): the classroom page is
+   * opened by URL — including on a hard refresh or a shared link — and pulling
+   * the whole collection to locate one row would scale with everyone else's
+   * classrooms rather than with this one.
+   *
+   * Returns null for a missing document rather than throwing, so the page can
+   * say "that classroom no longer exists" instead of showing an error banner
+   * that reads like a fault.
+   */
+  async get(docId: string): Promise<Classroom | null> {
+    if (!docId) {
+      return null;
+    }
+
+    const snapshot = await getDoc(activeClassroomDoc(docId));
+
+    return snapshot.exists()
+      ? normaliseClassroom<Classroom>(snapshot.id, snapshot.data())
+      : null;
+  }
+
   async listTrash(): Promise<TrashedClassroom[]> {
     const snapshot = await getDocs(trashClassroomsCollection());
 
@@ -180,6 +351,8 @@ export class ClassroomService {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
+
+    payload.programmes = await this.describeAllottedUnits(payload.programmes);
 
     await setDoc(reference, payload);
 
@@ -236,7 +409,122 @@ export class ClassroomService {
       return;
     }
 
+    if (defined['programmes']) {
+      defined['programmes'] = await this.describeAllottedUnits(
+        defined['programmes'] as Record<string, ClassroomProgramme>
+      );
+    }
+
     await updateDoc(activeClassroomDoc(docId), { ...defined, updatedAt: serverTimestamp() });
+  }
+
+  /**
+   * Fills in WHAT each allotted learning unit is, before the map is written.
+   *
+   * WHY IN THE SERVICE AND NOT IN EACH CALLER. Four places build this map — Add
+   * Classroom, the edit dialog, the setup wizard and registration — and only the
+   * first two have a learning-unit catalogue loaded. Threading one through the
+   * other two would mean each of them reading the whole collection for a field
+   * they never render, and any fifth writer added later would silently store ids
+   * with no detail. Doing it here means every write is described, once.
+   *
+   * READS ONLY THE UNITS IT NEEDS, and only those still missing detail, so a
+   * classroom whose map already carries codes and names costs nothing. Each read
+   * is a document GET by id — no query, no index.
+   *
+   * NEVER FAILS THE WRITE. A refused or missing learning unit leaves that entry's
+   * detail empty and the allotment intact: the id is the load-bearing part, and
+   * losing an allotment because a title could not be read would be a far worse
+   * outcome than an entry with no title.
+   */
+  private async describeAllottedUnits(
+    programmes: Record<string, ClassroomProgramme> | undefined
+  ): Promise<Record<string, ClassroomProgramme>> {
+    if (!programmes) {
+      return {};
+    }
+
+    const wanted = new Set<string>();
+
+    for (const entry of Object.values(programmes)) {
+      for (const workflow of entry.workflowIds ?? []) {
+        if (workflow.learningUnitId && !workflow.learningUnitCode) {
+          wanted.add(workflow.learningUnitId);
+        }
+      }
+    }
+
+    if (wanted.size === 0) {
+      return programmes;
+    }
+
+    /*
+     * The five fields, read defensively rather than through a normaliser.
+     *
+     * normaliseClassroom is for CLASSROOMS — running a learning unit through it
+     * would fill in classroomName and grade, which is nonsense here — and the
+     * learning-unit service's own normaliser would make this service depend on
+     * it for five strings. `String(… ?? '')` cannot produce undefined, which is
+     * the only property that matters on the way into Firestore.
+     */
+    const found = new Map<string, ClassroomProgrammeWorkflow>();
+
+    await Promise.all(
+      [...wanted].map(async id => {
+        try {
+          const snapshot = await getDoc(learningUnitDoc(id));
+
+          if (!snapshot.exists()) {
+            return;
+          }
+
+          const data = snapshot.data();
+          const display = String(data['learningUnitDisplayName'] ?? '').trim();
+
+          found.set(id, {
+            learningUnitId: id,
+            workflowId: '',
+            openAt: '',
+            closeAt: '',
+            workflowLocked: false,
+            learningUnitCode: String(data['learningUnitCode'] ?? ''),
+            learningUnitName: display || String(data['learningUnitName'] ?? ''),
+            learningUnitType: String(data['type'] ?? ''),
+            learningUnitVersion: String(data['version'] ?? ''),
+            learningUnitIsoCode: String(data['isoCode'] ?? '')
+          });
+        } catch {
+          // Swallowed deliberately — see the note above. The entry keeps its id.
+        }
+      })
+    );
+
+    return Object.fromEntries(
+      Object.entries(programmes).map(([programmeId, entry]) => [
+        programmeId,
+        {
+          ...entry,
+          workflowIds: (entry.workflowIds ?? []).map(workflow => {
+            const described = found.get(workflow.learningUnitId);
+
+            if (!described) {
+              return workflow;
+            }
+
+            // The workflow's OWN fields win: this only fills in description, and
+            // must never touch a date or a lock.
+            return {
+              ...workflow,
+              learningUnitCode: described.learningUnitCode,
+              learningUnitName: described.learningUnitName,
+              learningUnitType: described.learningUnitType,
+              learningUnitVersion: described.learningUnitVersion,
+              learningUnitIsoCode: described.learningUnitIsoCode
+            };
+          })
+        }
+      ])
+    );
   }
 
   /**
@@ -259,7 +547,7 @@ export class ClassroomService {
     const activeRef = activeClassroomDoc(docId);
     const trashRef = trashClassroomDoc(docId);
 
-    return runTransaction(db, async transaction => {
+    const moved = await runTransaction(db, async transaction => {
       const snapshot = await transaction.get(activeRef);
 
       if (!snapshot.exists()) {
@@ -275,6 +563,33 @@ export class ClassroomService {
 
       return { ...trashed, trashAt: Timestamp.now() } as TrashedClassroom;
     });
+
+    /*
+     * THEN DETACH IT FROM EVERY TEACHER WHO TAUGHT IT.
+     *
+     * The dashboard cards and the sidebar tree are built from
+     * `teachers/{id}.classrooms`, NOT from this collection — so without this a
+     * deleted class stayed on both surfaces forever, and re-reading could not
+     * help because the data still said the teacher taught it.
+     *
+     * AFTER the classroom has moved, and not inside the transaction: a
+     * transaction cannot run the query that finds which teachers list it. The
+     * order is the same trade the learning-unit resources cascade makes —
+     * classroom first, so a failure here leaves the links pointing at a class
+     * that is in the trash, which is recoverable, rather than stripping a
+     * teacher's classes off a class that is still live.
+     *
+     * The removed entries are stashed ON THE TRASH DOCUMENT so restore can put
+     * them back exactly: the entry carries denormalised fields — name, grade,
+     * section, institution, programmes — that this document does not hold.
+     */
+    const links = await this.teachers.detachClassroom(docId);
+
+    if (links.length > 0) {
+      await updateDoc(trashClassroomDoc(docId), { detachedTeacherLinks: links });
+    }
+
+    return moved;
   }
 
   /**
@@ -292,20 +607,52 @@ export class ClassroomService {
     const activeRef = activeClassroomDoc(docId);
     const trashRef = trashClassroomDoc(docId);
 
-    return runTransaction(db, async transaction => {
+    const { classroom, detached } = await runTransaction(db, async transaction => {
       const snapshot = await transaction.get(trashRef);
 
       if (!snapshot.exists()) {
         throw new Error('That classroom is no longer in the trash.');
       }
 
-      const restored = stripTrashMetadata(snapshot.data());
+      const stored = stripTrashMetadata(snapshot.data());
 
-      transaction.set(activeRef, restored);
+      /*
+       * `detachedTeacherLinks` is TRASH BOOKKEEPING, not part of the classroom.
+       *
+       * moveToTrash stashes it here so this restore can rebuild the teacher
+       * entries; writing it back onto the live document would leave a field
+       * nothing reads on every classroom that had ever been deleted.
+       */
+      const links = (stored['detachedTeacherLinks'] ?? []) as {
+        teacherDocId: string;
+        entry: TeacherClassroom;
+      }[];
+
+      delete stored['detachedTeacherLinks'];
+
+      transaction.set(activeRef, stored);
       transaction.delete(trashRef);
 
-      return normaliseClassroom<Classroom>(docId, restored);
+      return {
+        classroom: normaliseClassroom<Classroom>(docId, stored),
+        detached: links
+      };
     });
+
+    /*
+     * PUT THE TEACHER LINKS BACK, from what moveToTrash stashed.
+     *
+     * Rebuilt from the stored entries rather than from this document: the entry
+     * carries denormalised fields — the programmes attached to the class among
+     * them — that a classroom document does not hold, so reconstructing it would
+     * quietly return the class to every teacher with its programmes gone.
+     *
+     * A restore with nothing stashed is a classroom deleted before this cascade
+     * existed. Nothing to put back, and nothing to report.
+     */
+    await this.teachers.reattachClassrooms(detached);
+
+    return classroom;
   }
 
   /**

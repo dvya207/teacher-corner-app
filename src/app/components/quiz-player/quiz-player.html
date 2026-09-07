@@ -1,0 +1,297 @@
+<!-- A FULL-SCREEN OVERLAY, which is what production's player is: it replaces the
+     page rather than sitting inside the step pane, because a class working through
+     a quiz should not be looking at the workflow rail beside it. -->
+<div class="qp-overlay" role="dialog" aria-modal="true" [attr.aria-label]="quiz().displayName">
+  <div class="qp-sheet">
+
+    <header class="qp-head">
+      <!-- ============================================================
+           THE RAIL — one circle per question, then Done.
+
+           EVERY CIRCLE IS A CONTROL, not a decoration: production lets a reader
+           go back over an answer, and a rail that only showed position would make
+           the numbers look clickable without being so.
+           ============================================================ -->
+      <ol class="qp-rail">
+        @for (question of questions(); track $index; let qIndex = $index) {
+          <li class="qp-rail-item">
+            <button
+              type="button"
+              class="qp-dot"
+              [class.is-current]="qIndex === index()"
+              [class.is-answered]="isAnswered(qIndex)"
+              [attr.aria-current]="qIndex === index() ? 'step' : null"
+              [attr.aria-label]="'Question ' + (qIndex + 1) + (isAnswered(qIndex) ? ', answered' : '')"
+              (click)="goTo(qIndex)"
+            >
+              @if (isAnswered(qIndex)) {
+                <app-icon name="tick" [size]="13" [strokeWidth]="2.8" />
+              } @else {
+                {{ qIndex + 1 }}
+              }
+            </button>
+          </li>
+        }
+
+        <li class="qp-rail-item is-done-item">
+          <button
+            type="button"
+            class="qp-dot is-done"
+            [class.is-current]="onDone()"
+            aria-label="Done"
+            (click)="goTo(questions().length)"
+          >
+            <app-icon name="check" [size]="16" />
+          </button>
+          <span class="qp-done-label">Done</span>
+        </li>
+      </ol>
+
+      <button type="button" class="qp-close" (click)="close()" aria-label="Close quiz">
+        <app-icon name="close" [size]="18" />
+      </button>
+    </header>
+
+    @if (onDone()) {
+      <!-- ============================================================
+           THE DONE PANEL — production's "You are now done." and Submit.
+           ============================================================ -->
+      <div class="qp-body">
+        @if (outcome(); as result) {
+          <h2 class="qp-heading">Submitted.</h2>
+
+          <dl class="qp-score">
+            <div>
+              <dt>Answered</dt>
+              <dd>{{ result.answered }} of {{ result.total }}</dd>
+            </div>
+            @if (result.scorable > 0) {
+              <div>
+                <dt>Scored</dt>
+                <dd>{{ result.scored }} of {{ result.scorable }} marks</dd>
+              </div>
+            }
+          </dl>
+
+          <!-- ============================================================
+               WHY THERE IS NO SCORE, WHEN THERE IS NONE.
+
+               "0 of 5 marks" on a quiz whose author never ticked a correct
+               answer reads as "you got everything wrong". `markable` counts the
+               questions that carry an answer to mark against, so the panel can
+               say which of the two it is and where to fix it.
+               ============================================================ -->
+          @if (result.markable === 0) {
+            <p class="qp-note">
+              None of these questions can be marked automatically: no correct answer
+              is set on any of them. Mark the correct options in the quiz editor and
+              a score will appear here.
+            </p>
+          } @else if (result.markable < result.total) {
+            <p class="qp-note">
+              {{ result.markable }} of {{ result.total }} questions could be marked
+              automatically. The rest are descriptive or have no correct answer set.
+            </p>
+          }
+
+          <!-- ============================================================
+               WHAT THE WRITE DID, in production's own words.
+
+               Its toast reads "Successful — Quiz submitted ( attempt1 )", and the
+               attempt number is the part worth showing: submissions are capped,
+               so knowing this was the first of three is what tells a reader
+               whether they can run it again.
+               ============================================================ -->
+          @if (submissionFailed()) {
+            <p class="qp-note is-error" role="alert">{{ submissionNote() }}</p>
+          } @else if (submissionNote()) {
+            <p class="qp-saved" role="status">
+              <app-icon name="check" [size]="17" />
+              <span>{{ submissionNote() }}</span>
+            </p>
+          } @else if (submitting()) {
+            <p class="qp-note">Recording this attempt…</p>
+          }
+
+          <button type="button" class="qp-primary" (click)="close()">Close</button>
+        } @else {
+          <h2 class="qp-heading">You are now done.</h2>
+
+          <p class="qp-note">
+            {{ answeredCount() }} of {{ questions().length }} answered.
+            @if (answeredCount() < questions().length) {
+              <span>Use the circles above to go back to any you skipped.</span>
+            }
+          </p>
+
+          <button
+            type="button"
+            class="qp-submit"
+            [disabled]="submitting()"
+            (click)="askSubmit()"
+          >
+            {{ submitting() ? 'Submitting…' : 'Submit' }}
+          </button>
+        }
+      </div>
+    } @else if (current(); as question) {
+      <div class="qp-body">
+        <!-- THE TITLE IS HTML, from the quiz wizard's rich-text editor: it can
+             carry an image, which several of production's real questions do. -->
+        <h2 class="qp-question">
+          <span class="qp-q-no">{{ index() + 1 }}.</span>
+          <span class="qp-q-text" [innerHTML]="question.questionTitle"></span>
+        </h2>
+
+        @switch (question.questionType) {
+          @case ('MCQ') {
+            <!-- TWO COLUMNS, as production lays them out, and the control follows
+                 the QUESTION: a radio where one option is correct, a checkbox
+                 where several are — a multi-answer question offered as radios
+                 cannot be answered. -->
+            <ul class="qp-options">
+              @for (option of question.options; track $index; let oIndex = $index) {
+                <li>
+                  <label class="qp-option" [class.is-chosen]="isChosen(oIndex)">
+                    <input
+                      [type]="question.oneCorrectOption === false ? 'checkbox' : 'radio'"
+                      [name]="'question-' + index()"
+                      [checked]="isChosen(oIndex)"
+                      (change)="choose(oIndex)"
+                    />
+                    <span class="qp-option-no">{{ oIndex + 1 }}.</span>
+                    @if (option.optionType === 'IMAGE') {
+                      <span class="qp-muted">Image option</span>
+                    } @else if (option.name.trim()) {
+                      <span>{{ option.name }}</span>
+                    } @else {
+                      <span class="qp-muted">Empty option</span>
+                    }
+                  </label>
+                </li>
+              }
+            </ul>
+          }
+          @case ('FILL_IN_THE_BLANKS') {
+            <div class="qp-blanks">
+              @for (key of blankKeys(question); track key) {
+                <label class="qp-blank">
+                  <span>{{ key }}</span>
+                  <input
+                    type="text"
+                    autocomplete="off"
+                    [value]="blankValue(key)"
+                    (input)="setBlank(key, valueOf($event))"
+                  />
+                </label>
+              }
+
+              @if (blankKeys(question).length === 0) {
+                <p class="qp-muted">This question has no blanks defined.</p>
+              }
+            </div>
+          }
+          @case ('RICH_BLANKS') {
+            <div class="qp-blanks">
+              @for (key of blankKeys(question); track key) {
+                <label class="qp-blank">
+                  <span>{{ key }}</span>
+                  <input
+                    type="text"
+                    autocomplete="off"
+                    [value]="blankValue(key)"
+                    (input)="setBlank(key, valueOf($event))"
+                  />
+                </label>
+              }
+
+              @if (blankKeys(question).length === 0) {
+                <p class="qp-muted">This question has no blanks defined.</p>
+              }
+            </div>
+          }
+          @default {
+            <!-- TEXT and DESCRIPTIVE. A textarea for both: a descriptive answer is
+                 longer, but a single-line box for a text answer that turns out to
+                 be a sentence is the worse failure. -->
+            <textarea
+              class="qp-text"
+              rows="4"
+              [attr.maxlength]="question.maxCharLength || null"
+              [value]="textValue()"
+              (input)="setText(valueOf($event))"
+              [attr.aria-label]="'Answer to question ' + (index() + 1)"
+            ></textarea>
+
+            @if (question.maxCharLength) {
+              <p class="qp-muted">{{ textValue().length }} / {{ question.maxCharLength }}</p>
+            }
+          }
+        }
+
+        @if (question.hasSubParts && question.subParts?.length) {
+          <p class="qp-muted">
+            This question has {{ question.subParts!.length }} sub-question{{ question.subParts!.length === 1 ? '' : 's' }}.
+          </p>
+        }
+
+        <footer class="qp-foot">
+          <span class="qp-clock" [class.is-low]="runningOut()" aria-live="off">
+            {{ clock() }}
+          </span>
+
+          @if (index() > 0) {
+            <button type="button" class="qp-ghost" (click)="previous()">Back</button>
+          }
+
+          <button type="button" class="qp-primary" (click)="next()">
+            {{ index() === questions().length - 1 ? 'Finish' : 'Next' }}
+            <app-icon name="arrow-right" [size]="15" />
+          </button>
+        </footer>
+      </div>
+    } @else {
+      <div class="qp-body">
+        <h2 class="qp-heading">This quiz has no questions.</h2>
+        <button type="button" class="qp-primary" (click)="close()">Close</button>
+      </div>
+    }
+  </div>
+
+  <!-- ====================================================================
+       CONFIRM SUBMISSION — production's dialog, its heading and its wording.
+
+       ITS REMOTE LINE IS LEFT OUT. Production adds "Note*: You can press button Y
+       on remote to confirm or N to cancel.(if remote is Used)" because its player
+       pairs with a clicker. This app has no remote support, and an instruction for
+       a device that does nothing is worse than no instruction.
+       ==================================================================== -->
+  @if (confirming()) {
+    <div class="qp-confirm-scrim">
+      <div
+        class="qp-confirm"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="qp-confirm-title"
+      >
+        <h2 class="qp-confirm-title" id="qp-confirm-title">Confirm Submission</h2>
+
+        <!-- RED, as production draws it: this click spends one of a capped number
+             of attempts and there is no undo. -->
+        <p class="qp-confirm-ask">Are you sure you want to submit the quiz?</p>
+
+        @if (answeredCount() < questions().length) {
+          <p class="qp-confirm-note">
+            {{ questions().length - answeredCount() }} of {{ questions().length }}
+            questions have no answer. They will be recorded as unanswered.
+          </p>
+        }
+
+        <div class="qp-confirm-actions">
+          <button type="button" class="qp-ghost" (click)="cancelSubmit()">Cancel</button>
+          <button type="button" class="qp-primary" (click)="submit()">Yes</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

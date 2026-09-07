@@ -17,10 +17,10 @@ import {
   ClassroomType,
   Institution,
   InstitutionDraft,
-  Programme,
-  ProgrammeDraft
+  Programme
 } from '../../models/teaching.model';
-import { programmesFor, suggestedProgrammeName } from '../../services/programme.service';
+import { toProgrammeMap } from '../../services/classroom.service';
+import { programmesFor } from '../../services/programme.service';
 import { AddInstitutionInline } from './add-institution-inline';
 
 /**
@@ -78,7 +78,20 @@ export class AddClassroom {
   readonly error = input('');
 
   readonly submitted = output<ClassroomDraft>();
-  readonly programmeRequested = output<ProgrammeDraft>();
+  /**
+   * Asks the page to open the Create Programme wizard, scoped to this school and
+   * grade. The page creates the programme and it flows back down through the
+   * `programmes` input, so the picker offers it without a reload.
+   *
+   * REPLACED `programmeRequested`, which carried a whole ProgrammeDraft built by
+   * a name-only form in here. This component still writes nothing; it now asks
+   * for a form rather than pretending to be one.
+   */
+  readonly programmeWizardRequested = output<{
+    institutionId: string;
+    institutionName: string;
+    grades: string[];
+  }>();
   /**
    * Asks the PARENT to create a school. This component never writes, for the
    * same reason it never writes a programme: the page owns every Firestore call,
@@ -140,16 +153,11 @@ export class AddClassroom {
   readonly searched = signal(false);
 
 
-  /**
-   * The inline "new programme" form, shown only when asked for.
-   *
-   * It asks for a NAME and nothing else. The code used to be a free-text field
-   * here, which was wrong: production allocates programme codes from a sequence
-   * (P11697, P11698) and a hand-typed one could never join it. The service
-   * allocates the code now, so there is nothing left for this form to ask.
+  /*
+   * `creatingProgramme` and `newProgrammeName` USED TO BE HERE, holding the
+   * name-only inline create form. Both are gone with it: the page opens the full
+   * wizard now, so this component holds no draft state of its own.
    */
-  readonly creatingProgramme = signal(false);
-  readonly newProgrammeName = signal('');
 
   /** The nested Add a New Institution form. */
   readonly creatingInstitution = signal(false);
@@ -319,10 +327,6 @@ export class AddClassroom {
 
   readonly selectedCount = computed(() => this.selectedProgrammeIds().size);
 
-  /** Placeholder for the inline create form, in production's naming style. */
-  readonly suggestedName = computed(() =>
-    suggestedProgrammeName(this.selectedSchool()?.institutionName ?? '', this.grade(), 'Subject')
-  );
 
   /**
    * Everything answered.
@@ -430,7 +434,6 @@ export class AddClassroom {
 
   private clearProgrammes(): void {
     this.selectedProgrammeIds.set(new Set());
-    this.creatingProgramme.set(false);
   }
 
   toggleProgramme(programmeId: string): void {
@@ -451,62 +454,40 @@ export class AddClassroom {
 
   // ---- Inline programme creation ----------------------------------------
 
-  openProgrammeForm(): void {
-    this.creatingProgramme.set(true);
-  }
-
-  cancelProgrammeForm(): void {
-    this.creatingProgramme.set(false);
-    this.newProgrammeName.set('');
-  }
-
-  readonly newProgrammeValid = computed(() => this.newProgrammeName().trim() !== '');
-
   /**
-   * Asks the PARENT to create the programme.
+   * Asks the PAGE to open the full Create Programme wizard.
    *
-   * This component never writes. The parent owns every Firestore call, so a
-   * created programme lands in the catalogue the page already holds and flows
-   * straight back down through the `programmes` input — no reload, and no
-   * second copy of the list to keep in step.
+   * WHAT THIS REPLACED, and why. This used to open a name-only inline form here
+   * and emit a ProgrammeDraft built from it: no description, no status or type
+   * choice, no image, and `learningUnitsIds: []`. So a programme created from Add
+   * Classroom was a poorer object than one created on the Programme page, and —
+   * now that a classroom stores its allotted units — one that could never allot
+   * any, because it had none.
    *
-   * The new programme is scoped to the school and grade currently chosen, which
-   * is the only scope that can be correct: it is being created because the
-   * picker for that exact combination had nothing to offer.
+   * The wizard is hosted by the PAGE, not rendered inside this component, and
+   * that is deliberate: this modal's `.modal-card` combines `overflow: hidden`
+   * with an animation, which makes it a containing block that CLIPS a
+   * `position: fixed` descendant. The board-and-grade panel in the learning-unit
+   * form was clipped by exactly that, and nesting a second modal in here would
+   * reproduce it.
+   *
+   * The scope is emitted with the request because it is already known: the wizard
+   * opens for the school and grade whose picker had nothing to offer, so asking
+   * for them again would be asking the user to re-enter what they just filled in.
    */
-  createProgramme(): void {
+  openProgrammeForm(): void {
     const school = this.selectedSchool();
-    const type = this.type();
 
-    if (!this.newProgrammeValid() || !school || !type) {
+    if (!school) {
       return;
     }
 
-    const name = this.newProgrammeName().trim();
-
-    this.programmeRequested.emit({
-      programmeName: name,
-      displayName: name,
-      // Nothing to describe it with from here; the Programme page can fill it in.
-      programmeDescription: '',
+    this.programmeWizardRequested.emit({
       institutionId: school.docId,
       institutionName: school.institutionName,
-      // A club programme is not grade-scoped, so it carries no grades.
-      grades: this.isClub() || !this.grade() ? [] : [this.grade()],
-      // Grade-scoped by construction, so the age band stays empty.
-      age: [],
-      type: programmeTypeFor(type),
-      // Created LIVE: it exists because it is wanted on the classroom being
-      // filled in right now, and a DRAFT would not be offered by the picker.
-      programmeStatus: 'LIVE',
-      // Written empty rather than omitted, so a programme created from here has
-      // the same shape as one created by the Programme wizard.
-      programmeImagePath: '',
-      learningUnitsIds: [],
-      assignmentIds: []
+      // A club programme is not grade-scoped, so it carries no grade.
+      grades: this.isClub() || !this.grade() ? [] : [this.grade()]
     });
-
-    this.cancelProgrammeForm();
   }
 
   // ---- Submit ------------------------------------------------------------
@@ -538,17 +519,17 @@ export class AddClassroom {
       board: school.board,
       institutionId: school.docId,
       institutionName: school.institutionName,
-      programmes: Object.fromEntries(
-        chosen.map(programme => [
-          programme.programmeId,
-          {
-            programmeId: programme.programmeId,
-            programmeName: programme.programmeName,
-            programmeCode: programme.programmeCode,
-            displayName: programme.displayName?.trim() || programme.programmeName
-          }
-        ])
-      )
+      /*
+       * toProgrammeMap, NOT the four fields inlined.
+       *
+       * This built the entry by hand, which is the drift toClassroomProgramme's
+       * docstring warns about — and it cost exactly what that warning predicted:
+       * when `workflowIds` and `sequentiallyLocked` were added there, a classroom
+       * created here still stored no record of its allotted learning units, while
+       * one edited afterwards did. No `existing` argument: this is the create
+       * path, so there is no prior locking to preserve.
+       */
+      programmes: toProgrammeMap(chosen)
     });
   }
 

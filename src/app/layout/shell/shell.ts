@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import {
@@ -15,7 +15,13 @@ import { NotificationModule } from '../../models/teaching.model';
 import { NotificationService } from '../../services/notification.service';
 import { Logo } from '../../components/logo/logo';
 import { UpdateProfile } from '../../components/update-profile/update-profile';
+import {
+  AllottedInstitution,
+  TeacherClassroom
+} from '../../models/teaching.model';
 import { AuthService } from '../../services/auth.service';
+import { PageContextService } from '../../services/page-context.service';
+import { DashboardService } from '../../services/dashboard.service';
 import { ConfigurationService } from '../../services/configuration.service';
 
 export interface NavItem {
@@ -54,6 +60,129 @@ export class Shell {
     { label: 'Dashboard', path: '/dashboard', icon: 'grid' }
   ];
 
+  /* ======================================================================
+     INSTITUTIONS — the signed-in teacher's own schools and classes
+
+     Production's sidebar carries this between Dashboard and the Admin group: a
+     collapsible 'Institutions' item listing the schools this person teaches at,
+     each expanding to the classes they teach there.
+
+     THE SAME ALLOTMENT THE DASHBOARD USES. DashboardService.myAllotment reads
+     the teacher's own documents and groups them, so the sidebar and the
+     dashboard cards can never disagree about what someone is assigned to —
+     which they would if this counted separately.
+     ====================================================================== */
+
+  private dashboard = inject(DashboardService);
+
+  /**
+   * READS THE SHARED SIGNAL, rather than holding its own copy.
+   *
+   * The sidebar and the dashboard render the same allotment; two snapshots drift
+   * apart the moment one is refreshed and the other is not, which is exactly what
+   * deleting a classroom used to do.
+   */
+  readonly allotment = computed(() => this.dashboard.allotment().institutions);
+
+  /** Whether the Institutions group itself is open. Closed until asked for. */
+  readonly institutionsOpen = signal(false);
+
+  /**
+   * Which school's classes are showing, by key, or null.
+   *
+   * AN ACCORDION — one at a time, which is production's behaviour: opening
+   * Airaa Academy closes ThinkTac. With five schools and three classes each,
+   * all-open would push the whole Admin group off the bottom of the sidebar.
+   */
+  readonly openSchool = signal<string | null>(null);
+
+  /**
+   * The classroom the current URL is about, or ''.
+   *
+   * Kept so the tree can REVEAL it — see the effect below. Read from the URL
+   * rather than handed over by the page, because the shell is a layout route and
+   * must not depend on what is rendered inside it.
+   */
+  private readonly routeClassroomId = signal('');
+
+  /**
+   * OPENS THE TREE ONTO THE CLASS BEING VIEWED.
+   *
+   * WHY THIS EXISTS. Arriving from a dashboard card, or from a shared link, left
+   * the Institutions group collapsed — so the sidebar gave no indication of where
+   * you were and the class was two clicks from being visible, let alone clickable.
+   *
+   * AN EFFECT RATHER THAN A NAVIGATION HANDLER, because the two things it needs
+   * arrive in either order: the URL changes immediately, and the allotment lands
+   * after a read. Whichever is last triggers this, so a hard refresh straight
+   * onto a class still opens the tree once the schools appear.
+   *
+   * It only ever OPENS. Collapsing on navigation away would fight a user who had
+   * deliberately opened a different school.
+   */
+  private readonly revealCurrentClass = effect(() => {
+    const classroomId = this.routeClassroomId();
+
+    if (!classroomId) {
+      return;
+    }
+
+    const school = this.allotment().find(entry =>
+      entry.classrooms.some(classroom => classroom.classroomId === classroomId)
+    );
+
+    if (!school) {
+      return;
+    }
+
+    this.institutionsOpen.set(true);
+    this.openSchool.set(this.schoolKey(school));
+  });
+
+  schoolKey(institution: AllottedInstitution): string {
+    return institution.institutionId || institution.institutionName;
+  }
+
+  toggleInstitutions(): void {
+    this.institutionsOpen.update(open => !open);
+  }
+
+  toggleSchool(institution: AllottedInstitution): void {
+    const key = this.schoolKey(institution);
+
+    this.openSchool.update(open => (open === key ? null : key));
+  }
+
+  isSchoolOpen(institution: AllottedInstitution): boolean {
+    return this.openSchool() === this.schoolKey(institution);
+  }
+
+  /**
+   * A class's label in the tree: '1 A'.
+   *
+   * Grade and section, which is what production shows — not the classroom's
+   * name, because a name like 'ThinkTac STEM Forge' is far too long for a
+   * sidebar row and the grade is what distinguishes one class from the next.
+   * A class with neither falls back to its name rather than rendering blank.
+   */
+  /**
+   * The programme a class row should open on.
+   *
+   * THE FIRST ATTACHED, which is the same choice the dashboard cards make and
+   * the same one the page falls back to when given nothing. Passing it keeps the
+   * two entry points landing identically rather than one relying on the
+   * fallback.
+   */
+  firstProgrammeId(classroom: TeacherClassroom): string {
+    return classroom.programmes?.[0]?.programmeId ?? '';
+  }
+
+  classLabel(classroom: TeacherClassroom): string {
+    const parts = [classroom.grade, classroom.section].filter(part => part.trim() !== '');
+
+    return parts.length > 0 ? parts.join(' ') : classroom.classroomName || '—';
+  }
+
   /**
    * Set Up Wizard leads the Admin group, as it does in production's sidebar.
    *
@@ -65,21 +194,34 @@ export class Shell {
    * `settings` is its icon because `settings` is already the icon the page's own
    * heading renders, and production draws a cog here too.
    *
-   * Learning Units is deliberately ABSENT.
+   * Learning Units is BACK, and this entry is the whole of the nav side of that.
    *
-   * Removed from the nav, and then its ROUTE was removed too, both on instruction.
-   * /learning-units no longer resolves: it falls through to the '**' route and lands
-   * on the splash. The page, its add/edit form and LearningUnitService are all still
-   * in the repo — see the note in app.routes.ts for why the code stays — so bringing
-   * it back is one route block and one entry in this list.
+   * It was withheld twice — first this entry, then its route — and both were
+   * restored on instruction. Nothing about the page changed while it was
+   * unreachable, which is why bringing it back cost one line here and one route
+   * block in app.routes.ts, exactly as the note that stood here predicted.
    *
-   * The three entries after Set Up Wizard are untouched, in their original order.
+   * LAST, after Programme, which is the order production's sidebar uses.
+   *
+   * `chart` is its icon because production draws a bar chart here, and `book` is
+   * already spoken for by the page's own Total LUs stat card.
    */
   readonly adminNav: NavItem[] = [
-    { label: 'Set Up Wizard', path: '/setup-wizard',  icon: 'settings' },
-    { label: 'Institutions',  path: '/institutions',  icon: 'building' },
-    { label: 'Classrooms',    path: '/classrooms',    icon: 'classroom' },
-    { label: 'Programme',     path: '/programme',     icon: 'programme' }
+    { label: 'Set Up Wizard',  path: '/setup-wizard',   icon: 'settings' },
+    { label: 'Institutions',   path: '/institutions',   icon: 'building' },
+    { label: 'Classrooms',     path: '/classrooms',     icon: 'classroom' },
+    { label: 'Programme',      path: '/programme',      icon: 'programme' },
+    { label: 'Learning Units', path: '/learning-units', icon: 'chart' },
+    /* AFTER Learning Units, which is where production's sidebar puts it too —
+       the things a classroom is set come after the things it is built from.
+
+       THE ICONS ARE PRODUCTION'S OWN, entry for entry: Learning Units is
+       heroicons chart-square-bar ('chart' here), Assignments is academic-cap and
+       Workflow Templates is the plain clipboard. Assignments used the ticked
+       clipboard and Workflow Templates a grip of dots, neither of which appears
+       in its sidebar. */
+    { label: 'Assignments',    path: '/assignments',    icon: 'academic-cap' },
+    { label: 'Workflow Templates', path: '/workflow-templates', icon: 'clipboard-plain' }
   ];
 
   readonly collapsed = signal(false);
@@ -122,10 +264,23 @@ export class Shell {
    * renders as "Institutions" without a slug-to-label lookup living in the
    * template.
    */
-  readonly pageTitle = signal('Dashboard');
+  private readonly routeTitle = signal('Dashboard');
+  private readonly routeCrumbRoot = signal('ThinkTac');
 
-  /** First breadcrumb segment. 'ThinkTac' unless a route overrides it. */
-  readonly crumbRoot = signal('ThinkTac');
+  private pageContext = inject(PageContextService);
+
+  /*
+   * WHAT A PAGE SAYS WINS over what its route says.
+   *
+   * Route data names the SCREEN; a page about one record can name the record.
+   * See PageContextService — the route remains the fallback, so every page that
+   * says nothing behaves exactly as it did.
+   */
+  readonly pageTitle = computed(() => this.pageContext.title() || this.routeTitle());
+  readonly crumbRoot = computed(
+    () => this.pageContext.crumbRoot() || this.routeCrumbRoot()
+  );
+  readonly crumbTrail = computed(() => this.pageContext.crumbTrail());
 
   /** Topbar search placeholder, so it can name what the page actually searches. */
   readonly searchPlaceholder = signal('Search...');
@@ -134,10 +289,16 @@ export class Shell {
   private router = inject(Router);
   private configuration = inject(ConfigurationService);
 
-  readonly displayName = signal(this.auth.displayName());
-  readonly displayInitials = signal(this.auth.initials());
+  // Computed, not signal(...): a signal seeded with a call captures that call's
+  // value once and never re-runs it, so the topbar and the avatar kept the name
+  // they were built with after a profile edit.
+  readonly displayName = computed(() => this.auth.displayName());
+  readonly displayInitials = computed(() => this.auth.initials());
   readonly userRole = this.auth.role();
-  readonly userIdentity = this.auth.identity();
+  // Computed for the same reason displayName above is: a plain field snapshots
+  // the value at construction, so the "Signed in as" line kept naming the
+  // previous account after a session change.
+  readonly userIdentity = computed(() => this.auth.identity());
 
   constructor() {
     // ONCE PER SESSION, from the shell: this is the first thing that renders after
@@ -146,6 +307,15 @@ export class Shell {
     // calls, and every list already holds its built-in value, so nothing waits on it.
     void this.configuration.load();
 
+    // Same reasoning for the sidebar's Institutions tree: the shell is a layout
+    // route and outlives every page, so reading the teacher's allotment here is
+    // once per session rather than once per navigation.
+    void this.dashboard.refresh();
+
+    // A hard refresh straight onto a class: the URL is already correct here, and
+    // the effect above opens the tree once the allotment lands.
+    this.readClassroomFromUrl();
+
     this.router.events
       .pipe(
         filter((event): event is NavigationEnd => event instanceof NavigationEnd),
@@ -153,6 +323,7 @@ export class Shell {
       )
       .subscribe(() => {
         this.applyRouteData();
+        this.readClassroomFromUrl();
 
         // A navigation from inside the drawer has to close it, or the new page
         // renders underneath the overlay it was launched from.
@@ -182,11 +353,34 @@ export class Shell {
   }
 
   /** Pulls every topbar value the active route declares, in one pass. */
+  /**
+   * Pulls the classroom id out of /institutions/classroom/:id.
+   *
+   * Matched on the router's URL rather than by walking the activated route: the
+   * shell runs this from its own constructor too, before the child route has a
+   * snapshot assigned — the same hazard deepestData() documents.
+   */
+  private readClassroomFromUrl(): void {
+    const match = /\/institutions\/classroom\/([^/?#]+)/.exec(this.router.url);
+
+    this.routeClassroomId.set(match ? decodeURIComponent(match[1]) : '');
+  }
+
   private applyRouteData(): void {
     const data = this.deepestData();
 
-    this.pageTitle.set(data['title'] ?? 'Dashboard');
-    this.crumbRoot.set(data['crumbRoot'] ?? 'ThinkTac');
+    /*
+     * CLEARED FIRST, then applied.
+     *
+     * A page that named itself through PageContextService is already destroyed
+     * by the time this runs, so it cannot clean up after itself — and a crumb
+     * still naming the previous record is worse than a generic one. The page
+     * sets its own crumb again on init.
+     */
+    this.pageContext.clear();
+
+    this.routeTitle.set(data['title'] ?? 'Dashboard');
+    this.routeCrumbRoot.set(data['crumbRoot'] ?? 'ThinkTac');
     this.searchPlaceholder.set(data['search'] ?? 'Search...');
   }
 
@@ -279,24 +473,6 @@ export class Shell {
   }
 
   /**
-   * Refreshes the topbar after a save.
-   *
-   * username/userInitials are read once from the auth record at construction,
-   * so a profile saved to Firestore would otherwise leave the topbar showing
-   * the old name until a full reload.
-   */
-  onProfileSaved(profile: { firstName: string; lastName: string }): void {
-    const name = `${profile.firstName} ${profile.lastName}`.trim();
-
-    if (name) {
-      this.displayName.set(name);
-      this.displayInitials.set(
-        (profile.firstName[0] ?? '') + (profile.lastName[0] ?? '')
-      );
-    }
-  }
-
-  /**
    * Signs out, then hands off to the confirmation page rather than dropping
    * the user straight on /login, which is indistinguishable from a session
    * that expired on its own.
@@ -325,4 +501,6 @@ export class Shell {
 
     await this.router.navigate(['/sign-out']);
   }
+
+
 }

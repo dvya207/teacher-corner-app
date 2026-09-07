@@ -411,7 +411,7 @@
           <app-icon name="arrow-right" [size]="16" />
         </button>
       } @else {
-        <button type="button" class="btn btn-primary next-btn" (click)="save()"
+        <button type="button" class="btn btn-primary btn-save next-btn" (click)="save()"
                 [disabled]="saving() || !stepOneValid()">
           @if (saving()) {
             <span class="spinner" aria-hidden="true"></span>

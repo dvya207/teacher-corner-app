@@ -1,0 +1,48 @@
+/* ==========================================================================
+   Admin impersonation — the few rules the sign-in stylesheet does not cover.
+
+   Everything structural (the split layout, the form panel, the phone row, the
+   digit boxes, the hero and its decorations) comes from ../login/login.css,
+   which this page loads first. Only what is specific to this page lives here,
+   so the two cannot drift apart.
+   ========================================================================== */
+
+/* Stands in for `.field`, which cannot be used around the digit row: the global
+   `.field input` rule outranks `.digit` and would stretch each box to the full
+   column width. Same gap and margin as `.field` so the two blocks line up. */
+.passcode-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+
+/* Matches `.field > label` in styles.css, since the row it labels is not a
+   `.field`. Kept identical rather than approximated: a label a shade off from
+   the one directly above it is more noticeable than a wrong one alone. */
+.passcode-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+/* login.css puts a 20px bottom margin on .code-row for the gap above its Verify
+   button. Here the hint line sits between them, so the row's own margin would
+   double up. */
+.code-row {
+  margin-bottom: 0;
+}
+
+.passcode-hint {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.passcode-hint strong {
+  font-weight: 700;
+  color: var(--ink-700);
+}
+
+/* The .impersonate-actions block that held "Back to dashboard" is gone with the
+   link itself. Nothing sits between the button and the footer note now, so the
+   footer's own margin is the whole gap. */

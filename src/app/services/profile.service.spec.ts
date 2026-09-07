@@ -1,4 +1,4 @@
-import { supersededRequestKeys } from './profile.service';
+import { isUsableProfileName, supersededRequestKeys } from './profile.service';
 import { TeacherProfile } from '../models/teaching.model';
 
 type Requests = NonNullable<TeacherProfile['selfRegTeacherApproval']>;
@@ -71,5 +71,58 @@ describe('supersededRequestKeys', () => {
 
   it('copes with an empty document', () => {
     expect(supersededRequestKeys({}, { c1: request({}) })).toEqual([]);
+  });
+});
+
+/**
+ * WHICH NAME WINS.
+ *
+ * Two sources carry a teacher's name and they are known to disagree in live data:
+ * `users/{uid}`, which the teacher edits themselves, and `teachers/{docId}`,
+ * which an administrator typed when registering them. The administrator's record
+ * is consulted ONLY when the profile has no real name yet, so a teacher who edits
+ * their own name keeps it instead of having it reverted on the next sign-in.
+ * This predicate is the whole of that rule.
+ */
+describe('isUsableProfileName', () => {
+
+  it('accepts a real name, which stops the teachers record being consulted', () => {
+    expect(isUsableProfileName('Anita')).toBe(true);
+  });
+
+  it('rejects an absent name, so a wizard-registered teacher falls through', () => {
+    expect(isUsableProfileName(undefined)).toBe(false);
+  });
+
+  it('rejects an empty name', () => {
+    expect(isUsableProfileName('')).toBe(false);
+  });
+
+  it('rejects a whitespace-only name rather than greeting someone with a space', () => {
+    expect(isUsableProfileName('   ')).toBe(false);
+  });
+
+  /**
+   * THE REGRESSION THIS EXISTS FOR. The seed used to persist displayName(), which
+   * substitutes this placeholder when nothing is known, so phone-only accounts
+   * were written with the literal first name 'Teacher'. A truthiness check reads
+   * that as a real name, which is why those accounts stayed greeted as 'Teacher'
+   * with a users/{uid} document that looked correctly filled in.
+   */
+  it('rejects the literal placeholder, which older accounts still carry', () => {
+    expect(isUsableProfileName('Teacher')).toBe(false);
+  });
+
+  it('rejects the placeholder with padding, since it is trimmed before comparing', () => {
+    expect(isUsableProfileName('  Teacher  ')).toBe(false);
+  });
+
+  /** Only the exact placeholder is refused; a real person may be named this. */
+  it('accepts a name that merely contains the placeholder', () => {
+    expect(isUsableProfileName('Teacherson')).toBe(true);
+  });
+
+  it('accepts a name that differs from the placeholder only in case', () => {
+    expect(isUsableProfileName('teacher')).toBe(true);
   });
 });

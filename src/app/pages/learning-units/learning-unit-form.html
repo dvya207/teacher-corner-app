@@ -9,6 +9,7 @@
   <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
   <div
     class="modal-card animate-fade-up"
+    [class.is-editor]="isEdit()"
     role="dialog"
     aria-modal="true"
     [attr.aria-label]="isEdit() ? 'Edit learning unit' : 'Add a new learning unit or version'"
@@ -16,7 +17,17 @@
   >
 
     <header class="modal-head">
-      <h2>{{ isEdit() ? 'Edit Learning Unit' : 'Add a New Learning Unit or Version' }}</h2>
+      @if (isEdit()) {
+        <!-- The unit's own name and status, as the reference titles it. "Edit
+             Learning Unit" told you what you were doing; this tells you what you
+             are doing it to, which matters more once there are thirteen tabs. -->
+        <h2 class="edit-title">
+          {{ displayName() || name() }}
+          <span class="title-status" [class.is-live]="status() === 'LIVE'">{{ status() }}</span>
+        </h2>
+      } @else {
+        <h2>Add a New Learning Unit or Version</h2>
+      }
       <button type="button" class="modal-close" (click)="close()" aria-label="Close">
         <app-icon name="close" [size]="18" />
       </button>
@@ -28,368 +39,1826 @@
         <div class="modal-error" role="alert">{{ error() }}</div>
       }
 
-      <!-- ==================================================================
-           Name — and the route to "or Version"
-           ==================================================================
-           Typing here searches the units that already exist. Picking one adopts
-           its code, type and categorisation, so what gets saved is the next
-           version of that unit rather than a new one. -->
-      <div class="field field-suggest">
-        <label for="lu-name">Learning Unit Name <span class="req" aria-hidden="true">*</span></label>
-        <input
-          id="lu-name"
-          type="text"
-          placeholder="Enter the learning unit name"
-          autocomplete="off"
-          maxlength="60"
-          [value]="name()"
-          (input)="setName(valueOf($event))"
-        />
+      @if (isEdit()) {
 
-        @if (suggestions().length > 0) {
-          <ul class="suggest-list" role="listbox" aria-label="Existing learning units">
-            @for (match of suggestions(); track match.docId) {
-              <li>
-                <button type="button" class="suggest-row" (click)="pickExisting(match)">
-                  {{ suggestionLabel(match) }}
-                </button>
-              </li>
+        <!-- ================================================================
+             THE TAB STRIP
+             ================================================================
+             Scrolls rather than wraps: thirteen tabs cannot fit a modal at any
+             sensible width, and a second row would push the form itself below
+             the fold. The arrows are for a trackpad-less mouse — the strip is
+             scrollable by wheel and by touch regardless. -->
+        <nav class="lu-tabs" aria-label="Learning unit sections">
+          <button
+            type="button"
+            class="tab-arrow"
+            (click)="scrollTabs(-1)"
+            aria-label="Scroll tabs left"
+          >
+            <app-icon name="chevron-left" [size]="16" />
+          </button>
+
+          <div class="tab-strip" role="tablist" #tabStrip>
+            @for (tab of tabs; track tab) {
+              <button
+                type="button"
+                role="tab"
+                class="tab"
+                [class.is-active]="activeTab() === tab"
+                [attr.aria-selected]="activeTab() === tab"
+                (click)="setTab(tab)"
+              >
+                {{ tab }}
+              </button>
             }
-          </ul>
+          </div>
+
+          <!-- The same chevron turned around, rather than a second icon that
+               would have to be kept optically identical to this one by hand. -->
+          <button
+            type="button"
+            class="tab-arrow is-right"
+            (click)="scrollTabs(1)"
+            aria-label="Scroll tabs right"
+          >
+            <app-icon name="chevron-left" [size]="16" />
+          </button>
+        </nav>
+
+        @switch (activeTab()) {
+
+          <!-- ==============================================================
+               BASIC INFO
+               ==============================================================
+               Two columns, filled row by row in the reference's own order:
+               name / explore, display / learning, type / total, difficulty /
+               maturity, status / subject code, id / subject name, sub-domain
+               code / domain code, sub-domain name / domain name, composite
+               alone on the last row.
+
+               The taxonomy eight are read-only here on purpose. They are
+               derived from the learning unit code, which the editor does not
+               offer — production fixes a unit's identity when it is created. -->
+          @case ('Basic Info') {
+            <div class="basic-grid">
+
+              <div class="field">
+                <label for="lu-name">Learning Unit Name</label>
+                <input
+                  id="lu-name"
+                  type="text"
+                  autocomplete="off"
+                  [value]="name()"
+                  (input)="setName(valueOf($event))"
+                />
+              </div>
+
+              <div class="field">
+                <label for="lu-explore">Explore Time (minutes)</label>
+                <input
+                  id="lu-explore"
+                  type="number"
+                  min="0"
+                  [value]="exploreTime()"
+                  (input)="setExploreTime(valueOf($event))"
+                />
+              </div>
+
+              <div class="field">
+                <label for="lu-display">Learning Unit Display Name</label>
+                <input
+                  id="lu-display"
+                  type="text"
+                  autocomplete="off"
+                  [value]="displayName()"
+                  (input)="setDisplayName(valueOf($event))"
+                />
+              </div>
+
+              <div class="field">
+                <label for="lu-learn">Learning Time (minutes)</label>
+                <input
+                  id="lu-learn"
+                  type="number"
+                  min="0"
+                  [value]="learnTime()"
+                  (input)="setLearnTime(valueOf($event))"
+                />
+              </div>
+
+              <!-- Disabled, not absent. The type decides which resource slots a
+                   unit has, so changing it after creation would strand every
+                   file already uploaded against the old shape. -->
+              <div class="field">
+                <label for="lu-type">Learning Unit Type</label>
+                <select id="lu-type" disabled>
+                  <option>{{ type() }}</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="lu-time">Total Time (minutes)</label>
+                <input
+                  id="lu-time"
+                  type="number"
+                  min="0"
+                  step="5"
+                  [value]="totalTime()"
+                  (input)="setTotalTime(valueOf($event))"
+                />
+              </div>
+
+              <div class="field">
+                <label for="lu-difficulty">Difficulty Level</label>
+                <select id="lu-difficulty" (change)="setDifficulty(valueOf($event))">
+                  <option value="" disabled [selected]="difficultyLevel() === ''">Select</option>
+                  @for (level of difficulties(); track level) {
+                    <option [value]="level" [selected]="level === difficultyLevel()">{{ level }}</option>
+                  }
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="lu-maturity">Maturity</label>
+                <select id="lu-maturity" (change)="setMaturity(valueOf($event))">
+                  <option value="" disabled [selected]="maturity() === ''">Select</option>
+                  @for (option of maturities(); track option) {
+                    <option [value]="option" [selected]="option === maturity()">{{ option }}</option>
+                  }
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="lu-status">Status</label>
+                <select id="lu-status" (change)="setStatus(valueOf($event))">
+                  <!-- A status this form does not offer is rendered as itself, so
+                       what is shown is what will be saved. -->
+                  @if (unknownStatus()) {
+                    <option [value]="unknownStatus()" selected>{{ unknownStatus() }}</option>
+                  }
+                  @for (option of statuses(); track option.value) {
+                    <option [value]="option.value" [selected]="option.value === status()">
+                      {{ option.label }}
+                    </option>
+                  }
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="lu-subject-code">Subject Code</label>
+                <input id="lu-subject-code" type="text" readonly [value]="subjectCode()" />
+              </div>
+
+              <!-- The document id, which is what production shows here and what
+                   support asks for. Read-only with a copy button, because it is
+                   long, meaningless to read aloud, and never typed by hand. -->
+              <div class="field field-copy">
+                <label for="lu-id">Learning Unit ID</label>
+                <div class="copy-wrap">
+                  <input id="lu-id" type="text" readonly [value]="unit()?.docId ?? ''" />
+                  <button
+                    type="button"
+                    class="copy-btn"
+                    (click)="copyLearningUnitId()"
+                    [attr.aria-label]="copied() ? 'Copied' : 'Copy learning unit ID'"
+                  >
+                    <app-icon [name]="copied() ? 'check' : 'copy'" [size]="16" />
+                  </button>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="lu-subject-name">Subject Name</label>
+                <input id="lu-subject-name" type="text" readonly [value]="subjectName()" />
+              </div>
+
+              <div class="field">
+                <label for="lu-subdomain-code">Sub-Domain Code</label>
+                <input id="lu-subdomain-code" type="text" readonly [value]="subDomainCode()" />
+              </div>
+
+              <div class="field">
+                <label for="lu-domain-code">Domain Code</label>
+                <input id="lu-domain-code" type="text" readonly [value]="domainCode()" />
+              </div>
+
+              <div class="field">
+                <label for="lu-subdomain-name">Sub-Domain Name</label>
+                <input id="lu-subdomain-name" type="text" readonly [value]="subDomainName()" />
+              </div>
+
+              <div class="field">
+                <label for="lu-domain-name">Domain Name</label>
+                <input id="lu-domain-name" type="text" readonly [value]="domainName()" />
+              </div>
+
+              <div class="field">
+                <label for="lu-composite">Composite Code</label>
+                <input id="lu-composite" type="text" readonly [value]="compositeCode()" />
+              </div>
+
+            </div>
+          }
+
+          <!-- ==============================================================
+               DESCRIPTIONS
+               ==============================================================
+               The reference's five boxes, in its two-column order: long beside
+               alternate long, short beside alternate short, tiny alone on the
+               last row. The alternate pair is production's second wording of the
+               same unit for a different audience.
+
+               `tinyDescription` is the one field here production's documents do
+               not already carry — see the model for the name it is written
+               under. -->
+          @case ('Descriptions') {
+            <div class="basic-grid">
+
+              <div class="field">
+                <label for="lu-long">Learning Unit Long Description</label>
+                <textarea
+                  id="lu-long"
+                  class="desc-box"
+                  placeholder="Insert text here …"
+                  [value]="longDescription()"
+                  (input)="setLongDescription(valueOf($event))"
+                ></textarea>
+              </div>
+
+              <div class="field">
+                <label for="lu-alt-long">Learning Unit Alternate Long Description</label>
+                <textarea
+                  id="lu-alt-long"
+                  class="desc-box"
+                  placeholder="Insert text here …"
+                  [value]="alternateLongDescription()"
+                  (input)="setAlternateLongDescription(valueOf($event))"
+                ></textarea>
+              </div>
+
+              <div class="field">
+                <label for="lu-desc">Learning Unit Short Description</label>
+                <textarea
+                  id="lu-desc"
+                  class="desc-box"
+                  placeholder="Insert text here …"
+                  [value]="shortDescription()"
+                  (input)="setShortDescription(valueOf($event))"
+                ></textarea>
+              </div>
+
+              <div class="field">
+                <label for="lu-alt-short">Learning Unit Alternate Short Description</label>
+                <textarea
+                  id="lu-alt-short"
+                  class="desc-box"
+                  placeholder="Insert text here …"
+                  [value]="alternateShortDescription()"
+                  (input)="setAlternateShortDescription(valueOf($event))"
+                ></textarea>
+              </div>
+
+              <div class="field">
+                <label for="lu-tiny">Learning Unit Tiny Description</label>
+                <textarea
+                  id="lu-tiny"
+                  class="desc-box"
+                  placeholder="Insert text here …"
+                  [value]="tinyDescription()"
+                  (input)="setTinyDescription(valueOf($event))"
+                ></textarea>
+              </div>
+
+            </div>
+          }
+
+          <!-- ==============================================================
+               IMAGES
+               ==============================================================
+               Three slots, each one of two states: a stored path offers
+               Re-upload beside View, an empty one offers Upload across the full
+               width. That is the whole difference between the reference's
+               Head Line row and its QR Code row.
+
+               THE BUTTONS ARE DISABLED, and deliberately so. Every one of these
+               is a Cloud Storage operation, this app has never used Storage —
+               no SDK, no bucket rules, no storage block in firebase.json — and
+               Storage rules only take effect once deployed. A button that
+               looked live and failed on click would be worse than one that says
+               what it is waiting for. -->
+          @case ('Images') {
+            <div class="basic-grid">
+              @for (slot of imageSlots(); track slot.label) {
+                <div class="field">
+                  <!-- A span, not a label: a slot's control is a pair of
+                       buttons, and a <label> with no form element to point at is
+                       both meaningless to a screen reader and a lint failure.
+                       Each button carries its own accessible name instead. -->
+                  <span class="slot-label">{{ slot.label }}</span>
+                  <div class="image-slot">
+                    <button
+                      type="button"
+                      class="img-btn"
+                      [disabled]="uploadingImage() === slot.key"
+                      [attr.aria-label]="(slot.path ? 'Re-upload ' : 'Upload ') + slot.label"
+                      (click)="imageFile.click()"
+                    >
+                      <app-icon name="download-circle" [size]="17" />
+                      @if (uploadingImage() === slot.key) {
+                        Uploading… {{ uploadPercent() }}%
+                      } @else {
+                        {{ slot.path ? 'Re-upload' : 'Upload' }}
+                      }
+                    </button>
+
+                    <input
+                      #imageFile
+                      type="file"
+                      class="visually-hidden"
+                      accept="image/*"
+                      [attr.aria-label]="'Choose an image for ' + slot.label"
+                      (change)="uploadImage(slot, $event)"
+                    />
+
+                    <!-- No View where there is nothing stored to view. -->
+                    @if (slot.path) {
+                      <button
+                        type="button"
+                        class="img-btn is-view"
+                        [title]="slot.path"
+                        [attr.aria-label]="'View ' + slot.label"
+                        (click)="openResource(slot.path, slot.label)"
+                      >
+                        <app-icon name="eye" [size]="15" />
+                        View
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
+          <!-- ==============================================================
+               TACDEV
+               ==============================================================
+               A maturity selector over a list of resource slots, which is the
+               shape every resource tab takes: the slots a unit HAS depend on its
+               type and on which rung of the ladder you are looking at, so the
+               rung has to be chosen before there is a list to show.
+
+               The rows come from LEARNING_UNIT_RESOURCE_SCHEMA, not from the
+               stored document — nothing reads learningUnitResources yet, so
+               every slot renders empty. A slot holding a file would show
+               Re-Upload and a live View, as the reference's TAC R&D Notes row
+               does. -->
+          @case ('TACDev') {
+            <div class="tab-panel">
+
+              <div class="notched">
+                <label class="notched-label" for="lu-res-maturity">Maturity Type</label>
+                <select
+                  id="lu-res-maturity"
+                  class="notched-select"
+                  (change)="setResourceMaturity(valueOf($event))"
+                >
+                  <!-- All four listed; only the rungs the unit has reached can
+                       be picked. See reachedMaturities. -->
+                  @for (level of resourceMaturities(); track level) {
+                    <option
+                      [value]="level"
+                      [selected]="level === resourceMaturity()"
+                      [disabled]="!isMaturityReached(level)"
+                    >
+                      {{ level }}
+                    </option>
+                  }
+                </select>
+              </div>
+
+              @if (tacDevColumns().length > 0) {
+                <!-- Scrolls sideways rather than stacking: thirteen slots in one
+                     column would be a page of scrolling inside a modal that
+                     already scrolls. -->
+                <div class="slot-scroll">
+                  @for (column of tacDevColumns(); track $index) {
+                    <div class="slot-col">
+                      @for (slot of column; track slot.key) {
+                        <div class="slot-row">
+                          <span class="slot-label">{{ slot.label }}</span>
+                          <div class="slot-actions">
+                            <!-- ENABLED on a grade-dependent slot, because what
+                                 it opens is a dialog rather than a file picker,
+                                 and asking which board and grade needs no
+                                 Storage. A plain slot's Upload goes straight to
+                                 the file picker, so it stays inert. -->
+                            <!-- TWO KINDS OF SLOT, two behaviours. A
+                                 grade-dependent one holds a file per board and
+                                 grade, so Upload asks which before it asks for a
+                                 file. A plain one holds a single path, so it
+                                 goes straight to the picker. -->
+                            @if (slot.gradeDependent) {
+                              <button
+                                type="button"
+                                class="res-btn"
+                                title="Choose a board and grade"
+                                [attr.aria-label]="'Upload ' + slot.label + ' for a board and grade'"
+                                (click)="openBoardGrade(slot, 'tacDev')"
+                              >
+                                <app-icon name="upload-circle" [size]="17" />
+                                {{ slot.path ? 'Re-Upload' : 'Upload' }}
+                              </button>
+                            } @else {
+                              <button
+                                type="button"
+                                class="res-btn"
+                                [disabled]="isSlotUploading('tacDev', slot.key)"
+                                [attr.aria-label]="(slot.path ? 'Re-upload ' : 'Upload ') + slot.label"
+                                (click)="tacDevFile.click()"
+                              >
+                                <app-icon name="upload-circle" [size]="17" />
+                                @if (isSlotUploading('tacDev', slot.key)) {
+                                  Uploading… {{ uploadPercent() }}%
+                                } @else {
+                                  {{ slot.path ? 'Re-Upload' : 'Upload' }}
+                                }
+                              </button>
+
+                              <input
+                                #tacDevFile
+                                type="file"
+                                class="visually-hidden"
+                                [accept]="documentAccept"
+                                [attr.aria-label]="'Choose a file for ' + slot.label"
+                                (change)="uploadSlotFile('tacDev', slot.key, $event)"
+                              />
+                            }
+
+                            <!-- Kept on every row and greyed where the slot is
+                                 empty, which is the reference's own treatment. -->
+                            <!-- A grade-dependent slot keeps its files in
+                                 boardGradeResources, not on the rung document,
+                                 so its path comes from there. View opens the
+                                 most recently filed one. -->
+                            <button
+                              type="button"
+                              class="res-btn is-view"
+                              [class.is-empty]="!(slot.path || boardGradePath('tacDev', slot.key))"
+                              [disabled]="!(slot.path || boardGradePath('tacDev', slot.key))"
+                              [attr.aria-label]="'View ' + slot.label"
+                              [title]="slot.gradeDependent
+                                ? 'Opens the board and grade page'
+                                : slot.label"
+                              (click)="slot.gradeDependent
+                                ? openBoardGrid(slot, 'tacDev')
+                                : openResource(slot.path, slot.label)"
+                            >
+                              View
+                            </button>
+
+                            <!-- ONLY on a plain-path slot. A grade-dependent one
+                                 holds a fallback path and possibly one per board,
+                                 so there is no single path to copy — which is why
+                                 the reference shows the button beside Dev Guide
+                                 and not beside Consolidated BoC. -->
+                            @if (!slot.gradeDependent) {
+                              <button
+                                type="button"
+                                class="res-copy"
+                                [disabled]="!slot.path"
+                                [attr.aria-label]="'Copy the path for ' + slot.label"
+                                [title]="slot.path || 'No path stored yet'"
+                                (click)="copySlotPath('tacDev', slot.key, slot.path)"
+                              >
+                                <app-icon
+                                  [name]="isSlotCopied('tacDev', slot.key) ? 'check' : 'copy'"
+                                  [size]="17"
+                                />
+                              </button>
+                            }
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              } @else {
+                <p class="slot-empty">
+                  There is no resource available for the TACDev team for learning
+                  units of the {{ resourceMaturity() }} maturity
+                </p>
+              }
+            </div>
+          }
+
+          <!-- ==============================================================
+               VIDEO
+               ==============================================================
+               The same maturity selector and column layout as TACDev, with one
+               difference that matters: half these slots are LINKS, not files. A
+               slot whose key ends in Url or Raw renders a box you paste into;
+               the rest render an upload button. See isUrlSlot.
+
+               No copy buttons on this tab — the reference has none, and a link
+               is already selectable in its own box. -->
+          @case ('Video') {
+            <div class="tab-panel">
+
+              <div class="notched">
+                <label class="notched-label" for="lu-vid-maturity">Maturity Type</label>
+                <select
+                  id="lu-vid-maturity"
+                  class="notched-select"
+                  (change)="setResourceMaturity(valueOf($event))"
+                >
+                  <!-- All four listed; only the rungs the unit has reached can
+                       be picked. See reachedMaturities. -->
+                  @for (level of resourceMaturities(); track level) {
+                    <option
+                      [value]="level"
+                      [selected]="level === resourceMaturity()"
+                      [disabled]="!isMaturityReached(level)"
+                    >
+                      {{ level }}
+                    </option>
+                  }
+                </select>
+              </div>
+
+              @if (videoColumns().length > 0) {
+                <div class="slot-scroll">
+                  @for (column of videoColumns(); track $index) {
+                    <div class="slot-col">
+                      @for (slot of column; track slot.key) {
+                        <div class="slot-row">
+                          <span class="slot-label">{{ slot.label }}</span>
+                          <div class="slot-actions is-video">
+                            @if (slot.url) {
+                              <!-- EDITABLE, unlike every other control on these
+                                   tabs: a link is typed, so it needs no Cloud
+                                   Storage. It saves to the unit's resource
+                                   document for the chosen maturity. -->
+                              <input
+                                type="url"
+                                class="slot-url"
+                                autocomplete="off"
+                                placeholder="Paste video URL"
+                                [value]="slot.path"
+                                [attr.aria-label]="slot.label"
+                                (input)="setSlotValue('video', slot.key, valueOf($event))"
+                              />
+                            } @else {
+                              <button
+                                type="button"
+                                class="res-btn"
+                                [disabled]="isSlotUploading('video', slot.key)"
+                                [attr.aria-label]="(slot.path ? 'Re-upload ' : 'Upload ') + slot.label"
+                                (click)="videoFile.click()"
+                              >
+                                <app-icon name="download-circle" [size]="17" />
+                                @if (isSlotUploading('video', slot.key)) {
+                                  Uploading… {{ uploadPercent() }}%
+                                } @else {
+                                  {{ slot.path ? 'Re-Upload' : 'Upload' }}
+                                }
+                              </button>
+
+                              <input
+                                #videoFile
+                                type="file"
+                                class="visually-hidden"
+                                accept=".mp4,.mov,.webm,.zip,video/mp4,video/quicktime,video/webm,application/zip,application/x-zip-compressed"
+                                [attr.aria-label]="'Choose a file for ' + slot.label"
+                                (change)="uploadSlotFile('video', slot.key, $event)"
+                              />
+                            }
+
+                            <!-- Video's slots are plain files and links, so this
+                                 View reads the rung document directly. -->
+                            <button
+                              type="button"
+                              class="res-btn is-view"
+                              [class.is-empty]="!slot.path"
+                              [disabled]="!slot.path"
+                              [attr.aria-label]="'View ' + slot.label"
+                              (click)="openResource(slot.path, slot.label)"
+                            >
+                              View
+                            </button>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              } @else {
+                <p class="slot-empty">
+                  There is no resource available for the Video team for learning
+                  units of the {{ resourceMaturity() }} maturity
+                </p>
+              }
+            </div>
+          }
+
+          <!-- ==============================================================
+               3S
+               ==============================================================
+               The same shape as TACDev — every 3S slot is grade-dependent, so
+               every Upload opens the board-and-grade sheet and no row carries a
+               copy button. -->
+          @case ('3S') {
+            <div class="tab-panel">
+
+              <div class="notched">
+                <label class="notched-label" for="lu-3s-maturity">Maturity Type</label>
+                <select
+                  id="lu-3s-maturity"
+                  class="notched-select"
+                  (change)="setResourceMaturity(valueOf($event))"
+                >
+                  @for (level of resourceMaturities(); track level) {
+                    <option
+                      [value]="level"
+                      [selected]="level === resourceMaturity()"
+                      [disabled]="!isMaturityReached(level)"
+                    >
+                      {{ level }}
+                    </option>
+                  }
+                </select>
+              </div>
+
+              @if (threeSColumns().length > 0) {
+                <div class="slot-scroll">
+                  @for (column of threeSColumns(); track $index) {
+                    <div class="slot-col">
+                      @for (slot of column; track slot.key) {
+                        <div class="slot-row">
+                          <span class="slot-label">{{ slot.label }}</span>
+                          <div class="slot-actions">
+                            <!-- TWO KINDS OF SLOT, two behaviours. A
+                                 grade-dependent one holds a file per board and
+                                 grade, so Upload asks which before it asks for a
+                                 file. A plain one holds a single path, so it
+                                 goes straight to the picker. -->
+                            @if (slot.gradeDependent) {
+                              <button
+                                type="button"
+                                class="res-btn"
+                                title="Choose a board and grade"
+                                [attr.aria-label]="'Upload ' + slot.label + ' for a board and grade'"
+                                (click)="openBoardGrade(slot, '3S')"
+                              >
+                                <app-icon name="upload-circle" [size]="17" />
+                                {{ slot.path ? 'Re-Upload' : 'Upload' }}
+                              </button>
+                            } @else {
+                              <button
+                                type="button"
+                                class="res-btn"
+                                [disabled]="isSlotUploading('3S', slot.key)"
+                                [attr.aria-label]="(slot.path ? 'Re-upload ' : 'Upload ') + slot.label"
+                                (click)="threeSFile.click()"
+                              >
+                                <app-icon name="upload-circle" [size]="17" />
+                                @if (isSlotUploading('3S', slot.key)) {
+                                  Uploading… {{ uploadPercent() }}%
+                                } @else {
+                                  {{ slot.path ? 'Re-Upload' : 'Upload' }}
+                                }
+                              </button>
+
+                              <input
+                                #threeSFile
+                                type="file"
+                                class="visually-hidden"
+                                [accept]="documentAccept"
+                                [attr.aria-label]="'Choose a file for ' + slot.label"
+                                (change)="uploadSlotFile('3S', slot.key, $event)"
+                              />
+                            }
+
+                            <!-- A grade-dependent slot keeps its files in
+                                 boardGradeResources, not on the rung document,
+                                 so its path comes from there. View opens the
+                                 most recently filed one. -->
+                            <button
+                              type="button"
+                              class="res-btn is-view"
+                              [class.is-empty]="!(slot.path || boardGradePath('3S', slot.key))"
+                              [disabled]="!(slot.path || boardGradePath('3S', slot.key))"
+                              [attr.aria-label]="'View ' + slot.label"
+                              [title]="slot.gradeDependent
+                                ? 'Opens the board and grade page'
+                                : slot.label"
+                              (click)="slot.gradeDependent
+                                ? openBoardGrid(slot, '3S')
+                                : openResource(slot.path, slot.label)"
+                            >
+                              View
+                            </button>
+
+                            @if (!slot.gradeDependent) {
+                              <button
+                                type="button"
+                                class="res-copy"
+                                [disabled]="!slot.path"
+                                [attr.aria-label]="'Copy the path for ' + slot.label"
+                                [title]="slot.path || 'No path stored yet'"
+                                (click)="copySlotPath('3S', slot.key, slot.path)"
+                              >
+                                <app-icon
+                                  [name]="isSlotCopied('3S', slot.key) ? 'check' : 'copy'"
+                                  [size]="17"
+                                />
+                              </button>
+                            }
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              } @else {
+                <!-- Production's own sentence, verbatim apart from the tab
+                     name. It names the TEAM rather than the tab, which is how
+                     the people who fill these in refer to them. -->
+                <p class="slot-empty">
+                  There is no resource available for the 3S team for learning
+                  units of the {{ resourceMaturity() }} maturity
+                </p>
+              }
+            </div>
+          }
+
+          <!-- ==============================================================
+               VERSION CHANGES
+               ==============================================================
+               One box, writing versionNotes on the unit itself rather than to a
+               resource document — it describes the version, not a file. -->
+          @case ('Version Changes') {
+            <div class="tab-panel">
+              <div class="notched">
+                <label class="notched-label" for="lu-version-notes">Version Description</label>
+                <textarea
+                  id="lu-version-notes"
+                  class="notched-select desc-box"
+                  placeholder="What changed in this version"
+                  [value]="versionNotes()"
+                  (input)="setVersionNotes(valueOf($event))"
+                ></textarea>
+              </div>
+            </div>
+          }
+
+          <!-- ==============================================================
+               ADDITIONAL RESOURCES
+               ==============================================================
+               A list of cards, added by the button at the bottom and removed by
+               the bin on each one. Empty until something is added, which is what
+               the reference shows on a unit with none: just the button. -->
+          @case ('Additional Resources') {
+            <div class="tab-panel">
+
+              @for (resource of additionalResources(); track $index) {
+                <div class="res-card">
+                  <button
+                    type="button"
+                    class="res-card-remove"
+                    (click)="removeResource($index)"
+                    [attr.aria-label]="'Remove resource ' + ($index + 1)"
+                  >
+                    <app-icon name="trash" [size]="17" />
+                  </button>
+
+                  <div class="res-card-grid">
+                    <div class="field">
+                      <label [attr.for]="'lu-res-title-' + $index">
+                        Resource Title <span class="req" aria-hidden="true">*</span>
+                      </label>
+                      <input
+                        [id]="'lu-res-title-' + $index"
+                        type="text"
+                        autocomplete="off"
+                        [value]="resource.title"
+                        (input)="updateResource($index, 'title', valueOf($event))"
+                      />
+                    </div>
+
+                    <div class="field">
+                      <label [attr.for]="'lu-res-desc-' + $index">Short Description</label>
+                      <textarea
+                        [id]="'lu-res-desc-' + $index"
+                        rows="2"
+                        [value]="resource.shortdescription"
+                        (input)="updateResource($index, 'shortdescription', valueOf($event))"
+                      ></textarea>
+                    </div>
+
+                    <div class="field">
+                      <label [attr.for]="'lu-res-type-' + $index">
+                        Select File Type <span class="req" aria-hidden="true">*</span>
+                      </label>
+                      <div class="res-type-row">
+                        <select
+                          [id]="'lu-res-type-' + $index"
+                          (change)="setResourceFileType($index, valueOf($event))"
+                        >
+                          <option value="" [selected]="resource.type === ''">Select</option>
+                          @for (option of fileTypes; track option.label) {
+                            <option
+                              [value]="option.label"
+                              [selected]="option.label === fileTypeLabel(resource)"
+                            >
+                              {{ option.label }}
+                            </option>
+                          }
+                        </select>
+
+                        <!-- A YouTube link is typed; the other two are files and
+                             so wait on Cloud Storage. -->
+                        <!-- A VIDEO is a link, so it is typed; an UPLOAD is a
+                             file, so it gets the button the reference shows
+                             beside the select. -->
+                        @if (resource.type === 'VIDEO') {
+                          <input
+                            type="url"
+                            class="slot-url"
+                            placeholder="Paste the link"
+                            [value]="resource.resourcePath"
+                            [attr.aria-label]="'Link for resource ' + ($index + 1)"
+                            (input)="updateResource($index, 'resourcePath', valueOf($event))"
+                          />
+                        } @else if (resource.type === 'UPLOAD') {
+                          <!-- The button drives a hidden file input rather than
+                               being one: a bare <input type=file> cannot be
+                               styled to match the controls beside it, and the
+                               label-wrapping trick loses the disabled state
+                               while an upload is running. -->
+                          <button
+                            type="button"
+                            class="res-btn"
+                            [disabled]="uploadingRow() === $index"
+                            [attr.aria-label]="'Upload the file for resource ' + ($index + 1)"
+                            (click)="resourceFile.click()"
+                          >
+                            <app-icon name="upload-circle" [size]="17" />
+                            @if (uploadingRow() === $index) {
+                              Uploading… {{ uploadPercent() }}%
+                            } @else {
+                              {{ resource.resourcePath ? 'Re-Upload' : 'Upload' }}
+                            }
+                          </button>
+
+                          <input
+                            #resourceFile
+                            type="file"
+                            class="visually-hidden"
+                            [accept]="acceptFor(resource)"
+                            [attr.aria-label]="'Choose a file for resource ' + ($index + 1)"
+                            (change)="uploadResourceFile($index, $event)"
+                          />
+                        }
+
+                        <button
+                          type="button"
+                          class="res-btn is-view"
+                          [class.is-empty]="!resource.resourcePath"
+                          [disabled]="!resource.resourcePath"
+                          [attr.aria-label]="'View resource ' + ($index + 1)"
+                          (click)="openResource(resource.resourcePath, resource.title || 'this resource')"
+                        >
+                          View
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="field">
+                      <label [attr.for]="'lu-res-pub-' + $index">
+                        Publish <span class="req" aria-hidden="true">*</span>
+                      </label>
+                      <select
+                        [id]="'lu-res-pub-' + $index"
+                        (change)="setResourcePublish($index, valueOf($event))"
+                      >
+                        <option value="false" [selected]="!resource.publish">false</option>
+                        <option value="true" [selected]="resource.publish">true</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              }
+
+            </div>
+          }
+
+          <!-- ==============================================================
+               SOCIAL MEDIA
+               ==============================================================
+               Two slots per rung, both files, and NO copy button — the same
+               two-control row the Video tab uses rather than TACDev's three.
+
+               PLATINUM HAS NOTHING HERE, and that is the schema's data rather
+               than a gap: a TACtivity has no socialMedia category at that rung,
+               so the tab says so instead of showing empty rows. -->
+          @case ('Social Media') {
+            <div class="tab-panel">
+
+              <div class="notched">
+                <label class="notched-label" for="lu-social-maturity">Maturity Type</label>
+                <select
+                  id="lu-social-maturity"
+                  class="notched-select"
+                  (change)="setResourceMaturity(valueOf($event))"
+                >
+                  @for (level of resourceMaturities(); track level) {
+                    <option
+                      [value]="level"
+                      [selected]="level === resourceMaturity()"
+                      [disabled]="!isMaturityReached(level)"
+                    >
+                      {{ level }}
+                    </option>
+                  }
+                </select>
+              </div>
+
+              @if (socialColumns().length > 0) {
+                <div class="slot-scroll">
+                  @for (column of socialColumns(); track $index) {
+                    <div class="slot-col">
+                      @for (slot of column; track slot.key) {
+                        <div class="slot-row">
+                          <span class="slot-label">{{ slot.label }}</span>
+                          <div class="slot-actions is-video">
+                            <button
+                              type="button"
+                              class="res-btn"
+                              [disabled]="isSlotUploading('socialMedia', slot.key)"
+                              [attr.aria-label]="(slot.path ? 'Re-upload ' : 'Upload ') + slot.label"
+                              (click)="socialFile.click()"
+                            >
+                              <app-icon name="download-circle" [size]="17" />
+                              @if (isSlotUploading('socialMedia', slot.key)) {
+                                Uploading… {{ uploadPercent() }}%
+                              } @else {
+                                {{ slot.path ? 'Re-Upload' : 'Upload' }}
+                              }
+                            </button>
+
+                            <input
+                              #socialFile
+                              type="file"
+                              class="visually-hidden"
+                              accept=".mp4,.mov,.webm,.zip,video/mp4,video/quicktime,video/webm,application/zip,application/x-zip-compressed"
+                              [attr.aria-label]="'Choose a file for ' + slot.label"
+                              (change)="uploadSlotFile('socialMedia', slot.key, $event)"
+                            />
+
+                            <button
+                              type="button"
+                              class="res-btn is-view"
+                              [class.is-empty]="!slot.path"
+                              [disabled]="!slot.path"
+                              [attr.aria-label]="'View ' + slot.label"
+                              (click)="openResource(slot.path, slot.label)"
+                            >
+                              View
+                            </button>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              } @else {
+                <p class="slot-empty">
+                  There is no resource available for the Social Media team for
+                  learning units of the {{ resourceMaturity() }} maturity
+                </p>
+              }
+            </div>
+          }
+
+          <!-- ==============================================================
+               GRAPHICS
+               ==============================================================
+               The same three-control row as TACDev, because these carry copy
+               buttons: nine slots at Gold, of which only Label - 18 Sticker is
+               grade-dependent and so the only one without one. -->
+          @case ('Graphics') {
+            <div class="tab-panel">
+
+              <div class="notched">
+                <label class="notched-label" for="lu-graphics-maturity">Maturity Type</label>
+                <select
+                  id="lu-graphics-maturity"
+                  class="notched-select"
+                  (change)="setResourceMaturity(valueOf($event))"
+                >
+                  @for (level of resourceMaturities(); track level) {
+                    <option
+                      [value]="level"
+                      [selected]="level === resourceMaturity()"
+                      [disabled]="!isMaturityReached(level)"
+                    >
+                      {{ level }}
+                    </option>
+                  }
+                </select>
+              </div>
+
+              @if (graphicsColumns().length > 0) {
+                <div class="slot-scroll">
+                  @for (column of graphicsColumns(); track $index) {
+                    <div class="slot-col">
+                      @for (slot of column; track slot.key) {
+                        <div class="slot-row">
+                          <span class="slot-label">{{ slot.label }}</span>
+                          <div class="slot-actions">
+                            <!-- TWO KINDS OF SLOT, two behaviours. A
+                                 grade-dependent one holds a file per board and
+                                 grade, so Upload asks which before it asks for a
+                                 file. A plain one holds a single path, so it
+                                 goes straight to the picker. -->
+                            @if (slot.gradeDependent) {
+                              <button
+                                type="button"
+                                class="res-btn"
+                                title="Choose a board and grade"
+                                [attr.aria-label]="'Upload ' + slot.label + ' for a board and grade'"
+                                (click)="openBoardGrade(slot, 'graphics')"
+                              >
+                                <app-icon name="upload-circle" [size]="17" />
+                                {{ slot.path ? 'Re-Upload' : 'Upload' }}
+                              </button>
+                            } @else {
+                              <button
+                                type="button"
+                                class="res-btn"
+                                [disabled]="isSlotUploading('graphics', slot.key)"
+                                [attr.aria-label]="(slot.path ? 'Re-upload ' : 'Upload ') + slot.label"
+                                (click)="graphicsFile.click()"
+                              >
+                                <app-icon name="upload-circle" [size]="17" />
+                                @if (isSlotUploading('graphics', slot.key)) {
+                                  Uploading… {{ uploadPercent() }}%
+                                } @else {
+                                  {{ slot.path ? 'Re-Upload' : 'Upload' }}
+                                }
+                              </button>
+
+                              <input
+                                #graphicsFile
+                                type="file"
+                                class="visually-hidden"
+                                [accept]="documentAccept"
+                                [attr.aria-label]="'Choose a file for ' + slot.label"
+                                (change)="uploadSlotFile('graphics', slot.key, $event)"
+                              />
+                            }
+
+                            <!-- A grade-dependent slot keeps its files in
+                                 boardGradeResources, not on the rung document,
+                                 so its path comes from there. View opens the
+                                 most recently filed one. -->
+                            <button
+                              type="button"
+                              class="res-btn is-view"
+                              [class.is-empty]="!(slot.path || boardGradePath('graphics', slot.key))"
+                              [disabled]="!(slot.path || boardGradePath('graphics', slot.key))"
+                              [attr.aria-label]="'View ' + slot.label"
+                              [title]="slot.gradeDependent
+                                ? 'Opens the board and grade page'
+                                : slot.label"
+                              (click)="slot.gradeDependent
+                                ? openBoardGrid(slot, 'graphics')
+                                : openResource(slot.path, slot.label)"
+                            >
+                              View
+                            </button>
+
+                            @if (!slot.gradeDependent) {
+                              <button
+                                type="button"
+                                class="res-copy"
+                                [disabled]="!slot.path"
+                                [attr.aria-label]="'Copy the path for ' + slot.label"
+                                [title]="slot.path || 'No path stored yet'"
+                                (click)="copySlotPath('graphics', slot.key, slot.path)"
+                              >
+                                <app-icon
+                                  [name]="isSlotCopied('graphics', slot.key) ? 'check' : 'copy'"
+                                  [size]="17"
+                                />
+                              </button>
+                            }
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              } @else {
+                <!-- Lowercase 'graphics', as production writes it here — the 3S
+                     and Social Media sentences capitalise their team names and
+                     this one does not. -->
+                <p class="slot-empty">
+                  There is no resource available for the graphics team for learning
+                  units of the {{ resourceMaturity() }} maturity
+                </p>
+              }
+            </div>
+          }
+
+          <!-- ==============================================================
+               EXTERNAL RESOURCES
+               ==============================================================
+               NO MATURITY SELECTOR, and that is the reference's own shape:
+               these nine sit on the unit's `resources` map, one set per unit
+               rather than one per rung.
+
+               No View and no copy either — just the control that fills the slot,
+               which is an upload for a path and a box for a link. -->
+          @case ('External Resources') {
+            <div class="tab-panel">
+              <div class="slot-scroll">
+                @for (group of externalGroups; track $index) {
+                  <div class="slot-col">
+                    @for (row of group; track row.key) {
+                      <div class="slot-row is-single">
+                        <span class="slot-label">{{ row.label }}</span>
+
+                        <!-- Control and View on ONE line, as the reference has
+                             them. View is a second action on the row, not a row
+                             of its own, and it is inside this wrapper so it sits
+                             beside a pasted link exactly as it sits beside an
+                             Upload button. -->
+                        <div class="slot-inline">
+                          @if (isUrlResource(row.key)) {
+                            <input
+                              type="url"
+                              class="slot-url is-wide"
+                              autocomplete="off"
+                              [value]="unitResource(row.key)"
+                              [attr.aria-label]="row.label"
+                              (input)="setUnitResource(row.key, valueOf($event))"
+                            />
+                          } @else {
+                            <button
+                              type="button"
+                              class="res-btn is-wide"
+                              [disabled]="uploadingUnitResource() === row.key"
+                              [attr.aria-label]="(unitResource(row.key) ? 'Re-upload ' : 'Upload ') + row.label"
+                              (click)="externalFile.click()"
+                            >
+                              <app-icon name="upload-circle" [size]="17" />
+                              @if (uploadingUnitResource() === row.key) {
+                                Uploading… {{ uploadPercent() }}%
+                              } @else {
+                                {{ unitResource(row.key) ? 'Re-Upload' : 'Upload' }}
+                              }
+                            </button>
+
+                            <input
+                              #externalFile
+                              type="file"
+                              class="visually-hidden"
+                              [accept]="documentAccept"
+                              [attr.aria-label]="'Choose a file for ' + row.label"
+                              (change)="uploadUnitResource(row.key, row.label, $event)"
+                            />
+                          }
+
+                          <!-- Shown only once the slot holds something, which is
+                               what the reference does: an empty slot is the
+                               Upload button on its own. No eye icon, unlike the
+                               resource tabs — here the reference's button is the
+                               word by itself. -->
+                          @if (unitResource(row.key)) {
+                            <button
+                              type="button"
+                              class="res-btn is-view"
+                              [attr.aria-label]="'View ' + row.label"
+                              (click)="openResource(unitResource(row.key), row.label)"
+                            >
+                              View
+                            </button>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- ==============================================================
+               ASSOCIATED LU
+               ==============================================================
+               Three lists of other learning units. Each is a row of chips with
+               an x, and a + that opens the picker; the reference lays them out
+               with two on the left and one on the right. -->
+          @case ('Associated LU') {
+            <div class="tab-panel">
+              <div class="lu-lists">
+                @for (list of luLists; track list.key) {
+                  <div class="lu-list">
+                    <span class="slot-label">{{ list.label }}</span>
+
+                    <!-- The chips and the + share one underlined row, so the +
+                         follows the last chip rather than sitting apart. -->
+                    <div class="lu-field">
+                      @for (docId of luPicked(list.key); track docId) {
+                        <span class="lu-chip">
+                          {{ luLabel(docId) }}
+                          <button
+                            type="button"
+                            class="lu-chip-x"
+                            (click)="removeLu(list.key, docId)"
+                            [attr.aria-label]="'Remove ' + luLabel(docId)"
+                          >
+                            <app-icon name="close" [size]="11" />
+                          </button>
+                        </span>
+                      }
+
+                      <button
+                        type="button"
+                        class="lu-add"
+                        (click)="openLuPicker(list.key)"
+                        [attr.aria-label]="'Add to ' + list.label"
+                      >
+                        <app-icon name="plus" [size]="14" />
+                      </button>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          @default {
+            <div class="tab-empty">
+              <p class="tab-empty-title">{{ activeTab() }}</p>
+              <p class="tab-empty-note">Not built yet. Nothing here is saved.</p>
+            </div>
+          }
         }
 
-        @if (pickedExisting()) {
-          <!-- The copy is ONE span, not bare text. The hint is a flex row so the
-               icon aligns with the first line, and flex makes every child a
-               separate item — leaving the code and the full stop after it
-               stranded on their own baselines. -->
-          <span class="field-hint is-locked">
-            <app-icon name="lock" [size]="13" />
-            <span>
-              Adding a new version of <strong>{{ code() }}</strong>. The code and
-              categorisation are inherited; pick a language to number it.
-            </span>
-          </span>
-        } @else if (!isEdit()) {
-          <span class="field-hint">
-            Start typing to add a version of an existing unit instead of a new one.
-          </span>
-        }
-      </div>
+      } @else {
 
-      <!-- Display name. Locked after picking an existing unit, because a version
-           should carry its family's name — the pencil is the override. -->
-      <div class="field">
-        <label for="lu-display">
-          Learning Unit Display Name <span class="req" aria-hidden="true">*</span>
-        </label>
-        <div class="input-with-action">
+        <!-- ==================================================================
+             Name — and the route to "or Version"
+             ==================================================================
+             Typing here searches the units that already exist. Picking one adopts
+             its code, type and categorisation, so what gets saved is the next
+             version of that unit rather than a new one. -->
+        <div class="field field-suggest">
+          <label for="lu-name">Learning Unit Name <span class="req" aria-hidden="true">*</span></label>
           <input
-            id="lu-display"
+            id="lu-name"
             type="text"
-            placeholder="Enter the learning unit display name"
+            placeholder="Enter the learning unit name"
             autocomplete="off"
-            [value]="displayName()"
-            [disabled]="!displayNameEnabled() || displayNameLocked()"
-            (input)="setDisplayName(valueOf($event))"
+            maxlength="60"
+            [value]="name()"
+            (input)="setName(valueOf($event))"
           />
+
+          @if (suggestions().length > 0) {
+            <ul class="suggest-list" role="listbox" aria-label="Existing learning units">
+              @for (match of suggestions(); track match.docId) {
+                <li>
+                  <button type="button" class="suggest-row" (click)="pickExisting(match)">
+                    {{ suggestionLabel(match) }}
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+
           @if (pickedExisting()) {
-            <button
-              type="button"
-              class="input-action"
-              [class.is-on]="displayNameUnlocked()"
-              (click)="toggleDisplayNameEdit()"
-              [attr.aria-pressed]="displayNameUnlocked()"
-              aria-label="Edit the display name"
-              title="Edit the display name"
-            >
-              <app-icon name="edit" [size]="15" />
-            </button>
-          }
-        </div>
-      </div>
-
-      <div class="field-row">
-        <!-- Type. Carries a code as well as a name: the code prefixes
-             learningUnitId, so it is stored rather than derived later. -->
-        <div class="field">
-          <label for="lu-type">Learning Unit Type <span class="req" aria-hidden="true">*</span></label>
-          <select
-            id="lu-type"
-            [disabled]="!typeEnabled()"
-            (change)="setType(valueOf($event))"
-          >
-            <option value="" disabled [selected]="type() === ''">Select</option>
-            @for (option of types; track option.code) {
-              <option [value]="option.name" [selected]="option.name === type()">
-                {{ option.name }} ({{ option.code }})
-              </option>
-            }
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="lu-language">Select Language <span class="req" aria-hidden="true">*</span></label>
-          <select
-            id="lu-language"
-            [disabled]="!languageEnabled()"
-            (change)="setIsoCode(valueOf($event))"
-          >
-            <option value="" disabled [selected]="isoCode() === ''">Select a language</option>
-            @for (language of languages; track language.code) {
-              <option [value]="language.code" [selected]="language.code === isoCode()">
-                {{ language.label }} ({{ language.code }})
-              </option>
-            }
-          </select>
-        </div>
-      </div>
-
-      <div class="field-row">
-        <!-- Code. Four characters, two letters then two digits. The letters are
-             the domain and sub-domain and are what fill everything below. -->
-        <div class="field">
-          <label for="lu-code">Learning Unit Code <span class="req" aria-hidden="true">*</span></label>
-          <input
-            id="lu-code"
-            type="text"
-            placeholder="Enter the learning unit code (CLXY)"
-            autocomplete="off"
-            maxlength="4"
-            [value]="code()"
-            [disabled]="!codeEnabled()"
-            [attr.aria-invalid]="code() !== '' && !codeValid()"
-            (input)="setCode(valueOf($event))"
-          />
-
-          @if (code() !== '' && !codeWellFormed()) {
-            <span class="field-hint is-warn">
-              Two letters then two digits, as in <strong>AE04</strong>.
+            <!-- The copy is ONE span, not bare text. The hint is a flex row so the
+                 icon aligns with the first line, and flex makes every child a
+                 separate item — leaving the code and the full stop after it
+                 stranded on their own baselines. -->
+            <span class="field-hint is-locked">
+              <app-icon name="lock" [size]="13" />
+              <span>
+                Adding a new version of <strong>{{ code() }}</strong>. The code and
+                categorisation are inherited; pick a language to number it.
+              </span>
             </span>
-          } @else if (codeUnknownPair() && !codeValid()) {
-            <span class="field-hint is-warn">
-              <strong>{{ code()[0] }}{{ code()[1] }}</strong> is not a known
-              domain / sub-domain pair, so this unit cannot be categorised.
-            </span>
-          } @else if (compositeCode()) {
+          } @else if (!isEdit()) {
             <span class="field-hint">
-              Domain <strong>{{ domainCode() }}</strong>, sub-domain
-              <strong>{{ subDomainCode() }}</strong> — categorised below.
+              Start typing to add a version of an existing unit instead of a new one.
             </span>
           }
         </div>
 
-        <!-- Version. Computed per code + language + type; V10 is the first.
-             The pencil unlocks it for the rare manual correction. -->
+        <!-- Display name. Locked after picking an existing unit, because a version
+             should carry its family's name — the pencil is the override. -->
         <div class="field">
-          <label for="lu-version">Version Number <span class="req" aria-hidden="true">*</span></label>
+          <label for="lu-display">
+            Learning Unit Display Name <span class="req" aria-hidden="true">*</span>
+          </label>
           <div class="input-with-action">
             <input
-              id="lu-version"
+              id="lu-display"
               type="text"
-              placeholder="Enter the version number"
+              placeholder="Enter the learning unit display name"
               autocomplete="off"
-              [value]="versionLabel()"
-              [disabled]="!versionUnlocked()"
-              (input)="setVersion(valueOf($event))"
+              [value]="displayName()"
+              [disabled]="!displayNameEnabled() || displayNameLocked()"
+              (input)="setDisplayName(valueOf($event))"
             />
-            <button
-              type="button"
-              class="input-action"
-              [class.is-on]="versionUnlocked()"
-              (click)="toggleVersionEdit()"
-              [attr.aria-pressed]="versionUnlocked()"
-              aria-label="Edit the version number"
-              title="Set the version number by hand"
-            >
-              <app-icon name="edit" [size]="15" />
-            </button>
+            @if (pickedExisting()) {
+              <button
+                type="button"
+                class="input-action"
+                [class.is-on]="displayNameUnlocked()"
+                (click)="toggleDisplayNameEdit()"
+                [attr.aria-pressed]="displayNameUnlocked()"
+                aria-label="Edit the display name"
+                title="Edit the display name"
+              >
+                <app-icon name="edit" [size]="15" />
+              </button>
+            }
           </div>
-          @if (!versionUnlocked() && versionLabel()) {
-            <span class="field-hint">Assigned automatically. {{ learningUnitId() }}</span>
-          }
-        </div>
-      </div>
-
-      <div class="field-row">
-        <div class="field">
-          <label for="lu-maturity">Learning Unit Maturity <span class="req" aria-hidden="true">*</span></label>
-          <select
-            id="lu-maturity"
-            [disabled]="!maturityEnabled()"
-            (change)="setMaturity(valueOf($event))"
-          >
-            <option value="" disabled [selected]="maturity() === ''">Select maturity</option>
-            @for (level of maturities; track level) {
-              <option [value]="level" [selected]="level === maturity()">{{ level }}</option>
-            }
-          </select>
         </div>
 
-        <div class="field">
-          <label for="lu-status">Status <span class="req" aria-hidden="true">*</span></label>
-          <select id="lu-status" (change)="setStatus(valueOf($event))">
-            <!-- A status this form does not offer is rendered as itself, so what
-                 is shown is what will be saved. -->
-            @if (unknownStatus()) {
-              <option [value]="unknownStatus()" selected>{{ unknownStatus() }}</option>
-            }
-            @for (option of statuses; track option.value) {
-              <option [value]="option.value" [selected]="option.value === status()">
-                {{ option.label }}
-              </option>
-            }
-          </select>
-        </div>
-      </div>
+        <div class="field-row">
+          <!-- Type. Carries a code as well as a name: the code prefixes
+               learningUnitId, so it is stored rather than derived later. -->
+          <div class="field">
+            <label for="lu-type">Learning Unit Type <span class="req" aria-hidden="true">*</span></label>
+            <select
+              id="lu-type"
+              [disabled]="!typeEnabled()"
+              (change)="setType(valueOf($event))"
+            >
+              <option value="" disabled [selected]="type() === ''">Select</option>
+              @for (option of types(); track option.code) {
+                <option [value]="option.name" [selected]="option.name === type()">
+                  {{ option.name }} ({{ option.code }})
+                </option>
+              }
+            </select>
+          </div>
 
-      <!-- ==================================================================
-           Categorisation — DERIVED, never typed
-           ==================================================================
-           All seven come from the code's letter pair. They are rendered as
-           read-only selects rather than hidden so the user can see what the code
-           resolved to before saving, which is the only feedback that a mistyped
-           code was still a valid one. -->
-      <fieldset class="field-group" [disabled]="true">
-        <legend>
-          Categorisation
-          <span class="legend-note">filled from the code</span>
-        </legend>
+          <div class="field">
+            <label for="lu-language">Select Language <span class="req" aria-hidden="true">*</span></label>
+            <select
+              id="lu-language"
+              [disabled]="!languageEnabled()"
+              (change)="setIsoCode(valueOf($event))"
+            >
+              <option value="" disabled [selected]="isoCode() === ''">Select a language</option>
+              @for (language of languages(); track language.code) {
+                <option [value]="language.code" [selected]="language.code === isoCode()">
+                  {{ language.label }} ({{ language.code }})
+                </option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <!-- Code. Four characters, two letters then two digits. The letters are
+               the domain and sub-domain and are what fill everything below. -->
+          <div class="field">
+            <label for="lu-code">Learning Unit Code <span class="req" aria-hidden="true">*</span></label>
+            <input
+              id="lu-code"
+              type="text"
+              placeholder="Enter the learning unit code (CLXY)"
+              autocomplete="off"
+              maxlength="4"
+              [value]="code()"
+              [disabled]="!codeEnabled()"
+              [attr.aria-invalid]="code() !== '' && !codeValid()"
+              (input)="setCode(valueOf($event))"
+            />
+
+            @if (code() !== '' && !codeWellFormed()) {
+              <span class="field-hint is-warn">
+                Two letters then two digits, as in <strong>AE04</strong>.
+              </span>
+            } @else if (codeUnknownPair() && !codeValid()) {
+              <span class="field-hint is-warn">
+                <strong>{{ code()[0] }}{{ code()[1] }}</strong> is not a known
+                domain / sub-domain pair, so this unit cannot be categorised.
+              </span>
+            }
+            <!-- The third branch here read "Domain P, sub-domain S — categorised
+                 below." and pointed at the Categorisation group. That group is gone,
+                 and the Domain Code and Sub-Domain Code fields it described are now
+                 visible two rows down showing exactly those values, so the hint was
+                 restating what the form already displays. The two WARNING branches
+                 above are kept: they are the only thing that tells a user a
+                 well-formed code is not a real one. -->
+          </div>
+
+          <!-- Version. Computed per code + language + type; V10 is the first.
+               The pencil unlocks it for the rare manual correction. -->
+          <div class="field">
+            <label for="lu-version">Version Number <span class="req" aria-hidden="true">*</span></label>
+            <div class="input-with-action">
+              <input
+                id="lu-version"
+                type="text"
+                placeholder="Enter the version number"
+                autocomplete="off"
+                [value]="versionLabel()"
+                [disabled]="!versionUnlocked()"
+                (input)="setVersion(valueOf($event))"
+              />
+              <button
+                type="button"
+                class="input-action"
+                [class.is-on]="versionUnlocked()"
+                (click)="toggleVersionEdit()"
+                [attr.aria-pressed]="versionUnlocked()"
+                aria-label="Edit the version number"
+                title="Set the version number by hand"
+              >
+                <app-icon name="edit" [size]="15" />
+              </button>
+            </div>
+            @if (!versionUnlocked() && versionLabel()) {
+              <span class="field-hint">Assigned automatically. {{ learningUnitId() }}</span>
+            }
+          </div>
+        </div>
 
         <div class="field-row">
           <div class="field">
+            <label for="lu-maturity">Learning Unit Maturity <span class="req" aria-hidden="true">*</span></label>
+            <select
+              id="lu-maturity"
+              [disabled]="!maturityEnabled()"
+              (change)="setMaturity(valueOf($event))"
+            >
+              <option value="" disabled [selected]="maturity() === ''">Select maturity</option>
+              @for (level of maturities(); track level) {
+                <option [value]="level" [selected]="level === maturity()">{{ level }}</option>
+              }
+            </select>
+          </div>
+
+          <!-- Subject Code pairs with Maturity, as the reference has it. It is the
+               first of the seven DERIVED fields; see the note below. -->
+          <div class="field">
             <label for="lu-subject-code">Subject Code</label>
-            <select id="lu-subject-code">
+            <select id="lu-subject-code" class="is-derived" [disabled]="true">
               <option value="" [selected]="subjectCode() === ''">Select subject code</option>
               @for (option of subjectCodeOptions(); track option) {
                 <option [value]="option" [selected]="option === subjectCode()">{{ option }}</option>
               }
             </select>
           </div>
+        </div>
 
+        <!-- ==================================================================
+             Categorisation — DERIVED, never typed, AND DRAWN LIKE EVERYTHING ELSE
+             ==================================================================
+             Seven controls, all computed from the two letters of the code: Subject
+             Code (paired with Maturity above), Subject Name, Domain Code, Domain
+             Name, Sub-Domain Code, Sub-Domain Name, Composite Code.
+
+             NO LONGER A <fieldset>. They sat inside a bordered, grey-panelled group
+             with a "Categorisation / filled from the code" legend, which the
+             reference does not have — it runs one flat two-column grid from the
+             Learning Unit Name to the Composite Code with no visual break at all.
+             The wrapper also carried [disabled]="true", which dimmed all seven and
+             made the values it had just worked out the hardest text on the form to
+             read. Seeing that PS07 resolved to Physics / Sound is the ONLY feedback
+             that a mistyped code was still a valid code, so those seven values are
+             the last thing that should be greyed.
+
+             `disabled` MOVED ONTO EACH CONTROL, and `is-derived` with it. The
+             behaviour is unchanged — none of these is typeable, because each one is
+             a function of the code and letting the two disagree would make whichever
+             won a surprise. Only the appearance changed: is-derived renders them
+             exactly like a live field. See learning-unit-form.css.
+
+             Sub-Domain Name deliberately leaves the right-hand cell of its row
+             empty, and Composite Code spans the full width, both as the reference
+             lays them out. -->
+
+        <div class="field-row">
           <div class="field">
             <label for="lu-subject-name">Subject Name</label>
-            <select id="lu-subject-name">
+            <select id="lu-subject-name" class="is-derived" [disabled]="true">
               <option value="" [selected]="subjectName() === ''">Select subject name</option>
               @for (option of subjectNameOptions(); track option) {
                 <option [value]="option" [selected]="option === subjectName()">{{ option }}</option>
               }
             </select>
           </div>
-        </div>
 
-        <div class="field-row">
           <div class="field">
             <label for="lu-domain-code">Domain Code</label>
-            <select id="lu-domain-code">
+            <select id="lu-domain-code" class="is-derived" [disabled]="true">
               <option value="" [selected]="domainCode() === ''">Select domain code</option>
               @for (option of domainCodeOptions(); track option) {
                 <option [value]="option" [selected]="option === domainCode()">{{ option }}</option>
               }
             </select>
           </div>
+        </div>
 
+        <div class="field-row">
           <div class="field">
             <label for="lu-domain-name">Domain Name</label>
-            <select id="lu-domain-name">
+            <select id="lu-domain-name" class="is-derived" [disabled]="true">
               <option value="" [selected]="domainName() === ''">Select domain name</option>
               @for (option of domainNameOptions(); track option) {
                 <option [value]="option" [selected]="option === domainName()">{{ option }}</option>
               }
             </select>
           </div>
-        </div>
 
-        <div class="field-row">
           <div class="field">
             <label for="lu-subdomain-code">Sub-Domain Code</label>
-            <select id="lu-subdomain-code">
+            <select id="lu-subdomain-code" class="is-derived" [disabled]="true">
               <option value="" [selected]="subDomainCode() === ''">Select sub-domain code</option>
               @for (option of subDomainCodeOptions(); track option) {
                 <option [value]="option" [selected]="option === subDomainCode()">{{ option }}</option>
               }
             </select>
           </div>
+        </div>
 
+        <!-- Sub-Domain Name alone in its row, right-hand cell empty. -->
+        <div class="field-row">
           <div class="field">
             <label for="lu-subdomain-name">Sub-Domain Name</label>
-            <select id="lu-subdomain-name">
+            <select id="lu-subdomain-name" class="is-derived" [disabled]="true">
               <option value="" [selected]="subDomainName() === ''">Select sub-domain name</option>
               @for (option of subDomainNameOptions(); track option) {
                 <option [value]="option" [selected]="option === subDomainName()">{{ option }}</option>
               }
             </select>
           </div>
+          <div></div>
         </div>
 
+        <!-- Composite Code, full width, with the pencil the reference draws on it. -->
         <div class="field">
           <label for="lu-composite">Composite Code</label>
-          <input
-            id="lu-composite"
-            type="text"
-            placeholder="Composite Code"
-            [value]="compositeCode()"
-          />
+          <div class="input-with-action">
+            <input
+              id="lu-composite"
+              class="is-derived"
+              type="text"
+              placeholder="Composite Code"
+              [value]="compositeCode()"
+              [disabled]="true"
+            />
+            <span class="input-action is-static" aria-hidden="true">
+              <app-icon name="edit" [size]="15" />
+            </span>
+          </div>
         </div>
-      </fieldset>
 
-      <!-- ==================================================================
-           Details — EDIT ONLY
-           ==================================================================
-           Production's Add dialog does not collect these; it writes '' / 0 / 45
-           and the unit's own editor fills them in afterwards. Showing them on
-           create would be three fields of parity debt for no gain, and hiding
-           them on edit would mean this app could no longer set them at all. -->
-      @if (isEdit()) {
-        <fieldset class="field-group">
-          <legend>Details</legend>
-
-          <div class="field">
-            <label for="lu-desc">Short Description</label>
-            <textarea
-              id="lu-desc"
-              rows="3"
-              placeholder="What the learner does"
-              [value]="shortDescription()"
-              (input)="setShortDescription(valueOf($event))"
-            ></textarea>
-          </div>
-
-          <div class="field-row">
-            <div class="field">
-              <label for="lu-difficulty">Difficulty</label>
-              <select id="lu-difficulty" (change)="setDifficulty(valueOf($event))">
-                <option value="" disabled [selected]="difficultyLevel() === ''">Select</option>
-                @for (level of difficulties; track level) {
-                  <option [value]="level" [selected]="level === difficultyLevel()">{{ level }}</option>
-                }
-              </select>
-            </div>
-
-            <div class="field">
-              <label for="lu-time">Total time <span class="optional">minutes</span></label>
-              <input
-                id="lu-time"
-                type="number"
-                min="0"
-                step="5"
-                autocomplete="off"
-                [value]="totalTime()"
-                (input)="setTotalTime(valueOf($event))"
-              />
-            </div>
-          </div>
-        </fieldset>
+        <!-- ==================================================================
+             Details — EDIT ONLY
+             ==================================================================
+             Production's Add dialog does not collect these; it writes '' / 0 / 45
+             and the unit's own editor fills them in afterwards. Showing them on
+             create would be three fields of parity debt for no gain, and hiding
+             them on edit would mean this app could no longer set them at all. -->
       }
 
     </div>
 
+    @if (uploadError(); as failure) {
+      <p class="view-failed" role="alert">{{ failure }}</p>
+    }
+
+    @if (viewFailed(); as failed) {
+      <p class="view-failed" role="status">
+        Nothing to open for {{ failed }} — the file is not in storage, or this
+        app cannot read the bucket.
+      </p>
+    }
+
+    <!-- ====================================================================
+         BOARD AND GRADE
+         ====================================================================
+         A second layer over the editor rather than a separate component: it
+         reads the slot it was opened for and nothing else, and closing it must
+         not disturb the tab underneath.
+
+         Submit and Upload are inert. Choosing a board and a grade works; what
+         cannot happen yet is the file, which needs Cloud Storage. -->
+    <!-- ====================================================================
+         UPLOAD — boards, grades and one file
+         ====================================================================
+         What the row's Upload button opens, and the only thing that creates a
+         board's first document. View opens the board x grade page below. -->
+    @if (boardGradeSlot(); as slot) {
+      <!-- A click on the sheet's own background closes an open picker; one on
+           the backdrop closes the sheet. -->
+      <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+      <div class="sheet-overlay" (click)="closeBoardGrade()">
+        <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+        <div
+          class="sheet"
+          role="dialog"
+          aria-modal="true"
+          [attr.aria-label]="'Upload ' + slot.label"
+          (click)="onSheetClick($event)"
+        >
+          <!-- A FIELD THAT OPENS A CHECKBOX LIST, which is production's own
+               control: the closed field shows the chosen codes joined, and
+               the list under it is scrollable so five rows are visible at a
+               time.
+
+               Not a <select multiple>: that needs ctrl-click to pick a
+               second value, which nobody discovers, and it cannot show a
+               summary. -->
+          <div class="field multi">
+            <label class="multi-label" for="lu-board">
+              Select Boards <span class="req" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="lu-board"
+              type="text"
+              autocomplete="off"
+              placeholder="Type board name"
+              [value]="boardsOpen() ? boardQuery() : boardSummary()"
+              (focus)="openBoards()"
+              (input)="setBoardQuery(valueOf($event))"
+            />
+
+            @if (boardsOpen()) {
+              <div class="multi-panel" role="group" aria-label="Boards">
+                @for (board of boardMatches(); track board.code) {
+                  <label class="multi-row" [class.is-on]="isBoardChosen(board.code)">
+                    <input
+                      type="checkbox"
+                      [checked]="isBoardChosen(board.code)"
+                      (change)="toggleBoard(board.code)"
+                    />
+                    {{ board.code }}
+                  </label>
+                }
+              </div>
+            }
+          </div>
+
+          <div class="field multi">
+            <label class="multi-label" for="lu-grade">
+              Select Grade <span class="req" aria-hidden="true">*</span>
+            </label>
+            <input
+              id="lu-grade"
+              type="text"
+              autocomplete="off"
+              readonly
+              placeholder="Select grade"
+              [value]="gradeSummary()"
+              (focus)="openGrades()"
+              (click)="openGrades()"
+            />
+
+            @if (gradesOpen()) {
+              <div class="multi-panel" role="group" aria-label="Grades">
+                @for (grade of grades(); track grade) {
+                  <label class="multi-row" [class.is-on]="isGradeChosen(grade)">
+                    <input
+                      type="checkbox"
+                      [checked]="isGradeChosen(grade)"
+                      (change)="toggleGrade(grade)"
+                    />
+                    {{ gradeLabel(grade) }}
+                  </label>
+                }
+              </div>
+            }
+          </div>
+
+          <button
+            type="button"
+            class="sheet-upload"
+            [class.has-file]="boardGradeFile()"
+            (click)="sheetFile.click()"
+          >
+            <app-icon name="download-circle" [size]="17" />
+            {{ boardGradeFile()?.name || 'Upload' }}
+          </button>
+
+          <input
+            #sheetFile
+            type="file"
+            class="visually-hidden"
+            [accept]="documentAccept"
+            aria-label="Choose the file for these boards and grades"
+            (change)="chooseBoardGradeFile($event)"
+          />
+
+          <!-- Submit needs a board, a grade AND a file: it writes one
+               document per board and each has to point at something. -->
+          <button
+            type="button"
+            class="sheet-submit"
+            [disabled]="!boardGradeReady() || !boardGradeFile() || boardGradeSaving()"
+            (click)="submitBoardGrade()"
+          >
+            @if (boardGradeSaving()) {
+              Filing…
+            } @else {
+              Submit
+            }
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- ====================================================================
+         SELECT LEARNING UNITS
+         ====================================================================
+         The picker the + opens. Checkboxes rather than a click-to-add list: the
+         point is choosing several at once, and a tick shows what is already in
+         the list when the picker is reopened. -->
+    @if (luPickerFor(); as listKey) {
+      <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+      <div class="sheet-overlay" (click)="closeLuPicker()">
+        <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+        <div
+          class="sheet is-picker"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Select learning units"
+          (click)="$event.stopPropagation()"
+        >
+          <header class="picker-head">
+            <h3>Select Learning Units</h3>
+            <button
+              type="button"
+              class="modal-close"
+              (click)="closeLuPicker()"
+              aria-label="Close"
+            >
+              <app-icon name="close" [size]="16" />
+            </button>
+          </header>
+
+          <div class="picker-search">
+            <app-icon name="search" [size]="16" />
+            <input
+              type="search"
+              autocomplete="off"
+              placeholder="Search Learning unit"
+              [value]="luQuery()"
+              (input)="setLuQuery(valueOf($event))"
+              aria-label="Search learning units"
+            />
+          </div>
+
+          <div class="picker-list">
+            @for (option of luMatches(); track option.docId) {
+              <label class="multi-row" [class.is-on]="isLuPicked(listKey, option.docId)">
+                <input
+                  type="checkbox"
+                  [checked]="isLuPicked(listKey, option.docId)"
+                  (change)="toggleLu(listKey, option.docId)"
+                />
+                {{ luLabel(option.docId) }}
+              </label>
+            } @empty {
+              <p class="slot-empty">No other learning units to choose from.</p>
+            }
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Hidden on a resource tab with no slots: there is nothing to save and
+         nothing to cancel, and two dead buttons under "there is no resource
+         available" only invite a click that does nothing. -->
+    @if (!emptyResourceTab()) {
     <footer class="modal-foot">
+      <!-- ADD sits on the SAME ROW as Save, on the left, which is where the
+           reference puts it. It is an action on the list rather than on the
+           dialog, so it stays visually apart from Cancel and Save. -->
+      @if (isEdit() && activeTab() === 'Additional Resources') {
+        <button type="button" class="add-resource" (click)="addResource()">
+          Add New Resource
+          <app-icon name="plus-circle" [size]="18" />
+        </button>
+      }
+
       <button type="button" class="btn btn-ghost" (click)="close()">Cancel</button>
       <button
         type="button"
-        class="btn btn-primary save-btn"
-        [disabled]="!valid() || !dirty() || saving()"
+        class="btn btn-primary btn-save save-btn"
+        [disabled]="!valid() || saving()"
         (click)="save()"
       >
         @if (saving()) {
@@ -399,6 +1868,248 @@
         }
       </button>
     </footer>
+    }
 
   </div>
 </div>
+
+
+<!-- ==========================================================================
+     THE BOARD x GRADE PAGE LIVES OUTSIDE .modal-card, DELIBERATELY.
+
+     It is a second ROOT NODE of this template, not a child of the editor, and
+     that is load-bearing rather than tidy. .modal-card sets `overflow: hidden`
+     and carries .animate-fade-up, whose keyframes animate `transform` — which
+     makes it a containing block for `position: fixed` descendants in Chrome. A
+     fixed overlay nested inside it was therefore CLIPPED TO THE EDITOR: the
+     close button on the panel's right edge and the last grade columns were cut
+     off, and the page looked like it was missing them.
+
+     Out here it has no clipping ancestor, so 75vw x 80vh means the viewport.
+     The upload sheet above stays inside the card on purpose — it is meant to be
+     bounded by the editor it covers.
+     ========================================================================== -->
+<!-- ====================================================================
+     THE BOARD x GRADE PAGE
+     ====================================================================
+     What the row's View button opens on a grade-dependent slot:
+     production's own grid, grades across and boards down, so every cell
+     can be replaced or viewed on its own. Its markup is
+     view-resources.component.html.
+
+     A SURFACE OF ITS OWN, not a mode of the sheet above. Upload and View
+     sit side by side on the same row and open different things, so they
+     hold different signals — one shared signal made either button open
+     both. -->
+@if (boardGridSlot(); as slot) {
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+  <div class="bg-overlay" (click)="closeBoardGrid()">
+    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+    <div
+      class="bg-panel"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="slot.label + ' — by board and grade'"
+      (click)="onSheetClick($event)"
+    >
+      <header class="bg-head">
+        <h3>{{ slot.label }}</h3>
+
+        <!-- Top right, and deliberately larger than the editor's own close:
+             this page covers the whole viewport, so it is the only way out
+             besides the backdrop and Escape. -->
+        <button
+          type="button"
+          class="bg-close"
+          title="Close"
+          aria-label="Close the board and grade page"
+          (click)="closeBoardGrid()"
+        >
+          <app-icon name="close" [size]="22" />
+        </button>
+      </header>
+      <!-- SCROLLS HORIZONTALLY, as production's does: ten grade columns do
+           not fit any modal, and the Board column stays put so a row is
+           still identifiable once you have scrolled to Grade 9. -->
+      <div class="bg-scroll">
+        <table class="bg-grid">
+          <thead>
+            <tr>
+              <th class="bg-sticky">Board</th>
+              @for (column of gradeColumns(); track column.key) {
+                <th>{{ column.label }}</th>
+              }
+            </tr>
+          </thead>
+
+          <tbody>
+            <!-- The Universal row. One file for every board and grade, held
+                 on the rung slot itself rather than on a board document. -->
+            <tr class="bg-universal">
+              <th class="bg-sticky">Universal Board and Grade</th>
+              <td>
+                @if (boardGradeIsUrl()) {
+                  <input
+                    type="text"
+                    class="bg-url"
+                    placeholder="Paste video URL"
+                    [value]="universalPath()"
+                    aria-label="Universal link for every board and grade"
+                    (change)="setUniversalUrl($event)"
+                  />
+                } @else {
+                  <div class="bg-cell">
+                    <button
+                      type="button"
+                      class="bg-up"
+                      [disabled]="uploadingUniversal()"
+                      (click)="universalFile.click()"
+                    >
+                      @if (uploadingUniversal()) {
+                        {{ uploadPercent() }}%
+                      } @else if (universalPath()) {
+                        Re-Upload
+                      } @else {
+                        Upload
+                      }
+                    </button>
+
+                    <input
+                      #universalFile
+                      type="file"
+                      class="visually-hidden"
+                      [accept]="documentAccept"
+                      aria-label="Universal file for every board and grade"
+                      (change)="uploadUniversal($event)"
+                    />
+
+                    <button
+                      type="button"
+                      class="bg-view"
+                      [disabled]="!universalPath()"
+                      (click)="openResource(universalPath(), slot.label)"
+                    >
+                      View
+                    </button>
+
+                    <button
+                      type="button"
+                      class="bg-copy"
+                      [class.is-copied]="copiedCell() === universalCell"
+                      [disabled]="!universalPath()"
+                      title="Copy file name"
+                      aria-label="Copy file name"
+                      (click)="copyCellName(universalCell, universalPath())"
+                    >
+                      @if (copiedCell() === universalCell) {
+                        <app-icon name="check" [size]="14" />
+                      } @else {
+                        <app-icon name="copy" [size]="14" />
+                      }
+                    </button>
+                  </div>
+                }
+              </td>
+
+              <!-- The universal file is not per grade, so the rest of the
+                   row is empty rather than repeating one control ten times. -->
+              @for (column of gradeColumns(); track column.key) {
+                @if (!$first) {
+                  <td></td>
+                }
+              }
+            </tr>
+
+            @for (row of boardGradeRows(); track row.board) {
+              <tr>
+                <th class="bg-sticky">{{ row.board }}</th>
+
+                @for (column of gradeColumns(); track column.key) {
+                  <td>
+                    @if (boardGradeIsUrl()) {
+                      <input
+                        type="text"
+                        class="bg-url"
+                        placeholder="Paste video URL"
+                        [value]="cellPath(row, column.key)"
+                        [attr.aria-label]="row.board + ' ' + column.label + ' link'"
+                        (change)="setCellUrl(row.board, column.key, $event)"
+                      />
+                    } @else {
+                      <div class="bg-cell">
+                        <button
+                          type="button"
+                          class="bg-up"
+                          [disabled]="uploadingCell() === row.board + '|' + column.key"
+                          [attr.aria-label]="'Upload ' + row.board + ' ' + column.label"
+                          (click)="cellFile.click()"
+                        >
+                          @if (uploadingCell() === row.board + '|' + column.key) {
+                            {{ uploadPercent() }}%
+                          } @else if (cellPath(row, column.key)) {
+                            Re-Upload
+                          } @else {
+                            Upload
+                          }
+                        </button>
+
+                        <input
+                          #cellFile
+                          type="file"
+                          class="visually-hidden"
+                          [accept]="documentAccept"
+                          [attr.aria-label]="row.board + ' ' + column.label + ' file'"
+                          (change)="uploadCell(row.board, column.key, $event)"
+                        />
+
+                        <button
+                          type="button"
+                          class="bg-view"
+                          [disabled]="!cellPath(row, column.key)"
+                          (click)="openResource(cellPath(row, column.key), slot.label)"
+                        >
+                          View
+                        </button>
+
+                        <button
+                          type="button"
+                          class="bg-copy"
+                          [class.is-copied]="copiedCell() === row.board + '|' + column.key"
+                          [disabled]="!cellPath(row, column.key)"
+                          title="Copy file name"
+                          aria-label="Copy file name"
+                          (click)="copyCellName(row.board + '|' + column.key, cellPath(row, column.key))"
+                        >
+                          @if (copiedCell() === row.board + '|' + column.key) {
+                            <app-icon name="check" [size]="14" />
+                          } @else {
+                            <app-icon name="copy" [size]="14" />
+                          }
+                        </button>
+                      </div>
+                    }
+                  </td>
+                }
+              </tr>
+            }
+
+            @if (boardGradeRows().length === 0) {
+              <tr class="bg-empty">
+                <td [attr.colspan]="gradeColumns().length + 1">
+                  No board has anything filed for this slot yet. Use
+                  <strong>Add board</strong> to file the first one, or the
+                  Universal row above to cover every board and grade at once.
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (boardGradeDone(); as done) {
+        <p class="bg-done" role="status">{{ done }}</p>
+      }
+
+    </div>
+  </div>
+}

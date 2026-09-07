@@ -84,6 +84,7 @@
           (click)="setFilter(filter)"
         >
           {{ filter }}
+          <span class="pill-count">{{ countFor(filter) }}</span>
         </button>
       }
     </div>
@@ -128,67 +129,10 @@
     </div>
   </div>
 
-  <!-- ======================================================================
-       CARD VIEW
-       ====================================================================== -->
-  @if (view() === 'card') {
-    @if (filtered().length > 0) {
-      <div class="lu-grid">
-        @for (unit of filtered(); track unit.docId; let i = $index) {
-          <article class="lu-card" [class.is-busy]="busyRow() === unit.docId">
-            <div class="card-banner" [style.background]="cardGradient(unit, i)">
-              <span class="card-banner-code">{{ unit.learningUnitCode || '—' }}</span>
-
-              <!-- Actions on hover, and on focus — a keyboard user reaches these
-                   by tabbing, at which point hover has never fired. -->
-              <div class="card-actions">
-                <button
-                  type="button"
-                  class="card-act"
-                  aria-label="Edit"
-                  title="Edit"
-                  (click)="openEdit(unit)"
-                >
-                  <app-icon name="edit" [size]="15" />
-                </button>
-
-                <button
-                  type="button"
-                  class="card-act is-danger"
-                  aria-label="Move to Trash"
-                  title="Move to Trash"
-                  (click)="moveToTrash(unit)"
-                >
-                  <app-icon name="trash" [size]="15" />
-                </button>
-              </div>
-            </div>
-
-            <div class="card-body">
-              <span class="card-code">{{ unit.learningUnitCode || '—' }}</span>
-              <h3 class="card-name" [title]="title(unit)">{{ title(unit) }}</h3>
-
-              <div class="card-badges">
-                @if (unit.version) {
-                  <span class="cb cb-ver">{{ unit.version }}</span>
-                }
-                @if (unit.isoCode) {
-                  <span class="cb cb-lang">{{ unit.isoCode }}</span>
-                }
-                <span class="cb cb-status" [class.is-live]="isLive(unit)">
-                  {{ statusLabel(unit) }}
-                </span>
-              </div>
-            </div>
-          </article>
-        }
-      </div>
-    }
-  } @else {
-
-    <!-- ====================================================================
-         LIST VIEW
-         ==================================================================== -->
+  <!-- ====================================================================
+       LIST VIEW
+       ==================================================================== -->
+  @if (view() === 'list') {
     <div class="table-scroll">
       <table class="lu-table">
         <thead>
@@ -265,7 +209,7 @@
                   class="row-btn is-danger"
                   aria-label="Move to Trash"
                   title="Move to Trash"
-                  (click)="moveToTrash(unit)"
+                  (click)="askMoveToTrash(unit)"
                 >
                   <app-icon name="trash" [size]="16" />
                 </button>
@@ -294,6 +238,98 @@
   }
 </section>
 
+<!-- ========================================================================
+     CARD VIEW
+     ========================================================================
+     Outside the panel above rather than inside it, which is where production
+     puts these: the toolbar keeps its own bordered panel and the cards sit
+     straight on the page background, so the outer two align with the panel's
+     left and right edges instead of being inset from them by its padding. -->
+@if (view() === 'card' && filtered().length > 0) {
+  <div class="lu-grid">
+    @for (unit of filtered(); track unit.docId; let i = $index) {
+      <article
+        class="lu-card"
+        [class.is-busy]="busyRow() === unit.docId"
+        [class.is-open]="openCard() === unit.docId"
+        [attr.data-doc-id]="unit.docId"
+      >
+        <!-- The gradient stays on the banner even when there is an image: it is
+             what shows while the image loads, so a card never flashes white, and
+             it is the ground the code sits on for a unit with no picture. -->
+        <div class="card-banner" [style.background]="cardGradient(unit, i)">
+
+          <!-- THE UNIT'S OWN UPLOADED IMAGE, which production puts here and this
+               page was missing entirely.
+
+               A PATH is stored, not a URL — a download URL carries a revocable
+               token — so ResourceLinkService mints one after the card renders and
+               this is absent until then. `is-behind` on the code keeps it legible
+               over a photo rather than hiding it. -->
+          @if (bannerImage(unit.docId); as url) {
+            <img
+              class="card-banner-img"
+              [src]="url"
+              [alt]="title(unit)"
+              loading="lazy"
+              (error)="onImageError(unit.docId)"
+            />
+          }
+
+          <span class="card-banner-code" [class.over-image]="bannerImage(unit.docId)">
+            {{ unit.learningUnitCode || '—' }}
+          </span>
+
+          <!-- Centred over the banner, revealed on hover, on focus — a
+               keyboard user reaches these by tabbing, at which point hover has
+               never fired — and on a click of the card, which latches them
+               open over a dimmed banner for a touch or trackpad user who has
+               no hover to give. The click is handled on the document rather
+               than here, so a click anywhere else closes them again. -->
+          <div class="card-actions">
+            <button
+              type="button"
+              class="card-act"
+              aria-label="Edit"
+              title="Edit"
+              (click)="openEdit(unit)"
+            >
+              <app-icon name="edit" [size]="15" />
+            </button>
+
+            <button
+              type="button"
+              class="card-act is-danger"
+              aria-label="Move to Trash"
+              title="Move to Trash"
+              (click)="askMoveToTrash(unit)"
+            >
+              <app-icon name="trash" [size]="15" />
+            </button>
+          </div>
+        </div>
+
+        <div class="card-body">
+          <span class="card-code">{{ unit.learningUnitCode || '—' }}</span>
+          <h3 class="card-name" [title]="title(unit)">{{ title(unit) }}</h3>
+
+          <div class="card-badges">
+            @if (unit.version) {
+              <span class="cb cb-ver">{{ unit.version }}</span>
+            }
+            @if (unit.isoCode) {
+              <span class="cb cb-lang">{{ unit.isoCode }}</span>
+            }
+            <span class="cb cb-status" [class.is-live]="isLive(unit)">
+              {{ statusLabel(unit) }}
+            </span>
+          </div>
+        </div>
+      </article>
+    }
+  </div>
+}
+
 <!-- One modal for both create and edit: a learning unit is the same flat form
      either way, so two components would be the same markup twice.
 
@@ -309,6 +345,26 @@
     [error]="modalError()"
     (closed)="closeForm()"
     (submitted)="submitForm($event)"
+    (resourcesSubmitted)="stageResourceEdits($event)"
+  />
+}
+
+<!-- ======================================================================
+     Move to Trash — confirmation
+
+     Production's wording, verbatim: a card is one VERSION of a learning unit,
+     not the unit, and "Delete Version" is what the person clicking has already
+     learned that button to mean in the live app.
+     ====================================================================== -->
+@if (confirmingTrash(); as target) {
+  <app-confirm-dialog
+    heading="Delete Version"
+    message="Are you sure you want to delete this version?"
+    confirmLabel="Confirm"
+    busyLabel="Deleting…"
+    [busy]="busyRow() === target.docId"
+    (confirmed)="confirmMoveToTrash()"
+    (cancelled)="cancelMoveToTrash()"
   />
 }
 

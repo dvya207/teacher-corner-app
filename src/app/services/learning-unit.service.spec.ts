@@ -1,9 +1,15 @@
+import { Timestamp } from 'firebase/firestore';
 import {
   normaliseLearningUnit,
   stripTrashMetadata,
   toPickableUnits
 } from './learning-unit.service';
 import { LearningUnit } from '../models/teaching.model';
+
+/** A Timestamp from a date, for the newest-first ordering tests. */
+function ts(iso: string): Timestamp {
+  return Timestamp.fromDate(new Date(iso));
+}
 
 function unit(fields: Partial<LearningUnit>): LearningUnit {
   return {
@@ -97,23 +103,30 @@ describe('stripTrashMetadata', () => {
 });
 
 /**
- * The fold from storage shape to picker shape.
+ * The programme picker's rows.
  *
- * Production stores ONE LANGUAGE PER DOCUMENT, so a unit existing in Tamil and
- * English is two documents sharing a code — and the programme picker shows one
- * row reading "PT12 DIY Sundial / TA · EN · vV22". Get this wrong and the picker
- * either lists the same activity twice or loses a language.
+ * PRODUCTION'S TRANSFORM, and nothing more: learning-list.component.ts filters
+ * its documents to LIVE and sorts them newest first. One document is one row.
+ *
+ * THIS USED TO COLLAPSE a code's language variants into a single row carrying
+ * `languages: ['TA','EN']`, on a misreading of production's row meta —
+ * "TA · EN · vV22" is typeCode · isoCode · version, so 'TA' is TACtivity, not
+ * Tamil. The tests below pin the corrected behaviour, because the mistake was
+ * invisible: a collapsed row still looked plausible and quietly chose which
+ * language variant a programme referenced.
  */
 describe('toPickableUnits', () => {
 
-  it('collapses documents sharing a code into one row', () => {
+  /* ONE ROW PER DOCUMENT. Two documents sharing a code are two rows, because
+     learningUnitsIds stores one docId and therefore one language. */
+  it('does not merge documents that share a code', () => {
     const rows = toPickableUnits([
       unit({ docId: 'a', isoCode: 'TA' }),
       unit({ docId: 'b', isoCode: 'EN' })
     ]);
 
-    expect(rows.length).toBe(1);
-    expect(rows[0].languages.sort()).toEqual(['EN', 'TA']);
+    expect(rows.length).toBe(2);
+    expect(rows.map(row => row.isoCode).sort()).toEqual(['EN', 'TA']);
   });
 
   it('keeps units with different codes apart', () => {
@@ -125,22 +138,34 @@ describe('toPickableUnits', () => {
     expect(rows.length).toBe(2);
   });
 
-  /** Only LIVE units are offered, matching every other picker in this app. */
-  it('drops anything not LIVE', () => {
-    const rows = toPickableUnits([unit({ status: 'DEVELOPEMENT' })]);
-
-    expect(rows.length).toBe(0);
+  /**
+   * Only LIVE units are offered, which is production's own filter.
+   *
+   * isActiveStatus rather than its strict `=== 'LIVE'`: production data carries
+   * both spellings in mixed case, and a strict comparison would show a unit as
+   * Live in the Learning Units table and omit it from this picker.
+   */
+  it('drops anything not live, and accepts both spellings', () => {
+    expect(toPickableUnits([unit({ status: 'DEVELOPEMENT' })]).length).toBe(0);
+    expect(toPickableUnits([unit({ status: 'LIVE' })]).length).toBe(1);
+    // 'ACTIVE' is a real stored value production uses; the cast is only because
+    // the union in this app narrows to the two the form offers.
+    expect(
+      toPickableUnits([unit({ status: 'ACTIVE' as LearningUnit['status'] })]).length
+    ).toBe(1);
   });
 
-  it('carries the four fields the picker renders', () => {
-    const rows = toPickableUnits([unit({})]);
+  it('carries the fields the row renders', () => {
+    const rows = toPickableUnits([unit({ typeCode: 'TA' })]);
 
     expect(rows[0]).toEqual({
       docId: 'lu1',
       code: 'PT12',
       name: 'DIY Sundial',
-      languages: ['EN'],
-      version: 'vV22'
+      typeCode: 'TA',
+      isoCode: 'EN',
+      version: 'vV22',
+      createdAt: null
     });
   });
 
@@ -150,75 +175,32 @@ describe('toPickableUnits', () => {
     expect(rows[0].name).toBe('Sundial');
   });
 
-  /** A unit with no code cannot be grouped, so it stands alone under its id. */
-  it('does not merge units that have no code at all', () => {
+  /* NEWEST FIRST, as production sorts. */
+  it('orders by creation date, newest first', () => {
     const rows = toPickableUnits([
-      unit({ docId: 'a', learningUnitCode: '' }),
-      unit({ docId: 'b', learningUnitCode: '' })
+      unit({ docId: 'old', learningUnitCode: 'AA01', createdAt: ts('2026-01-01') }),
+      unit({ docId: 'new', learningUnitCode: 'ZZ99', createdAt: ts('2026-08-01') })
     ]);
 
-    expect(rows.length).toBe(2);
+    expect(rows.map(row => row.docId)).toEqual(['new', 'old']);
   });
 
-  it('does not repeat a language when two documents share one', () => {
+  /* A document predating the field must not jump the queue. */
+  it('sorts a unit with no creation date last', () => {
     const rows = toPickableUnits([
-      unit({ docId: 'a', isoCode: 'EN' }),
-      unit({ docId: 'b', isoCode: 'EN' })
+      unit({ docId: 'undated', learningUnitCode: 'AA01' }),
+      unit({ docId: 'dated', learningUnitCode: 'ZZ99', createdAt: ts('2026-01-01') })
     ]);
 
-    expect(rows[0].languages).toEqual(['EN']);
+    expect(rows.map(row => row.docId)).toEqual(['dated', 'undated']);
   });
 
-  it('orders distinct codes the same regardless of input order', () => {
-    const forwards = toPickableUnits([
-      unit({ docId: 'a', learningUnitCode: 'NF05', learningUnitName: 'First' }),
-      unit({ docId: 'b', learningUnitCode: 'PT12', learningUnitName: 'Second' })
-    ]);
-    const backwards = toPickableUnits([
-      unit({ docId: 'b', learningUnitCode: 'PT12', learningUnitName: 'Second' }),
-      unit({ docId: 'a', learningUnitCode: 'NF05', learningUnitName: 'First' })
-    ]);
+  /* Same input, same output, whatever order the query returned. */
+  it('orders the same regardless of input order', () => {
+    const a = unit({ docId: 'a', learningUnitCode: 'NF05', createdAt: ts('2026-02-01') });
+    const b = unit({ docId: 'b', learningUnitCode: 'PT12', createdAt: ts('2026-03-01') });
 
-    expect(forwards.map(row => row.code)).toEqual(backwards.map(row => row.code));
-  });
-
-  /**
-   * THE CASE THE TIE-BREAK EXISTS FOR, and the one the assertion above cannot
-   * reach: two documents SHARING a code. localeCompare returns 0 for them and
-   * Array.sort is stable, so sorting by code alone left the winner decided by
-   * query order — and the winner's docId is what a programme persists, so it
-   * decides which language variant gets referenced.
-   */
-  it('picks the same document when two share a code, either input order', () => {
-    const forwards = toPickableUnits([
-      unit({ docId: 'aaa', isoCode: 'EN', version: 'vV22' }),
-      unit({ docId: 'bbb', isoCode: 'TA', version: 'vV23' })
-    ]);
-    const backwards = toPickableUnits([
-      unit({ docId: 'bbb', isoCode: 'TA', version: 'vV23' }),
-      unit({ docId: 'aaa', isoCode: 'EN', version: 'vV22' })
-    ]);
-
-    expect(forwards.length).toBe(1);
-    expect(backwards.length).toBe(1);
-    expect(forwards[0].docId).toBe(backwards[0].docId);
-    expect(forwards[0].version).toBe(backwards[0].version);
-    // Lowest docId wins, so the choice is a property of the data, not the query.
-    expect(forwards[0].docId).toBe('aaa');
-  });
-
-  /**
-   * The picker must agree with the table about what "live" means. Production
-   * carries both spellings in mixed case; a strict === 'LIVE' would show a unit
-   * as Live in the table and silently omit it here.
-   */
-  it('accepts the other spellings of live that production stores', () => {
-    const lower = unit({ docId: 'a', learningUnitCode: 'AA01' });
-    (lower as { status: string }).status = 'live';
-
-    const active = unit({ docId: 'b', learningUnitCode: 'BB02' });
-    (active as { status: string }).status = 'ACTIVE';
-
-    expect(toPickableUnits([lower, active]).length).toBe(2);
+    expect(toPickableUnits([a, b]).map(row => row.docId))
+      .toEqual(toPickableUnits([b, a]).map(row => row.docId));
   });
 });

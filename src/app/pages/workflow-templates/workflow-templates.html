@@ -1,0 +1,328 @@
+<header class="page-head">
+  <div class="page-head-copy">
+    <h1>Workflow Templates</h1>
+    <p>Reusable workflow blueprints for learning units across maturities and subjects</p>
+  </div>
+
+  <div class="page-head-actions">
+    <button type="button" class="add-btn" (click)="openCreate()">
+      <app-icon name="plus-circle" [size]="18" />
+      Create Workflow Template
+    </button>
+
+    <button type="button" class="trash-btn" (click)="openTrash()">
+      <app-icon name="trash" [size]="17" />
+      Trash
+    </button>
+  </div>
+</header>
+
+<!-- Total plus one card per maturity, which is what production shows: its stats
+     are the ladder, not the workflow types. A template's maturity is the thing a
+     reader looks for it by. -->
+@if (!statsHidden()) {
+  <section class="stat-cards">
+    <div class="stat-card">
+      <span class="sc-icon sc-total"><app-icon name="grip" [size]="20" /></span>
+      <span class="sc-copy">
+        <strong>{{ totalCount() }}</strong>
+        <span>Total Templates</span>
+      </span>
+    </div>
+
+    <!-- THREE CARDS, NOT FOUR: Gold, Silver and Platinum, and no Diamond.
+         That is production's own arrangement — its stats stop at Platinum while
+         its pills below carry Diamond too — and it is what was asked for. See
+         `cardMaturities`. -->
+    @for (maturity of cardMaturities; track maturity) {
+      <div class="stat-card">
+        <span class="sc-icon" [class]="'sc-icon sc-' + maturityClass(maturity)">
+          <app-icon name="check-circle" [size]="20" />
+        </span>
+        <span class="sc-copy">
+          <strong>{{ countFor(maturity) }}</strong>
+          <span>{{ maturity }}</span>
+        </span>
+      </div>
+    }
+  </section>
+}
+
+@if (error()) {
+  <div class="load-error" role="alert">
+    <strong>Workflow templates unavailable.</strong>
+    {{ error() }}
+  </div>
+}
+
+@if (notice()) {
+  <div class="toast" role="status">
+    <span class="toast-icon"><app-icon name="check-circle" [size]="18" /></span>
+    {{ notice() }}
+    <button type="button" class="toast-close" (click)="dismissNotice()" aria-label="Dismiss">
+      <app-icon name="close" [size]="14" />
+    </button>
+  </div>
+}
+
+<section class="table-panel">
+
+  <div class="table-toolbar">
+    <div class="filter-pills">
+      @for (filter of filters; track filter) {
+        <button
+          type="button"
+          class="pill"
+          [class.is-active]="activeFilter() === filter"
+          (click)="setFilter(filter)"
+        >
+          {{ filter }}
+          <span class="pill-count">{{ countFor(filter) }}</span>
+        </button>
+      }
+    </div>
+
+    <div class="toolbar-right">
+      <span class="loaded-count">
+        Showing {{ filtered().length }} of {{ totalCount() }}
+      </span>
+
+      <button type="button" class="hide-btn" (click)="toggleStats()">
+        <app-icon [name]="statsHidden() ? 'eye' : 'eye-off'" [size]="15" />
+        {{ statsHidden() ? 'Show' : 'Hide' }} Stats
+      </button>
+    </div>
+  </div>
+
+  <div class="table-scroll">
+    <table class="wt-table">
+      <thead>
+        <tr>
+          <th scope="col" class="col-name">Template</th>
+          <th scope="col">LU Type</th>
+          <th scope="col">Maturity</th>
+          <th scope="col">Subject</th>
+          <th scope="col">Type</th>
+          <th scope="col">Created</th>
+          <th scope="col">Updated</th>
+          <th scope="col">ID</th>
+          <th scope="col" class="col-actions">Actions</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        @if (loading()) {
+          <tr><td colspan="9" class="wt-state">Loading workflow templates…</td></tr>
+        } @else if (filtered().length === 0) {
+          <tr>
+            <td colspan="9" class="wt-state">
+              @if (error()) {
+                The list could not be loaded.
+              } @else if (totalCount() === 0) {
+                No workflow templates yet.
+              } @else {
+                Nothing matches that filter.
+              }
+            </td>
+          </tr>
+        } @else {
+          @for (row of filtered(); track row.docId) {
+            <tr [class.is-busy]="busyRow() === row.docId">
+              <!-- The icon badge production puts before every name. -->
+              <td class="col-name">
+                <span class="wt-badge" aria-hidden="true">
+                  <app-icon name="grip" [size]="15" />
+                </span>
+                <strong>{{ row.templateName || '—' }}</strong>
+              </td>
+
+              <!-- The NAME for the stored code: the document says 'TA'. -->
+              <td class="truncate">{{ learningUnitTypeLabel(row.learningUnitType) }}</td>
+
+              <td>
+                @if (row.maturity) {
+                  <span class="maturity-pill" [class]="'maturity-pill is-' + maturityClass(row.maturity)">
+                    {{ row.maturity }}
+                  </span>
+                } @else {
+                  <span class="wt-empty">—</span>
+                }
+              </td>
+
+              <td class="truncate">{{ row.subject || '—' }}</td>
+
+              <td>
+                <span class="type-pill">{{ workflowTypeLabel(row.type) }}</span>
+              </td>
+
+              <td class="wt-date">
+                {{ toDate(row.createdAt) ? (toDate(row.createdAt) | date: 'dd MMM yyyy') : '—' }}
+              </td>
+
+              <td class="wt-date">
+                {{ toDate(row.updatedAt) ? (toDate(row.updatedAt) | date: 'dd MMM yyyy') : '—' }}
+              </td>
+
+              <!-- Its own column, as production has it, rather than under the
+                   name. Muted and truncated: it is there to be copied, not read. -->
+              <td class="wt-id" [title]="row.docId">{{ shortId(row.docId) }}</td>
+
+              <td class="col-actions">
+                <button
+                  type="button"
+                  class="icon-act"
+                  aria-label="Edit"
+                  title="Edit"
+                  [disabled]="busyRow() === row.docId"
+                  (click)="openEdit(row)"
+                >
+                  <app-icon name="edit" [size]="17" />
+                </button>
+
+                <button
+                  type="button"
+                  class="icon-act is-danger"
+                  aria-label="Move to Trash"
+                  title="Move to Trash"
+                  [disabled]="busyRow() === row.docId"
+                  (click)="askMoveToTrash(row)"
+                >
+                  <app-icon name="trash" [size]="17" />
+                </button>
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================================================================
+     The delete confirmation. Create and edit are a PAGE — see openCreate.
+     ====================================================================== -->
+@if (confirming(); as row) {
+  <app-confirm-dialog
+    heading="Move to Trash"
+    [message]="'Move &quot;' + row.templateName + '&quot; to the trash?'"
+    warning="It leaves the list and can be restored from Trash. Learning units
+             already built from it are not affected."
+    icon="trash"
+    confirmLabel="Move to Trash"
+    busyLabel="Moving…"
+    [busy]="busyRow() === row.docId"
+    (confirmed)="moveToTrash()"
+    (cancelled)="cancelConfirm()"
+  />
+}
+
+<!-- ======================================================================
+     Trash — the same full-page overlay the other five tables use
+     ====================================================================== -->
+@if (trashOpen()) {
+  <div class="trash-overlay animate-fade-up">
+
+    <header class="trash-head">
+      <h2>
+        Deleted Workflow Templates
+        <span class="trash-count">{{ trashed().length }}</span>
+      </h2>
+
+      <div class="trash-head-actions">
+        <button
+          type="button"
+          class="empty-btn"
+          [class.is-confirming]="confirmingEmpty()"
+          [disabled]="trashed().length === 0 || busyRow() === '__all__'"
+          (click)="emptyTrash()"
+        >
+          <app-icon name="trash" [size]="16" />
+          @if (busyRow() === '__all__') {
+            Emptying...
+          } @else if (confirmingEmpty()) {
+            Confirm — delete {{ trashed().length }} permanently
+          } @else {
+            Empty Trash
+          }
+        </button>
+
+        <button type="button" class="trash-close" (click)="closeTrash()" aria-label="Close">
+          <app-icon name="close" [size]="19" />
+        </button>
+      </div>
+    </header>
+
+    <div class="trash-body">
+      @if (trashLoading()) {
+        <div class="trash-state">Loading Trash…</div>
+      } @else if (trashError()) {
+        <div class="trash-state is-error" role="alert">{{ trashError() }}</div>
+      } @else if (trashed().length > 0) {
+        <table class="wt-table trash-table">
+          <thead>
+            <tr>
+              <th class="col-name">Template</th>
+              <th>LU Type</th>
+              <th>Maturity</th>
+              <th>Subject</th>
+              <th>Deleted Date</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            @for (row of trashed(); track row.docId) {
+              <tr [class.is-busy]="busyRow() === row.docId">
+                <td class="col-name">
+                  <strong>{{ row.templateName || '—' }}</strong>
+                  <span class="wt-id">ID: {{ shortId(row.docId) }}</span>
+                </td>
+                <td class="truncate">{{ learningUnitTypeLabel(row.learningUnitType) }}</td>
+                <td>
+                  <span class="maturity-pill" [class]="'maturity-pill is-' + maturityClass(row.maturity)">
+                    {{ row.maturity || '—' }}
+                  </span>
+                </td>
+                <td class="truncate">{{ row.subject || '—' }}</td>
+                <td class="wt-date">
+                  {{ toDate(row.trashAt) ? (toDate(row.trashAt) | date: 'dd/MM/yyyy') : '—' }}
+                </td>
+
+                <td class="col-actions">
+                  <button
+                    type="button"
+                    class="row-btn is-boxed"
+                    aria-label="Restore"
+                    title="Restore"
+                    [disabled]="busyRow() !== null"
+                    (click)="restore(row)"
+                  >
+                    <app-icon name="restore" [size]="15" />
+                  </button>
+
+                  <button
+                    type="button"
+                    class="row-btn is-boxed is-danger"
+                    aria-label="Delete permanently"
+                    title="Delete permanently"
+                    [disabled]="busyRow() !== null"
+                    (click)="purge(row)"
+                  >
+                    <app-icon name="trash" [size]="15" />
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <div class="trash-empty">
+          <span class="trash-empty-icon"><app-icon name="trash" [size]="26" /></span>
+          <h3>Trash is empty</h3>
+          <p>Workflow templates you delete will appear here, and can be restored.</p>
+        </div>
+      }
+    </div>
+
+  </div>
+}

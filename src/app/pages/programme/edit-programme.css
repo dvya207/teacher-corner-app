@@ -14,7 +14,10 @@
   place-items: center;
   padding: 24px 16px;
   background: var(--overlay);
-  backdrop-filter: blur(2px);
+  /* NO BLUR. The page behind a modal is context — which unit you were looking
+     at, how many rows there were — and a blur destroys exactly the detail that
+     makes it context while leaving the shapes to distract. Production's dialogs
+     dim and do not blur; matched here. */
 }
 
 .modal-card {
@@ -206,3 +209,60 @@
 
 }
 
+/* ==========================================================================
+   THE TWO PANES
+
+   Basic Info and Manage Learning Units. Production had both tabs; the second
+   was removed on instruction and is back on instruction.
+
+   ONE SAVE FOR BOTH. The footer is outside the panes, because an edit to a
+   field and a change to the unit list are one patch — splitting them would
+   mean two saves for one intent, and a half-saved programme in between.
+   ========================================================================== */
+
+.ep-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ep-tab {
+  position: relative;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s var(--ease);
+}
+
+.ep-tab:hover {
+  color: var(--ink-900);
+}
+
+/*
+ * An underline rather than a filled pill.
+ *
+ * The pane below is a form, and a solid tab reads as a button that submits it.
+ * The underline sits ON the container's border, which is why it is -3px: the
+ * border is 1px and the marker is 2px, so the two occupy the same line rather
+ * than stacking into a 3px edge.
+ */
+.ep-tab.is-current {
+  color: var(--accent-600);
+}
+
+.ep-tab.is-current::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 12px;
+  right: 12px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--accent-500);
+}

@@ -10,8 +10,10 @@ import {
 } from 'firebase/firestore';
 
 import { userProfileDoc } from '../core/firestore-paths';
+import { toSubscriberDigits } from '../data/institution-options';
 import { TeacherProfile } from '../models/teaching.model';
-import { AuthService } from './auth.service';
+import { AuthService, FALLBACK_DISPLAY_NAME } from './auth.service';
+import { TeacherService } from './teacher.service';
 
 /**
  * Old request keys that an incoming resolved request supersedes.
@@ -36,12 +38,33 @@ export function supersededRequestKeys(
     .map(([key]) => key);
 }
 
+/**
+ * Whether the name stored on a profile is a real one.
+ *
+ * Exported and tested directly, for the reason supersededRequestKeys above is:
+ * this decides whether the administrator's record gets to supply an identity,
+ * and a rule that picks between two sources of a person's name should be visible
+ * rather than inlined in a sign-in path.
+ *
+ * THE PLACEHOLDER IS NOT A NAME. Accounts that signed in while the seed still
+ * wrote `displayName()` are carrying the literal 'Teacher' in firstName, which
+ * is indistinguishable from a real name by a truthiness check and is why those
+ * accounts stayed greeted as 'Teacher' with a users/{uid} document that looked
+ * correctly filled in.
+ */
+export function isUsableProfileName(firstName: string | undefined): boolean {
+  const trimmed = (firstName ?? '').trim();
+
+  return trimmed !== '' && trimmed !== FALLBACK_DISPLAY_NAME;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class ProfileService {
 
   private auth = inject(AuthService);
+  private teachers = inject(TeacherService);
 
   /**
    * The teacher's profile document, or a draft seeded from their auth record.
@@ -139,6 +162,21 @@ export class ProfileService {
       },
       { merge: true }
     );
+
+    /*
+     * KEEP THE AUTH RECORD IN STEP WITH THE EDIT.
+     *
+     * users/{uid} is the source of truth, but the greeting, the topbar and the
+     * avatar initials all read `auth.currentUser.displayName` — a cache of this
+     * one field, so they can stay synchronous instead of each fetching the
+     * profile. Saving a new name here without updating that cache left every one
+     * of them showing the old name until a full reload.
+     *
+     * AFTER the Firestore write, so the cache never leads the record. Best
+     * effort inside setDisplayName, which logs and swallows: a refused update
+     * costs a stale greeting, and must not fail a save that already succeeded.
+     */
+    await this.auth.setDisplayName(profile.firstName, profile.lastName ?? '');
   }
 
 
@@ -193,7 +231,9 @@ export class ProfileService {
       const snapshot = await getDoc(userProfileDoc(uid));
 
       if (!snapshot.exists()) {
-        return 'register';
+        // No profile at all. An administrator may still have registered them, so
+        // that is checked before sending them to a form.
+        return (await this.registeredByAdmin()) ? null : 'register';
       }
 
       const profile = snapshot.data() as TeacherProfile;
@@ -211,14 +251,18 @@ export class ProfileService {
         // LEGACY, and it has to stay: documents written before the two-phase
         // split carry profileComplete and ApprovedStatus and no request at all.
         if (profile.profileComplete === true) {
-          return profile.ApprovedStatus === true ? null : 'approval';
+          if (profile.ApprovedStatus === true) {
+            return null;
+          }
+
+          return (await this.registeredByAdmin()) ? null : 'approval';
         }
 
-        return 'register';
+        return (await this.registeredByAdmin()) ? null : 'register';
       }
 
       if (!requests.some(request => request.approvalStatus === true)) {
-        return 'approval';
+        return (await this.registeredByAdmin()) ? null : 'approval';
       }
 
       /*
@@ -235,6 +279,52 @@ export class ProfileService {
     } catch (error) {
       console.error('Could not read the profile to decide where to route.', error);
       return null;
+    }
+  }
+
+  /**
+   * Whether an administrator already registered this person in `teachers`.
+   *
+   * BEING IN THAT COLLECTION IS THE APPROVAL. Someone put the record there
+   * deliberately, with a school and a class on it, so asking that person to fill
+   * in a self-registration form and then wait in an approval queue is asking
+   * them to apply for what they have already been granted. A teacher added in the
+   * Setup Wizard should sign in and land on the dashboard.
+   *
+   * CALLED ONLY WHEN THE PROFILE WOULD OTHERWISE TURN THEM AWAY, which is why
+   * the calls are scattered through [gate] rather than hoisted to the top of it.
+   * gate() runs on every navigation into the shell and its one-read promise is
+   * worth keeping: a teacher who is already through pays nothing for this.
+   *
+   * MATCHES ON UID **OR** NUMBER. `linkSignedInUid` stamps the uid, but it runs
+   * after the session exists and this can run before it, so on a first sign-in
+   * there is nothing stamped yet. The number is what the administrator typed.
+   *
+   * FAILS CLOSED, unlike the rest of gate(). A refused or failed read returns
+   * false, so the teacher goes to the form rather than being waved through on a
+   * lookup that did not answer. gate() as a whole still fails OPEN on a thrown
+   * error, which is the right default for a profile read; this one narrow check
+   * is the exception, because it is the thing granting access rather than
+   * describing it.
+   */
+  private async registeredByAdmin(): Promise<boolean> {
+    try {
+      const uid = this.auth.currentUid() ?? '';
+      const digits = (this.auth.currentUser?.phoneNumber ?? '')
+        .replace(/\D/g, '')
+        .slice(-10);
+
+      if (!uid && digits.length < 10) {
+        return false;
+      }
+
+      return await this.teachers.isRegisteredTeacher(
+        uid,
+        digits.length === 10 ? digits : ''
+      );
+    } catch (error) {
+      console.error('Could not check whether a teacher record exists.', error);
+      return false;
     }
   }
 
@@ -333,7 +423,14 @@ export class ProfileService {
     const seed = existing.exists()
       ? {}
       : (() => {
-          const [first = '', ...rest] = this.auth.displayName().split(/\s+/);
+          // storedDisplayName, NOT displayName: the latter substitutes the
+          // 'Teacher' placeholder when nothing is known, and this line persists
+          // its result as a first name. A phone-only account has no display name
+          // on the auth record at this point, so seeding from displayName() wrote
+          // the placeholder into users/{uid}.firstName where it then read as a
+          // real name to everything downstream. Blank is the honest value, and
+          // the backfill below is what fills it.
+          const [first = '', ...rest] = this.auth.storedDisplayName().split(/\s+/);
           return {
             firstName: first,
             lastName: rest.join(' '),
@@ -387,9 +484,49 @@ export class ProfileService {
     // on a first sign-in.
     if (!user.displayName) {
       const saved = (await getDoc(reference)).data() as TeacherProfile | undefined;
+      if (isUsableProfileName(saved?.firstName)) {
+        await this.auth.setDisplayName(
+          (saved?.firstName ?? '').trim(),
+          saved?.lastName ?? ''
+        );
+        return;
+      }
 
-      if (saved?.firstName) {
-        await this.auth.setDisplayName(saved.firstName, saved.lastName ?? '');
+      /*
+       * SECOND SOURCE: the record an administrator registered them from.
+       *
+       * A teacher added through the Set Up Wizard never fills in the profile
+       * form, so the first backfill has nothing to work with and they were
+       * greeted as 'Teacher' indefinitely. The administrator typed their name
+       * into `teachers` when they registered them, which is a perfectly good
+       * name and the one they are known by at their school.
+       *
+       * ONLY WHEN NOTHING IS KNOWN YET, deliberately. This does not run when the
+       * profile carries a real name, so a teacher who edits their own name keeps
+       * it rather than having it reverted to the administrator's spelling on
+       * every sign-in. The two sources are known to disagree in live data, and
+       * the person's own edit is the one that should survive.
+       *
+       * Written through to users/{uid} as well as the auth record, so the name
+       * persists as theirs: the profile form opens populated, and this lookup
+       * does not repeat on every subsequent sign-in.
+       */
+      const registered = await this.teachers.registeredName(
+        user.uid,
+        toSubscriberDigits(user.phoneNumber ?? '')
+      );
+
+      if (registered) {
+        await this.auth.setDisplayName(registered.firstName, registered.lastName);
+        await setDoc(
+          reference,
+          {
+            firstName: registered.firstName,
+            lastName: registered.lastName,
+            updatedAt: serverTimestamp()
+          },
+          { merge: true }
+        );
       }
     }
   }

@@ -1,4 +1,5 @@
 import { FirebaseApp, initializeApp } from 'firebase/app';
+import { FirebaseStorage, getStorage } from 'firebase/storage';
 import { Auth, getAuth } from 'firebase/auth';
 import { Firestore, getFirestore } from 'firebase/firestore';
 
@@ -55,3 +56,16 @@ export const auth: Auth = getAuth(firebaseApp);
 export const FIRESTORE_DATABASE_ID = 'teacher-corner-dev';
 
 export const db: Firestore = getFirestore(firebaseApp, FIRESTORE_DATABASE_ID);
+
+/**
+ * Cloud Storage, for READING only.
+ *
+ * A resource slot holds a PATH — 'learningUnits/{docId}/guide.pdf' — not a URL,
+ * because a download URL carries a token that can be revoked. Turning one into
+ * something a browser can open needs the SDK, which is what this is for.
+ *
+ * Nothing here uploads. The bucket is shared with other apps in this project and
+ * this app has never written to it; whether a read succeeds depends on the
+ * bucket's own rules, which live outside this repo.
+ */
+export const storage: FirebaseStorage = getStorage(firebaseApp);

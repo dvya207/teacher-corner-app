@@ -1,7 +1,10 @@
 import { Timestamp } from 'firebase/firestore';
 
-import { Teacher, TeacherClassroom } from '../models/teaching.model';
+import { Teacher, TeacherClassroom, TeacherMeta } from '../models/teaching.model';
 import {
+  isUnlinkedMatch,
+  matchesStoredNumber,
+  pickRegisteredName,
   mergeClassrooms,
   stampedClassrooms,
   supersededClassroomKeys,
@@ -456,5 +459,231 @@ describe('supersededClassroomKeys', () => {
   it('finds nothing in a map with no unresolved entries', () => {
     expect(supersededClassroomKeys({ c1: entry({}) })).toEqual([]);
     expect(supersededClassroomKeys({})).toEqual([]);
+  });
+});
+
+/**
+ * Which stored record a signed-in Firebase account becomes.
+ *
+ * THE FLOW THIS PROTECTS. An administrator registers a teacher in the Set Up
+ * Wizard, which writes teachers/{docId} with a number and no uid — no Auth user
+ * exists yet. That person later signs in with OTP, and this rule is what decides
+ * that the new Firebase account IS that record, so teacherMeta.uid gets stamped
+ * and both apps can resolve them by uid from then on.
+ *
+ * It failed for most teachers before, in two independent ways: the login field
+ * mangled numbers beginning 91, and this comparison was a raw `===` against a
+ * field the wizard could store with a dial code on it.
+ */
+describe('isUnlinkedMatch', () => {
+
+  const meta = (over: Partial<TeacherMeta> = {}): Partial<TeacherMeta> => ({
+    phoneNumber: '9481635184',
+    phone: '9481635184',
+    ...over
+  });
+
+  it('matches an unlinked record on the same number', () => {
+    expect(isUnlinkedMatch(meta(), '9481635184')).toBe(true);
+  });
+
+  it('refuses a record that already carries a uid', () => {
+    // Numbers are recycled. Claiming a linked record would hand one teacher
+    // another's classrooms.
+    expect(isUnlinkedMatch(meta({ uid: 'someone-else' }), '9481635184')).toBe(false);
+  });
+
+  it('refuses a different number', () => {
+    expect(isUnlinkedMatch(meta(), '9000000000')).toBe(false);
+  });
+
+  it('matches through a stored dial code', () => {
+    // The wizard could store this before toPhoneDigits was fixed, and a raw ===
+    // comparison never matched it.
+    expect(isUnlinkedMatch(meta({ phoneNumber: '+919481635184' }), '9481635184'))
+      .toBe(true);
+  });
+
+  it('matches through stored separators', () => {
+    expect(isUnlinkedMatch(meta({ phoneNumber: '94816 35184' }), '9481635184'))
+      .toBe(true);
+  });
+
+  it('matches through a stored trunk prefix', () => {
+    expect(isUnlinkedMatch(meta({ phoneNumber: '09481635184' }), '9481635184'))
+      .toBe(true);
+  });
+
+  it('falls back to `phone` when `phoneNumber` is absent', () => {
+    // Production writes one or the other; the web app writes both.
+    const withoutPhoneNumber: Partial<TeacherMeta> = { phone: '9481635184' };
+
+    expect(isUnlinkedMatch(withoutPhoneNumber, '9481635184')).toBe(true);
+  });
+
+  it('matches a number that legitimately begins 91', () => {
+    // 91xxxxxxxx is a real series. Nothing in the chain may treat the leading 91
+    // of a ten-digit number as a dial code.
+    expect(isUnlinkedMatch(meta({ phoneNumber: '9180000000' }), '9180000000'))
+      .toBe(true);
+  });
+
+  it('refuses an incomplete number rather than matching loosely', () => {
+    // A partial value must never claim a record.
+    expect(isUnlinkedMatch(meta(), '94816')).toBe(false);
+    expect(isUnlinkedMatch(meta(), '')).toBe(false);
+  });
+
+  it('refuses a record with no number at all', () => {
+    expect(isUnlinkedMatch({}, '9481635184')).toBe(false);
+  });
+});
+
+/**
+ * The name an administrator recorded, which is what a wizard-registered teacher
+ * is greeted by. They never fill in the profile form, so `teachers` is the only
+ * place their name exists.
+ */
+describe('pickRegisteredName', () => {
+
+  const meta = (over: Record<string, unknown> = {}) => ({
+    teacherMeta: { firstName: 'Anita', lastName: 'Rao', ...over }
+  });
+
+  it('returns the name an administrator typed into teacherMeta', () => {
+    expect(pickRegisteredName([meta()])).toEqual({ firstName: 'Anita', lastName: 'Rao' });
+  });
+
+  it('returns null for no documents, so absent is distinct from blank', () => {
+    expect(pickRegisteredName([])).toBeNull();
+  });
+
+  /**
+   * Being in `teachers` IS the approval, and setActive(false) is how it is
+   * withdrawn. A withdrawn record is not waved past the gate and must not supply
+   * an identity either.
+   */
+  it('skips a deactivated record', () => {
+    expect(pickRegisteredName([{ ...meta(), active: false }])).toBeNull();
+  });
+
+  it('treats an absent active flag as active, since create does not write it', () => {
+    expect(pickRegisteredName([meta()])?.firstName).toBe('Anita');
+  });
+
+  /** A half-filled record must not shadow a complete one later in the list. */
+  it('passes over a blank name and takes the next usable record', () => {
+    const found = pickRegisteredName([
+      meta({ firstName: '', lastName: '' }),
+      meta({ firstName: 'Bhavna', lastName: 'Iyer' })
+    ]);
+
+    expect(found).toEqual({ firstName: 'Bhavna', lastName: 'Iyer' });
+  });
+
+  it('passes over a deactivated record to reach a live one', () => {
+    const found = pickRegisteredName([
+      { ...meta({ firstName: 'Withdrawn' }), active: false },
+      meta({ firstName: 'Bhavna', lastName: 'Iyer' })
+    ]);
+
+    expect(found?.firstName).toBe('Bhavna');
+  });
+
+  /**
+   * One person holds one record per class they teach, which is what assigning a
+   * registered teacher to another class creates. Those carry the same name, so
+   * first-wins is a choice between equals rather than an arbitrary pick.
+   */
+  it('takes the first usable record when a teacher holds several', () => {
+    const found = pickRegisteredName([meta(), meta({ firstName: 'Anita', lastName: 'Rao' })]);
+
+    expect(found).toEqual({ firstName: 'Anita', lastName: 'Rao' });
+  });
+
+  /** Identity used to live in flat fields; teacherMetaFrom still reads them. */
+  it('reads the flat legacy fields when teacherMeta is absent', () => {
+    expect(pickRegisteredName([{ firstName: 'Chitra', lastName: 'Nair' }]))
+      .toEqual({ firstName: 'Chitra', lastName: 'Nair' });
+  });
+
+  it('trims the stored name rather than greeting someone with padding', () => {
+    expect(pickRegisteredName([meta({ firstName: '  Anita  ', lastName: '  Rao  ' })]))
+      .toEqual({ firstName: 'Anita', lastName: 'Rao' });
+  });
+
+  it('does not treat a whitespace-only name as usable', () => {
+    expect(pickRegisteredName([meta({ firstName: '   ', lastName: '' })])).toBeNull();
+  });
+
+  it('returns a blank last name rather than dropping a one-word name', () => {
+    expect(pickRegisteredName([meta({ firstName: 'Anita', lastName: '' })]))
+      .toEqual({ firstName: 'Anita', lastName: '' });
+  });
+});
+
+/**
+ * NUMBER MATCHING, INDEPENDENT OF WHETHER THE RECORD IS LINKED.
+ *
+ * isUnlinkedMatch answers "may this sign-in CLAIM this record", which requires
+ * the record to be unclaimed. Reading a name off a record the caller already owns
+ * is a different question, so the number comparison is shared and the uid
+ * condition is not.
+ *
+ * The forms below are the ones live records actually contain: the wizard, an
+ * import and production have each written the same person's number differently.
+ */
+describe('matchesStoredNumber', () => {
+
+  const meta = (stored: string) => ({ phoneNumber: stored });
+
+  it('matches a plainly stored ten-digit number', () => {
+    expect(matchesStoredNumber(meta('9481635184'), '9481635184')).toBe(true);
+  });
+
+  it('matches through a stored dial code, which an equality query would miss', () => {
+    expect(matchesStoredNumber(meta('+919481635184'), '9481635184')).toBe(true);
+  });
+
+  it('matches through a stored trunk prefix', () => {
+    expect(matchesStoredNumber(meta('09481635184'), '9481635184')).toBe(true);
+  });
+
+  it('matches through stored separators', () => {
+    expect(matchesStoredNumber(meta('94816 35184'), '9481635184')).toBe(true);
+  });
+
+  it('falls back to `phone` when `phoneNumber` is absent', () => {
+    expect(matchesStoredNumber({ phone: '9481635184' }, '9481635184')).toBe(true);
+  });
+
+  it('refuses a different number', () => {
+    expect(matchesStoredNumber(meta('9000000000'), '9481635184')).toBe(false);
+  });
+
+  it('refuses an incomplete number rather than matching loosely', () => {
+    expect(matchesStoredNumber(meta('9481635184'), '94816')).toBe(false);
+    expect(matchesStoredNumber(meta('9481635184'), '')).toBe(false);
+  });
+
+  it('refuses a record carrying no number', () => {
+    expect(matchesStoredNumber({}, '9481635184')).toBe(false);
+  });
+
+  it('keeps a number that legitimately begins 91 whole', () => {
+    expect(matchesStoredNumber(meta('9180000000'), '9180000000')).toBe(true);
+  });
+
+  /**
+   * THE DIFFERENCE FROM isUnlinkedMatch. This says the number is the same
+   * person's; it does not say the sign-in may claim the record. Linking still
+   * refuses an already-linked record, which is what stops a reassigned number
+   * inheriting somebody else's classrooms.
+   */
+  it('matches a record that already carries a uid, unlike isUnlinkedMatch', () => {
+    const linked = { phoneNumber: '9481635184', uid: 'someone-else' };
+
+    expect(matchesStoredNumber(linked, '9481635184')).toBe(true);
+    expect(isUnlinkedMatch(linked, '9481635184')).toBe(false);
   });
 });

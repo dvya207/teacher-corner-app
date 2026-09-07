@@ -147,6 +147,28 @@
   --warning: #f59e0b;
   --danger: #ef4444;
 
+  /*
+   * TWO COLOURS SAMPLED OFF PRODUCTION'S CLASSROOM STEPPER, because that screen
+   * uses two the rest of the app does not and approximating either was visibly
+   * wrong.
+   *
+   * --step-done: #2c9fa6, the TEAL of a completed step's marker and the connector
+   * above it. Sampled from a screenshot of its rail (686 pixels of exactly this
+   * value in one circle), not guessed. This was --success, the app's green, and
+   * green against production's teal is the difference between "our timeline" and
+   * "the same timeline" — it is the most repeated mark on the busiest screen.
+   *
+   * --save-violet: #330268, the DEEP VIOLET of Save Workflow Steps. Distinct from
+   * --brand-900 (#272b66), which is the sidebar's navy: the palette note above
+   * records #330268 as a WRONG value for the sidebar, and it turns out to be the
+   * right one for this button. Two different colours that both read as "dark
+   * purple" at a glance, which is exactly why this needed sampling.
+   */
+  --step-done: #2c9fa6;
+  --save-violet: #330268;
+  /* One step darker, for the hover. */
+  --save-violet-dark: #26014e;
+
   /* ---- Status tints -----------------------------------------------------
      Production's $*-bg tokens with the text colours its own badges pair with
      them ($success-bg/#065F46, $warning-bg/#92400E, $error-bg/#EF4444), plus
@@ -159,6 +181,18 @@
   --on-green: #065f46;
   --on-amber: #92400e;
   --on-red: #ef4444;
+
+  /* A FIFTH TINT, added for the Assignments page's type badges.
+     Four types need four distinguishable fills, and blue is already spoken for:
+     every page here uses it for the TOTAL card, so a QUIZ badge in blue would
+     read as "all of them". Violet is production's own colour on that page — its
+     Forms card and its FORM badge — borrowed here for the type that needed a
+     colour rather than assigned to the same type, since its Quizzes card is the
+     blue this app cannot reuse. --brand-900 is the sidebar's violet; these are
+     the tint-and-text pair for it, mixed to the same lightness as the four
+     above so no one badge shouts. */
+  --tint-violet: #f1eefc;
+  --on-violet: #4c1d95;
 
   /* ---- Surfaces ---------------------------------------------------------- */
   --page-bg: var(--ink-050);
@@ -177,9 +211,17 @@
      off --brand-900, which is what this used to approximate it with. */
   --label: #23275c;
 
-  /* .edit-dialog-overlay, verbatim: a neutral black at 45%, not the navy-tinted
-     scrim each modal used to mix for itself. */
-  --overlay: rgba(0, 0, 0, 0.45);
+  /*
+   * A neutral black at 32%, not the navy-tinted scrim each modal used to mix
+   * for itself.
+   *
+   * 32%, NOT the 45% this carried before. Production's dialogs pass no
+   * backdropClass — filter-learning-unit.component.ts opens the Add Learning
+   * Unit dialog with a panelClass only — so they get Angular Material's default
+   * `cdk-overlay-dark-backdrop`, which is exactly rgba(0, 0, 0, 0.32). At 45%
+   * the page behind our modals read as switched off rather than as context.
+   */
+  --overlay: rgba(0, 0, 0, 0.32);
 
   /* Two slate steps production uses alongside the Tarang neutrals: the dialog
      close button's fill and its icon (#F1F5F9 / #64748B), and the programme
@@ -336,6 +378,42 @@ select:has(option[value='']:checked) {
    Shared primitives
    ========================================================================== */
 
+/* ---- Segmented view toggle ----------------------------------------------
+   Cards or rows. GLOBAL because two pages carry it — Learning Units and a
+   classroom's units — and it is a generic control like .field above rather than
+   either page's own furniture. Moved out of learning-units.css, where a
+   component stylesheet's scoping kept it from reaching the second consumer. */
+
+.view-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--ink-050);
+}
+
+.vt-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 26px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease),
+              box-shadow 0.15s var(--ease);
+}
+
+.vt-btn:hover {
+  color: var(--ink-900);
+}
+
+.vt-btn.is-on {
+  background: var(--white);
+  color: var(--accent-600);
+  box-shadow: var(--shadow-sm);
+}
+
 /* ---- Form field ---------------------------------------------------------- */
 
 .field {
@@ -433,6 +511,61 @@ select:has(option[value='']:checked) {
   transform: translateY(1px);
 }
 
+/* ==========================================================================
+   SAVE — production's violet, on every button that commits a form
+   ==========================================================================
+
+   A MODIFIER OVER .btn-primary RATHER THAN A CHANGE TO IT, and the distinction is
+   the whole point: production paints most primary actions BLUE — its Submit, its
+   Upload, its Next Step, its confirm Yes — and reserves #330268 for SAVING. So
+   repainting .btn-primary would take Next, Continue, Send and Verify with it and
+   lose the difference the colour is carrying.
+
+   SAVE MEANS COMMITTING AN EDITOR: Save, Save Changes, Save Institution, Save
+   Workflow Steps. Not Next, not Continue, not Create Account — those move you
+   through a flow rather than writing anything.
+
+   #330268 IS SAMPLED, not chosen. See --save-violet. The stepper's own
+   .cw-save and its pager use the same token directly, because both are
+   full-width or pill-shaped rather than .btn-shaped.
+   ========================================================================== */
+
+.btn-save {
+  background: var(--save-violet);
+  color: var(--white);
+}
+
+.btn-save:hover:not(:disabled) {
+  background: var(--save-violet-dark);
+  box-shadow: var(--shadow-btn);
+}
+
+.btn-save:active:not(:disabled) {
+  background: var(--save-violet-dark);
+  transform: translateY(1px);
+}
+
+/*
+ * A DISABLED SAVE STAYS VIOLET, on instruction — the same call already made for
+ * the stepper's Save Workflow Steps.
+ *
+ * `.btn:disabled` greys the shared button, and grey read as broken: a form saved
+ * successfully and its Save turned into dead furniture, which is the complaint
+ * that started this ("dim coloured and disabled looking"). It keeps its colour and
+ * loses only some contrast, so it still reads as THE SAVE BUTTON, currently with
+ * nothing to do.
+ *
+ * THE REMAINING DISABLED CASES ARE VALIDATION, not "already saved" — those five
+ * buttons no longer disable on a clean form at all. So this styles a button that
+ * is waiting for a required field, and `cursor: not-allowed` plus the reduced
+ * contrast are what say it is not ready.
+ */
+.btn-save:disabled {
+  background: var(--save-violet);
+  color: var(--white);
+  opacity: 0.55;
+}
+
 .btn-outline {
   background: var(--white);
   color: var(--ink-700);
@@ -518,6 +651,29 @@ select:has(option[value='']:checked) {
   font-size: 14px;
 }
 
+/* ==========================================================================
+   .visually-hidden
+
+   GLOBAL, and it has to be. This lived in learning-unit-form.css, which is a
+   COMPONENT stylesheet and therefore scoped — so the class worked in that one
+   template and silently did nothing everywhere else. Add Programme used it on
+   its file input and got a raw "Choose File / No file chosen" control rendered
+   in the middle of the form, because nothing was hiding it.
+
+   Off screen, not `display: none`: the input is still the thing the visible
+   button clicks and the thing a screen reader announces, and display:none would
+   take it out of the accessibility tree entirely.
+   ========================================================================== */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 /* ---- Motion -------------------------------------------------------------- */
 
 @keyframes fade-up {
@@ -566,8 +722,11 @@ select:has(option[value='']:checked) {
   display: grid;
   place-items: center;
   padding: 24px 16px;
+  /* Heavier than --overlay, and deliberately: this one can open OVER the Trash
+     overlay, so it needs to separate from a surface that is already a scrim.
+     Production's own Delete Version dialog dims about this much. No blur, for
+     the reason given on every modal overlay. */
   background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(2px);
 }
 
 .confirm-card {

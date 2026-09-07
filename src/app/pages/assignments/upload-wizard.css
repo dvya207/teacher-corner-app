@@ -1,0 +1,789 @@
+/* ==========================================================================
+   Create Upload Assignment — the three-step dialog.
+
+   THE MODAL CHROME BELOW IS COPIED FROM quiz-wizard.css, byte for byte, and that
+   is a known duplication rather than an oversight. Component styles are scoped,
+   so the second wizard cannot see the first one's rules, and the two honest
+   options were to copy the shared chrome or to lift it out of a dialog that had
+   just been measured against the reference and signed off.
+
+   Copying won on risk: extracting would have rewritten the quiz wizard's
+   stylesheet, and nothing in the suite checks pixels, so a boundary drawn one
+   rule too wide would have shipped as a silent visual regression. Lifting the
+   shared half of both files into one place is the follow-up, and it is a
+   mechanical change once neither dialog is moving.
+
+   Everything from `.uw-` onward is this dialog's own.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Shared chrome — see the note above. Keep in step with quiz-wizard.css.
+   -------------------------------------------------------------------------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  /* 60, matching the other modals — see assignments.css, where the trash sits at
+     55 so a form opened over it lands on top. */
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+}
+
+.modal-card {
+  display: flex;
+  flex-direction: column;
+  /*
+   * 600px, MEASURED off the reference rather than borrowed from another modal.
+   * Its card spans ~597px: two 237px columns, a 32px gap between them, and 44px
+   * of body padding either side — 237 + 32 + 236 + 88 = 593. This was 760px,
+   * which made every field half again as wide as production's and the dialog read
+   * as a different form.
+   */
+  width: min(600px, 100%);
+  max-height: calc(100dvh - 48px);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+/* 22px, where the BODY below is inset 44px. Measured, and not an inconsistency
+   in the reading: its header and footer sit closer to the card edge than the form
+   does, which is what gives the form its centred column. */
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.qw-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--tint-violet);
+  color: var(--on-violet);
+}
+
+.qw-titles {
+  min-width: 0;
+}
+
+.qw-titles h2 {
+  font-size: 18px;
+  color: var(--ink-900);
+}
+
+.modal-sub {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/*
+ * A NUMBER PER STEP, JOINED BY A RULE — and NOT a filled circle.
+ *
+ * This drew each step as a 24px disc, accent for the current one and green for a
+ * finished one. The reference draws bare numerals with a thin line between them
+ * and swaps a finished numeral for a tick; four coloured discs in a dialog header
+ * read as badges competing with the title.
+ */
+.qw-steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-left: auto;
+  padding-top: 4px;
+  list-style: none;
+}
+
+.qw-step {
+  display: grid;
+  place-items: center;
+  min-width: 14px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-400);
+}
+
+/* The connector, drawn as the gap between two steps rather than as a pseudo
+   element on one of them — a 26px flex item cannot be mispositioned the way an
+   absolutely placed rule can. */
+.qw-step + .qw-step {
+  margin-left: 34px;
+}
+
+.qw-step + .qw-step::before {
+  content: '';
+  position: absolute;
+  width: 26px;
+  height: 1px;
+  margin-left: -34px;
+  background: var(--ink-200);
+}
+
+/* Darker and heavier, not filled: the current step is where you are, not a
+   button. */
+.qw-step.is-current {
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.qw-step.is-done {
+  color: var(--on-green);
+}
+
+.modal-close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.modal-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.modal-body {
+  /* 44px inline — see the note on .modal-card for where the number comes from. */
+  padding: 24px 44px;
+  overflow-y: auto;
+}
+
+.modal-error {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--tint-red);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 13px;
+  color: var(--on-red);
+}
+
+/* 32px between the columns, measured; 26px between rows, which is the gap from a
+   field's bottom edge to the next row's label. */
+.qw-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 26px 32px;
+}
+
+.req {
+  color: var(--danger);
+}
+
+/* A label for a control that is not a single input — the rich-text editor and
+   the option lists. `.field > label` would be wrong: there is no `for` target. */
+.field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+/*
+ * NO BORDER AND NO BOX. The reference shows "Total Duration" as a plain caption
+ * over three bare fields; a bordered fieldset was this app's own invention and it
+ * boxed off a row that reads as part of the same form.
+ *
+ * A <fieldset> is still the right ELEMENT — three inputs under one caption is
+ * exactly what a legend is for — so the semantics stay and only the chrome goes.
+ */
+.qw-duration {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  /* 17px, measured. Tighter than the 32px between the two main columns, because
+     three fields at that gap would not fit the 512px content width. */
+  gap: 17px;
+  margin: 26px 0;
+  padding: 0;
+  border: 0;
+}
+
+/*
+ * SPANS EVERY COLUMN, so it sits on its own row above the three fields.
+ *
+ * A <legend> IS a grid item, and left to itself it takes the first cell — which
+ * put Hours and Minutes on row one and pushed Seconds down to row two. `float`
+ * was the first attempt and did not help: the measurement harness reported
+ * durationOneRow: false, which is how this was caught rather than shipped.
+ */
+.qw-duration legend {
+  grid-column: 1 / -1;
+  margin-bottom: 8px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+/* Inside a question card the row is tighter, and it keeps a white ground so it
+   reads as a field row against the card's tint. */
+.qw-duration.is-inline {
+  margin: 0 0 14px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--white);
+}
+
+.qw-review {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+  gap: 9px 16px;
+  margin-bottom: 18px;
+  font-size: 13.5px;
+}
+
+.qw-review.is-compact {
+  grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+  gap: 7px 14px;
+  margin-bottom: 0;
+  font-size: 13px;
+}
+
+.qw-review dt {
+  font-weight: 600;
+  color: var(--label);
+}
+
+.qw-review dd {
+  color: var(--ink-900);
+  overflow-wrap: anywhere;
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
+}
+
+/* Pushes Skip and Next to the right while Back stays left, without either side
+   needing a margin that would have to change when Skip appears. */
+.qw-foot-gap {
+  flex: 1;
+}
+
+/* The save-failure message repeated beside the footer — see the template note. */
+.qw-foot-error {
+  margin: 0 22px;
+  padding: 10px 13px;
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--on-red);
+}
+
+.qw-grid .field,
+.qw-duration .field {
+  margin-bottom: 0;
+}
+
+/*
+ * 40px TALL, which is what the reference's fields measure.
+ *
+ * The global `.field input` uses 12px of vertical padding for the app's other
+ * forms and lands on 49px here. Nine px gets it to 40. Applied to selects too,
+ * so a select and an input on the same row are the same height.
+ */
+.modal-body .field input,
+.modal-body .field select {
+  padding: 9px 12px;
+  font-size: 13.5px;
+}
+
+.qw-review-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 22px 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+}
+
+.qw-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--tint-violet);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--on-violet);
+}
+
+/* --------------------------------------------------------------------------
+   Step 2 — the stepper strip and the slot fields
+   -------------------------------------------------------------------------- */
+
+/*
+ * THE PANEL SCROLLS, THE `+` DOES NOT.
+ *
+ * Production makes them siblings in a 12-column grid — the panel takes eleven and
+ * the button one — so however many slots there are, the one control that adds
+ * another stays where it was. Nesting the button inside the scroller was the
+ * earlier mistake here.
+ */
+.uw-step2 {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.uw-panel {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--ink-050);
+}
+
+/*
+ * A STEPPER, not a row of pills: numbered circles joined by a rule, with the
+ * title beneath each. `flex: 1` on the items shares the width evenly, which is
+ * what keeps the connectors the same length as slots are added.
+ */
+.uw-tabs {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+}
+
+.uw-tab-item {
+  display: flex;
+  flex: 1;
+  min-width: 92px;
+  justify-content: center;
+}
+
+/* The connector, drawn from the item rather than between them so the first tab
+   has none. */
+.uw-tab-item + .uw-tab-item {
+  position: relative;
+}
+
+.uw-tab-item + .uw-tab-item::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  right: 50%;
+  left: -50%;
+  height: 1px;
+  background: var(--ink-300);
+}
+
+.uw-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  z-index: 1;
+  max-width: 130px;
+  padding: 6px 10px 8px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-600);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.uw-tab:hover .uw-tab-num {
+  border-color: var(--accent-500);
+  color: var(--accent-600);
+}
+
+/* The active slot gets the tinted pill behind it, as the reference has. */
+.uw-tab.is-active {
+  background: var(--tint-blue);
+  color: var(--accent-600);
+  font-weight: 600;
+}
+
+/*
+ * A NUMBER WHEN ACTIVE, A PENCIL OTHERWISE. That is the reference's own way of
+ * saying which slot you are editing and which you can go to — and it is why the
+ * circle is sized to fit either.
+ */
+.uw-tab-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--ink-300);
+  border-radius: 50%;
+  background: var(--white);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-600);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.uw-tab.is-active .uw-tab-num {
+  border-color: var(--accent-500);
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+/*
+ * AN UNFINISHED SLOT IS RINGED, so the strip says which tab to go to rather than
+ * leaving the reader to open each one.
+ *
+ * Amber, not red: nothing is wrong yet, it is simply not filled in. Red is what
+ * the unselected file type uses inside the slot, where the field genuinely is
+ * blocking, and having both mean the same thing at two strengths would be worse
+ * than either.
+ */
+.uw-tab.is-incomplete .uw-tab-num {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+/* The active slot keeps its filled circle: its own required markers are on
+   screen, so ringing it as well says nothing new. */
+.uw-tab.is-incomplete.is-active .uw-tab-num {
+  border-color: var(--accent-500);
+  color: var(--white);
+}
+
+/* One line, clipped: a slot title is a sentence in production's own data. */
+.uw-tab-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* Production's plus-circle, outside the panel and level with its top. */
+.uw-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 14px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent-500);
+  cursor: pointer;
+  transition: color 0.15s, transform 0.15s;
+}
+
+.uw-add:hover {
+  color: var(--accent-600);
+  transform: scale(1.08);
+}
+
+/* ---- the rows ------------------------------------------------------------ */
+
+/*
+ * LABEL LEFT, CONTROL RIGHT — production's 2-of-12 label beside an 8-of-12
+ * control, rather than the stacked labels this dialog used to have. Centred on
+ * the row so a one-line label sits against the middle of its input; `is-tall`
+ * pushes it to the top for the rich text and the duration group, which are
+ * several rows high and would otherwise have the label floating in the middle.
+ */
+.uw-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 2fr) 8fr;
+  gap: 14px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.uw-row.is-tall {
+  align-items: start;
+}
+
+.uw-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-700);
+}
+
+.uw-control {
+  min-width: 0;
+}
+
+.uw-control > input,
+.uw-control > select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink-800);
+}
+
+.uw-control > input:focus,
+.uw-control > select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/*
+ * THE UNSELECTED FILE TYPE IN RED, which is the reference's own treatment and
+ * not decoration: it is the one field on the slot with no sensible default, it
+ * blocks Next, and red is what says so before the button is reached for.
+ */
+.uw-control > select.is-unset {
+  color: var(--danger);
+}
+
+.uw-hint {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--ink-500);
+}
+
+/* Hours / Minutes / Seconds across the control column, sub-labelled as the
+   reference sub-labels them. */
+.uw-duration {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.uw-duration .field {
+  margin-bottom: 0;
+}
+
+/* The dependency checkboxes, wrapping: a tenth slot offers nine of them. */
+.uw-deps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding-top: 6px;
+}
+
+.uw-dep {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.uw-dep input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-500);
+  cursor: pointer;
+}
+
+.uw-slot-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.btn-ghost.is-danger {
+  color: var(--danger);
+}
+
+/* --------------------------------------------------------------------------
+   Step 3 — review
+   -------------------------------------------------------------------------- */
+
+/*
+ * THE PANEL SCROLLS, NOT THE BODY, so the save button below it stays put.
+ *
+ * Production caps this at a fixed 57vh for the same reason. A real form has four
+ * or more questions of a paragraph each; left to grow, the panel pushed Save
+ * below the fold and reaching it meant scrolling the whole dialog — the button
+ * you are looking for moving away from where it was.
+ *
+ * `max-height` rather than production's fixed `height`: a one-question review
+ * then stays its own size instead of sitting in a mostly empty box.
+ */
+.uw-review {
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--ink-050);
+}
+
+/* Labels in one column and values in another, in the reference's 2:3 split.
+   Two stacked lists rather than a row per pair, so a long value cannot pull the
+   label column narrow. */
+.uw-recap {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  margin-bottom: 20px;
+}
+
+.uw-recap p {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.uw-recap-labels p {
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.uw-recap-values p {
+  font-weight: 500;
+  color: var(--ink-700);
+}
+
+.uw-review-slot + .uw-review-slot {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.uw-review-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-violet);
+}
+
+.uw-review-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* MIDDLE, not top: a long instruction wraps and production's label sits against
+   the centre of that block rather than riding at its first line. */
+.uw-review-table th[scope='row'] {
+  width: 33%;
+  padding: 0 0 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  vertical-align: middle;
+  color: var(--ink-900);
+}
+
+.uw-review-table td {
+  padding: 0 0 12px 16px;
+  font-size: 13.5px;
+  vertical-align: top;
+  color: var(--ink-600);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * A PILL, and deliberately not styled as a button: the reference renders a plain
+ * div here and nothing happens when it is clicked, so anything with a button's
+ * affordance would be promising a click it cannot honour.
+ */
+.uw-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--accent-500);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--white);
+}
+
+.uw-pill-note {
+  margin-left: 10px;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+
+.uw-save-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+/*
+ * The reason line, immediately above the footer.
+ *
+ * A BUTTON, not a paragraph: it opens the slot it names, which turns the message
+ * from a complaint into the fix. Placed here rather than at the top of the body
+ * because the body scrolls and the button it explains is at the bottom.
+ */
+.uw-blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: calc(100% - 88px);
+  margin: 0 44px;
+  padding: 9px 12px;
+  /* The tint's own edge rather than the full warning colour: this is a hint about
+     unfinished work, not an error, and a saturated border reads as one. */
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--tint-amber);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: left;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.uw-blocked:hover {
+  border-color: var(--warning);
+}
+
+.uw-blocked app-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--warning);
+}
+
+.uw-blocked em {
+  display: block;
+  font-style: normal;
+  color: var(--ink-500);
+}
+
+/* The message's own text colour, matching the tint it sits on. */
+.uw-blocked > span {
+  color: var(--on-amber);
+}

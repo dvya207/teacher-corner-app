@@ -203,7 +203,10 @@ test('the path builder declares exactly the approved collections', () => {
     classrooms: 'classrooms',
     programmes: 'programmes',
     learningUnits: 'learningUnits',
-    teachers: 'teachers'
+    learningUnitResources: 'learningUnitResources',
+    boardGradeResources: 'boardGradeResources',
+    teachers: 'teachers',
+    configuration: 'Configuration'
   })) {
     assert.match(
       builder.text,
@@ -261,6 +264,28 @@ test('the path builder declares exactly the approved collections', () => {
   assert.match(builder.text, /LEARNING_UNIT_TRASH_SUBCOLLECTION\s*=\s*'DeletedLearningUnits'/, 'deleted learning units must live in `DeletedLearningUnits`, matching production');
   assert.match(builder.text, /doc\(db,\s*COLLECTIONS\.learningUnits,\s*TRASH_DOC\)/, 'the learning-unit trash container must sit in the learningUnits collection');
   assert.match(builder.text, /collection\(learningUnitTrashContainer\(\),\s*LEARNING_UNIT_TRASH_SUBCOLLECTION\)/, 'deleted learning units must be a subcollection of the trash document');
+
+  // Learning unit resources are FLAT, and repeat the trash shape a FIFTH time:
+  //
+  //   learningUnitResources/{id}
+  //   learningUnitResources/trash/DeletedLearningUnitResources/{id}
+  //
+  // This is the one trash production does not have. It was added deliberately —
+  // deleting a unit used to leave its resource documents in the live collection
+  // with nothing pointing at them — and the assertion below was inverted at that
+  // point, from "there is no trash" to "the trash has exactly this shape". The
+  // container must be the shared `trash` sentinel and the subcollection must be
+  // pinned, or the rules block written for it stops matching.
+  assert.match(builder.text, /collection\(db,\s*COLLECTIONS\.learningUnitResources\)/, 'resource documents must be a top-level collection');
+  assert.match(builder.text, /LEARNING_UNIT_RESOURCE_TRASH_SUBCOLLECTION\s*=\s*'DeletedLearningUnitResources'/, 'deleted resource documents must live in `DeletedLearningUnitResources`');
+  assert.match(builder.text, /doc\(db,\s*COLLECTIONS\.learningUnitResources,\s*TRASH_DOC\)/, 'the resource trash container must sit in the learningUnitResources collection and use the shared `trash` sentinel');
+  assert.match(builder.text, /collection\(\s*learningUnitResourceTrashContainer\(\),\s*LEARNING_UNIT_RESOURCE_TRASH_SUBCOLLECTION\s*\)/, 'deleted resource documents must be a subcollection of the trash document');
+  assert.match(builder.text, /where\('learningUnitDocId',\s*'==',\s*learningUnitDocId\)/, "a unit's resources must be found by its document id, not its readable id");
+
+  // Board and grade resources are flat and joined on the unit's document id,
+  // for the same reason learningUnitResources is.
+  assert.match(builder.text, /collection\(db,\s*COLLECTIONS\.boardGradeResources\)/, 'board and grade resources must be a top-level collection');
+  assert.match(builder.text, /where\('learningUnitDocId',\s*'==',\s*learningUnitDocId\)/, "they must be found by the unit's document id");
 
   // Teachers repeat the shape a fifth time:
   //
@@ -391,5 +416,93 @@ test('the app targets its OWN database, never a shared one', () => {
     firebase.text,
     /getFirestore\(\s*firebaseApp,\s*FIRESTORE_DATABASE_ID\s*\)/,
     'getFirestore must be passed the database id, or it silently targets (default)'
+  );
+});
+
+/**
+ * A SUBMISSION IS ROOTED ON THE TEACHER RECORD, NEVER ON THE UID.
+ *
+ * WHY THIS IS A TEST AND NOT A TYPE. `submissionSummaryDoc` takes a document id
+ * as its first argument and both candidates are plain strings, so passing the
+ * wrong one compiles, lints and unit-tests clean. It then writes to
+ * `teachers/{uid}/submissions/...`, where no teacher document exists, and the
+ * rule's get() on that missing parent denies it. The symptom is a
+ * permission-denied at submit time and nothing else — no type error, no failing
+ * spec.
+ *
+ * THIS EXACT MISTAKE HAS ALREADY HAPPENED ONCE. The move from `users/{uid}` to
+ * `teachers/{teacherDocId}` was applied with a search-and-replace that matched
+ * only the single-line call sites; the two written across several lines kept
+ * passing `where.uid` and shipped a broken upload and form submit.
+ *
+ * The two ids are genuinely different values in this app — the uid identifies
+ * the ACCOUNT and still stamps `teacherId` and the Storage path, while the
+ * teacher record has an id of its own — so there is no version of this that a
+ * reader can eyeball reliably.
+ */
+test('submissionSummaryDoc is never handed a uid', () => {
+  const offenders = [];
+
+  for (const file of FILES) {
+    if (file.path.endsWith('core/firestore-paths.ts')) {
+      continue;
+    }
+
+    // The call and its first argument, across whatever whitespace separates them.
+    const call = /submissionSummaryDoc\s*\(\s*([A-Za-z0-9_.]+)/g;
+    let match;
+
+    while ((match = call.exec(file.text)) !== null) {
+      const firstArgument = match[1];
+
+      if (/(^|\.)uid$/i.test(firstArgument)) {
+        offenders.push(`${file.path}: submissionSummaryDoc(${firstArgument}, ...)`);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    'a submission path was built from a uid rather than a teacher document id:\n' +
+      offenders.join('\n')
+  );
+});
+
+/**
+ * THE ASSIGNMENTS LIST IS NOT OWNER-SCOPED, and that has to stay true.
+ *
+ * Every other top-level list in this app filters by `ownerId`, because
+ * institutions, classrooms and learning units carry ownership in a field and the
+ * rules refuse an unfiltered read of them. Assignments are the exception: the
+ * rule is `read: if signedIn()` with no ownership test, production reads the
+ * whole collection, and an assignment set by one teacher is answered by another.
+ *
+ * THE FILTER WAS THERE FOR YEARS ON A FALSE PREMISE — a comment claiming the
+ * rules required it. Someone tidying the file back into line with its neighbours
+ * would reintroduce it in good faith and silently hide every assignment from
+ * anyone but its author, including the same person's other sign-in provider.
+ * This is the test that stops that.
+ */
+test('AssignmentService lists every assignment, not just the caller\'s', () => {
+  const service = FILES.find(f => f.path === 'src/app/services/assignment.service.ts');
+
+  assert.ok(service, 'assignment.service.ts is missing');
+
+  const listBody = service.text.slice(
+    service.text.indexOf('async list('),
+    service.text.indexOf('async listTrash(')
+  );
+
+  assert.ok(listBody.length > 0, 'could not isolate AssignmentService.list()');
+  assert.match(
+    listBody,
+    /getDocs\(\s*allAssignments\(\s*\)\s*\)/,
+    'list() must read allAssignments(); an owner filter here hides assignments ' +
+      'from every teacher but their author'
+  );
+  assert.ok(
+    !/ownedAssignments\s*\(/.test(listBody),
+    'list() must not use ownedAssignments(); that is the trash list only'
   );
 });

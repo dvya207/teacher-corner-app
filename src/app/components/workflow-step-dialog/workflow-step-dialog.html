@@ -1,0 +1,399 @@
+<!-- ======================================================================
+     The step editor — production's own dialog, shared by both callers.
+
+     Left: the step's fields. Right: its Contents, each a block with a name, a
+     category and an access level, added with ADD NEW CONTENT.
+
+     THE OVERLAY CLOSES ON CLICK and the card stops the event, which is why the
+     card needs its own handler: without it every click inside the dialog would
+     bubble to the overlay and shut it.
+     ====================================================================== -->
+<!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+<div class="step-overlay" (click)="close()">
+  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
+  <div
+    class="step-card animate-fade-up"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Edit workflow step"
+    (click)="$event.stopPropagation()"
+  >
+    <button
+      type="button"
+      class="step-close"
+      (click)="close()"
+      aria-label="Close"
+    >
+      <app-icon name="close" [size]="18" />
+    </button>
+
+    <div class="step-body">
+
+      <div class="step-fields">
+        <div class="field">
+          <label for="wt-step-name">Step Name <span class="req">*</span></label>
+          <input
+            id="wt-step-name"
+            type="text"
+            autocomplete="off"
+            placeholder="Enter step name"
+            [value]="step().workflowStepName"
+            (input)="setStepName(valueOf($event))"
+          />
+        </div>
+
+        <div class="field">
+          <label for="wt-step-seq">Sequence Number <span class="req">*</span></label>
+          <input
+            id="wt-step-seq"
+            type="number"
+            min="1"
+            [value]="step().sequenceNumber"
+            (input)="setStepSequence(valueOf($event))"
+          />
+        </div>
+
+        <div class="field">
+          <label for="wt-step-desc">Step Description</label>
+          <input
+            id="wt-step-desc"
+            type="text"
+            autocomplete="off"
+            placeholder="Enter step description"
+            [value]="step().workflowStepDescription"
+            (input)="setStepDescription(valueOf($event))"
+          />
+        </div>
+
+        <div class="field">
+          <label for="wt-step-duration">Step Duration</label>
+          <input
+            id="wt-step-duration"
+            type="number"
+            min="0"
+            placeholder="Enter step duration"
+            [value]="step().workflowStepDuration"
+            (input)="setStepDuration(valueOf($event))"
+          />
+        </div>
+
+        <!-- A TOGGLE, as production has it, and it opens ON. -->
+        <div class="field">
+          <span class="field-label">Show in UnLab?</span>
+          <label class="wt-toggle">
+            <input
+              type="checkbox"
+              [checked]="step().viewUnlab"
+              (change)="setViewUnlab(checkedOf($event))"
+            />
+            <span class="wt-toggle-track" aria-hidden="true"></span>
+            <!-- WRAPPED, not a bare text node: a loose string in a flex
+                 container becomes an anonymous flex item, which laid the
+                 track on top of the words. -->
+            <span class="wt-toggle-text">Show in UnLab?</span>
+          </label>
+        </div>
+
+        <div class="field">
+          <label for="wt-step-location">Location</label>
+          <input
+            id="wt-step-location"
+            type="text"
+            autocomplete="off"
+            placeholder="Enter workflow location"
+            [value]="step().workflowLocation"
+            (input)="setStepLocation(valueOf($event))"
+          />
+        </div>
+
+        <div class="field">
+          <label for="wt-step-access">Access Level</label>
+          <input
+            id="wt-step-access"
+            type="text"
+            autocomplete="off"
+            placeholder="Enter access level"
+            [value]="step().allowAccess"
+            (input)="setStepAccess(valueOf($event))"
+          />
+        </div>
+
+        <div class="field">
+          <label for="wt-step-skip">Can Skip Step</label>
+          <select
+            id="wt-step-skip"
+            (change)="setCanSkip(valueOf($event))"
+          >
+            <!-- THE PLACEHOLDER IS A THIRD STATE, not a prompt to ignore: '' is
+                 production's unanswered and is stored as null. -->
+            <option value="" [selected]="canSkipValue(step()) === ''">
+              Select Yes or No
+            </option>
+            @for (option of skipOptions; track option.code) {
+              <option
+                [value]="option.code"
+                [selected]="option.code === canSkipValue(step())"
+              >{{ option.label }}</option>
+            }
+          </select>
+        </div>
+      </div>
+
+      <!-- ---- Contents ---- -->
+      <div class="step-contents">
+        <h3>Contents</h3>
+
+        @for (content of step().contents; track $index; let contentIndex = $index) {
+          <div class="content-block">
+            <span class="content-chip">content : {{ contentIndex + 1 }}</span>
+
+            <div class="field">
+              <label [attr.for]="'wt-content-name-' + contentIndex">
+                Content Name <span class="req">*</span>
+              </label>
+              <input
+                [id]="'wt-content-name-' + contentIndex"
+                type="text"
+                autocomplete="off"
+                placeholder="Enter content name"
+                [value]="content.contentName"
+                (input)="setContentName(contentIndex, valueOf($event))"
+              />
+            </div>
+
+            <div class="field">
+              <label [attr.for]="'wt-content-cat-' + contentIndex">
+                Content Category <span class="req">*</span>
+              </label>
+              <select
+                [id]="'wt-content-cat-' + contentIndex"
+                (change)="setContentCategory(contentIndex, valueOf($event))"
+              >
+                <option value="" [selected]="content.contentCategory === ''">
+                  Select content Category
+                </option>
+                @for (option of contentCategories(); track option.code) {
+                  <option
+                    [value]="option.code"
+                    [selected]="option.code === content.contentCategory"
+                  >{{ option.label }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- ==========================================================
+                 WHAT THE CATEGORY ASKS FOR NEXT
+
+                 Production shows a different field, or set of fields, under
+                 each category, and the pairing is not cosmetic — each writes
+                 a different key. Only one branch is ever open.
+                 ========================================================== -->
+
+            @if (content.contentCategory === 'custom resource') {
+              <!-- CUSTOM MODE'S RESOURCE KIND. Same three options as default
+                   mode's Additional Resource Type, different stored field —
+                   see the model's note on the pair. -->
+              <div class="field">
+                <label [attr.for]="'wt-content-crt-' + contentIndex">
+                  Custom Resource Type
+                </label>
+                <select
+                  [id]="'wt-content-crt-' + contentIndex"
+                  (change)="setCustomResourceType(contentIndex, valueOf($event))"
+                >
+                  <option value="" [selected]="content.customResourceType === ''">Select</option>
+                  @for (option of resourceTypes; track option.code) {
+                    <option
+                      [value]="option.code"
+                      [selected]="option.code === content.customResourceType"
+                    >{{ option.label }}</option>
+                  }
+                </select>
+              </div>
+            }
+
+            @if (content.contentCategory === 'additional resources') {
+              <div class="field">
+                <label [attr.for]="'wt-content-art-' + contentIndex">
+                  Additional Resource Type
+                </label>
+                <select
+                  [id]="'wt-content-art-' + contentIndex"
+                  (change)="setAdditionalResourceType(contentIndex, valueOf($event))"
+                >
+                  <option value="" [selected]="content.additionalResourceType === ''">Select</option>
+                  @for (option of resourceTypes; track option.code) {
+                    <option
+                      [value]="option.code"
+                      [selected]="option.code === content.additionalResourceType"
+                    >{{ option.label }}</option>
+                  }
+                </select>
+              </div>
+            }
+
+            @if (content.contentCategory === 'assignment') {
+
+              <div class="field">
+                <label [attr.for]="'wt-content-at-' + contentIndex">Assignment Type</label>
+                <!-- THIS APP'S THREE. Production's list comes from the
+                     AssignmentTypes document and includes GAME and TEXTBLOCK;
+                     neither is creatable here, so neither is offered. -->
+                <select
+                  [id]="'wt-content-at-' + contentIndex"
+                  (change)="setAssignmentType(contentIndex, valueOf($event))"
+                >
+                  <option value="" [selected]="content.assignmentType === ''">Select</option>
+                  @for (option of assignmentTypes; track option.type) {
+                    <option
+                      [value]="option.type"
+                      [selected]="option.type === content.assignmentType"
+                    >{{ option.label }}</option>
+                  }
+                </select>
+              </div>
+
+              <div class="field">
+                <label [attr.for]="'wt-content-an-' + contentIndex">Assignment Name</label>
+                <!-- THE VALUE IS THE DOC ID, not the name: two assignments can
+                     share a display name, and the document stores both. -->
+                <select
+                  [id]="'wt-content-an-' + contentIndex"
+                  [disabled]="content.assignmentType === ''"
+                  (change)="setAssignmentByDocId(contentIndex, valueOf($event))"
+                >
+                  <option value="" [selected]="content.assignmentId === ''">Select</option>
+                  @for (option of assignmentsForContent(content); track option.docId) {
+                    <option
+                      [value]="option.docId"
+                      [selected]="option.docId === content.assignmentId"
+                    >{{ option.displayName }}</option>
+                  }
+                </select>
+
+                @if (content.assignmentType !== '' && assignmentsForContent(content).length === 0) {
+                  <p class="content-note">
+                    No assignments of that type to choose from yet.
+                  </p>
+                }
+              </div>
+
+              <div class="field">
+                <label [attr.for]="'wt-content-dd-' + contentIndex">
+                  Is there a due date?
+                </label>
+                <select
+                  [id]="'wt-content-dd-' + contentIndex"
+                  (change)="setContentDueDate(contentIndex, valueOf($event))"
+                >
+                  <option value="false" [selected]="!content.isDueDate">No</option>
+                  <option value="true" [selected]="content.isDueDate">Yes</option>
+                </select>
+              </div>
+
+              @if (content.isDueDate) {
+                <div class="field">
+                  <label [attr.for]="'wt-content-due-' + contentIndex">Due Date</label>
+                  <!-- DATE AND TIME. Production's picker carries an hour and a
+                       minute under its calendar, and a date-only field would
+                       round every deadline to midnight. -->
+                  <input
+                    [id]="'wt-content-due-' + contentIndex"
+                    type="datetime-local"
+                    [value]="dueDateInputValue(content)"
+                    (input)="setContentDueDateValue(contentIndex, valueOf($event))"
+                  />
+                </div>
+              }
+            }
+
+            <!-- ITS OWN SELECT, and only where the category has any. The
+                 values are production's internal resource-slot names
+                 ('tacQuickVideoUrl'), read off its data. Neither resource
+                 category nor 'assignment' has any, so the field is hidden
+                 rather than shown empty. -->
+            @if (subCategoriesFor(content).length > 0) {
+              <div class="field">
+                <label [attr.for]="'wt-content-sub-' + contentIndex">
+                  Content Sub Category
+                </label>
+                <select
+                  [id]="'wt-content-sub-' + contentIndex"
+                  (change)="setContentSubCategory(contentIndex, valueOf($event))"
+                >
+                  <option value="" [selected]="content.contentSubCategory === ''">Select content type</option>
+                  @for (option of subCategoriesFor(content); track option) {
+                    <option [value]="option" [selected]="option === content.contentSubCategory">{{ option }}</option>
+                  }
+                </select>
+              </div>
+            }
+
+            <div class="field">
+              <label [attr.for]="'wt-content-access-' + contentIndex">Access Level</label>
+              <!-- A NUMBER, 1 TO 10, which is production's own input — despite
+                   the field it writes being called `contentIsLocked`. See the
+                   setter for why the name and the meaning disagree. -->
+              <input
+                [id]="'wt-content-access-' + contentIndex"
+                type="number"
+                min="1"
+                max="10"
+                autocomplete="off"
+                placeholder="Enter access level"
+                [value]="content.contentIsLocked"
+                (input)="setContentAccess(contentIndex, valueOf($event))"
+              />
+            </div>
+
+            @if (!contentValid(content)) {
+              <p class="content-note">
+                A content block needs a name and a category, or it is dropped
+                when the template is saved.
+              </p>
+            }
+
+            <!-- A FULL-WIDTH RED BAND, as production has it, rather than a
+                 small × in the corner: deleting a content block is the one
+                 destructive action in this panel. -->
+            <button
+              type="button"
+              class="content-delete"
+              title="Delete content from this step"
+              [attr.aria-label]="'Delete content ' + (contentIndex + 1) + ' from this step'"
+              (click)="removeContent(contentIndex)"
+            >
+              <app-icon name="trash" [size]="15" />
+              Delete Content
+            </button>
+          </div>
+        }
+
+        <!-- BELOW the blocks, which is where production puts it. -->
+        <button
+          type="button"
+          class="content-add"
+          (click)="addContent()"
+        >
+          ADD NEW CONTENT
+          <app-icon name="plus-circle" [size]="17" />
+        </button>
+      </div>
+    </div>
+
+    <footer class="step-foot">
+      @if (!valid()) {
+        <p class="step-blocked">A step needs a name.</p>
+      }
+
+      <button
+        type="button"
+        class="btn btn-primary btn-save"
+        [disabled]="!valid()"
+        (click)="close()"
+      >
+        Save Changes
+      </button>
+    </footer>
+  </div>
+</div>

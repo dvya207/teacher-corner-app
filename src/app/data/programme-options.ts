@@ -220,7 +220,6 @@ export function emptyProgrammeDraft(): ProgrammeDraft {
     type: 'REGULAR',
     programmeStatus: 'LIVE',
     programmeImagePath: '',
-    learningUnitsIds: [],
-    assignmentIds: []
+    learningUnitsIds: []
   };
 }

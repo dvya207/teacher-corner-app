@@ -1,0 +1,264 @@
+/* ==========================================================================
+   Rich text — a toolbar over a contenteditable surface.
+
+   Built to look like the app's own inputs rather than like Quill's default
+   chrome: the field it replaces is a `.field input`, and a control that framed
+   itself differently would read as a different product on the same form.
+   ========================================================================== */
+
+.rt {
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  overflow: hidden;
+}
+
+.rt:focus-within {
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/* TWO ROWS, as the reference has: fourteen controls on one line either wrap
+   unpredictably or squeeze past being clickable at the 512px content width. */
+.rt-bar {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--ink-050);
+}
+
+.rt-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.rt-row + .rt-row {
+  margin-top: 4px;
+}
+
+/*
+ * COMPACT: both rows on one line.
+ *
+ * The rows are kept in the markup rather than merged, so the full and short bars
+ * are the same template with groups hidden — one row order to reason about
+ * instead of two. `display: contents` makes the surviving groups children of the
+ * bar itself, which is what lets them sit on a single line; without it the empty
+ * second row still takes its own line and leaves a gap under the marks.
+ */
+.rt.is-compact .rt-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rt.is-compact .rt-row {
+  display: contents;
+}
+
+.rt.is-compact .rt-row + .rt-row {
+  margin-top: 0;
+}
+
+/* `display: contents` costs the groups their sibling relationship ACROSS rows, so
+   the `.rt-group + .rt-group` rule above cannot draw this one divider. */
+.rt.is-compact .rt-row + .rt-row > .rt-group:first-child {
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+/* Groups separated by a rule rather than by a wider gap, so the toolbar reads as
+   three sets of related controls at a glance. */
+.rt-group {
+  display: flex;
+  gap: 2px;
+}
+
+.rt-group + .rt-group {
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+/* A SELECT, sized to its content and matching the buttons' height so the row
+   does not step up and down. */
+/* A FIXED WIDTH. Left to size itself a select takes the width of its longest
+   option plus the platform's arrow, which pushed the first row's list buttons onto
+   a second line. 76px fits 'Normal' and every other label here. */
+.rt-select {
+  width: 76px;
+  height: 26px;
+  padding: 0 4px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  font-size: 12px;
+  color: var(--ink-700);
+}
+
+/* ---- Colour pickers -----------------------------------------------------
+   A label wrapping a hidden-ish native input: the swatch is the letter A with a
+   bar of the chosen colour under it, which is what the reference shows, while
+   the platform's own picker does the actual work. */
+
+.rt-colour {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s var(--ease);
+}
+
+.rt-colour:hover {
+  background: var(--ink-100);
+}
+
+.rt-colour-mark {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-900);
+  border-bottom: 2px solid currentcolor;
+}
+
+.rt-colour-mark.is-highlight {
+  /* The highlight swatch reads as a marker rather than as text colour. */
+  padding: 0 2px;
+  background: #ffff00;
+  border-bottom-color: var(--ink-500);
+}
+
+/* The native input covers the swatch so a click anywhere opens the picker, and
+   is invisible rather than display:none — a hidden input cannot be opened. */
+.rt-colour input[type='color'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.rt-btn {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--ink-700);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.rt-btn:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+/* Image and PDF, tinted as the reference tints them: they are the two controls
+   that ADD something rather than restyling what is already there. A label, not a
+   button, because each wraps a file input. */
+.rt-btn.is-media {
+  background: var(--tint-blue);
+  color: var(--on-blue);
+  cursor: pointer;
+}
+
+.rt-btn.is-media:hover {
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+/* ---- Upload feedback --------------------------------------------------- */
+
+.rt-status {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--tint-blue);
+  font-size: 12px;
+  color: var(--on-blue);
+}
+
+.rt-status.is-error {
+  background: var(--tint-red);
+  color: var(--on-red);
+}
+
+.rt-surface-wrap {
+  position: relative;
+}
+
+.rt-placeholder {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  font-size: 13.5px;
+  color: var(--ink-400);
+  pointer-events: none;
+}
+
+.rt-surface {
+  min-height: inherit;
+  padding: 11px 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-900);
+  outline: none;
+  overflow-y: auto;
+}
+
+/* The surface renders user HTML, so the elements it can contain need styling —
+   without this an <h1> inherits the field's 13.5px and a list loses its markers. */
+.rt-surface h1 { margin: 6px 0; font-size: 20px; font-weight: 700; }
+.rt-surface h2 { margin: 6px 0; font-size: 17px; font-weight: 700; }
+.rt-surface h3 { margin: 6px 0; font-size: 15px; font-weight: 700; }
+.rt-surface p  { margin: 4px 0; }
+
+.rt-surface ul,
+.rt-surface ol {
+  margin: 4px 0;
+  padding-left: 22px;
+  list-style-position: outside;
+}
+
+.rt-surface ul { list-style-type: disc; }
+.rt-surface ol { list-style-type: decimal; }
+
+/* A code block, which the </> button produces. Monospace and tinted, so it is
+   distinguishable from a quote at a glance. */
+.rt-surface pre {
+  margin: 6px 0;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-100);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+}
+
+.rt-surface a {
+  color: var(--accent-600);
+  text-decoration: underline;
+}
+
+.rt-surface blockquote {
+  margin: 6px 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--ink-300);
+  color: var(--ink-700);
+}
+
+/* Production embeds images in a question title. This app cannot INSERT one, but
+   it must not break one that is already there. */
+.rt-surface img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}

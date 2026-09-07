@@ -1,0 +1,132 @@
+/* ==========================================================================
+   Assignment picker — only what differs from the learning-unit picker.
+
+   The panels, counts, rows, drag states and empty states come from
+   learning-unit-picker.css, listed first in this component's styleUrls. What is
+   here is the card's second line and the due-date field, which that picker has
+   no equivalent of.
+   ========================================================================== */
+
+/*
+ * THE TYPE, as production shows it: the raw stored value under the title, in the
+ * accent colour rather than the muted grey the learning-unit meta line uses. It
+ * is the one piece of classification on the card and worth reading first.
+ */
+.ap-type {
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  color: var(--accent-600);
+}
+
+/* Room for the due-date row, which makes a selected card taller than an
+   available one. */
+.unit-row.ap-selected {
+  align-items: flex-start;
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+
+/* The due date as SHOWN on the card. It is set in the dialog. */
+.ap-due-shown {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--ink-600);
+}
+
+.ap-due-shown em {
+  font-style: normal;
+  color: var(--ink-400);
+}
+
+/* The pencil, borrowing the move button's shape from the shared stylesheet. */
+.ap-edit {
+  color: var(--accent-600);
+}
+
+/* --------------------------------------------------------------------------
+   The due-date dialog
+
+   A SECOND LAYER OVER A MODAL, which is what production does here: the wizard is
+   already a dialog and this opens on top of it. z-index is above the wizard's own
+   because the two are siblings in the stacking context the overlay creates.
+   -------------------------------------------------------------------------- */
+
+.ap-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+}
+
+.ap-dialog {
+  width: min(460px, 100%);
+  padding: 26px 28px 24px;
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.ap-dialog h3 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 650;
+  text-align: center;
+  color: var(--on-violet);
+}
+
+/* Which assignment is being dated. Production's dialog does not name it, and it
+   is the one thing a reader here might otherwise have to remember. */
+.ap-dialog-for {
+  margin: 0 0 18px;
+  font-size: 12.5px;
+  text-align: center;
+  color: var(--ink-500);
+  overflow-wrap: anywhere;
+}
+
+/* The tinted panel the reference puts the field inside. */
+.ap-dialog-panel {
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: var(--tint-blue);
+}
+
+.ap-dialog-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-violet);
+}
+
+.ap-dialog-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink-800);
+}
+
+.ap-dialog-input:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/*
+ * Cancel and Save, right-aligned. Production centres a lone Save; Cancel is here
+ * because this dialog can be reached by a drag, and a drag that opened a modal
+ * with no way out but the backdrop is a trap.
+ */
+.ap-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}

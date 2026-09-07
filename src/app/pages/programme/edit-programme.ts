@@ -1,23 +1,34 @@
 import { Component, computed, input, output, signal, inject } from '@angular/core';
 import { ConfigurationService } from '../../services/configuration.service';
 
+import {
+  AssignmentPicker,
+  PickableAssignment
+} from '../../components/assignment-picker/assignment-picker';
 import { Icon } from '../../components/icon/icon';
+import { LearningUnitPicker } from '../../components/learning-unit-picker/learning-unit-picker';
 import {
   isActiveStatus,
   rangeLabel,
   scopeOf,
   statusLabel
 } from '../../data/programme-options';
-import { Programme } from '../../models/teaching.model';
+import {
+  PickableUnit,
+  Programme,
+  ProgrammeAssignment
+} from '../../models/teaching.model';
 
 /**
  * Edit Programme — the Basic Info form.
  *
- * ONE PANE, NOT THREE. It briefly carried production's Manage Learning Units and
- * Manage Assignments tabs; both were removed on instruction. Nothing about the
+ * THREE PANES, production's own: Basic Info, Manage Learning Units and Manage
+ * Assignments. The last two were each removed at one point and each came back;
+ * without them a programme's units and assignments could only be set at creation,
+ * so changing either meant recreating the programme. Nothing about the
  * learningUnits collection, its rules or its trash changed with them — only this
  * dialog's tabs and the reads that fed them, so a programme's stored
- * `learningUnitsIds` and `assignmentIds` are left exactly as they are, written by
+ * `learningUnitsIds` is left exactly as it is, written by
  * nothing and read by nothing here.
  *
  * WHAT BASIC INFO SHOWS, AND WHAT IT DOES NOT. The field set is production's
@@ -42,7 +53,7 @@ import { Programme } from '../../models/teaching.model';
  */
 @Component({
   selector: 'app-edit-programme',
-  imports: [Icon],
+  imports: [AssignmentPicker, Icon, LearningUnitPicker],
   templateUrl: './edit-programme.html',
   styleUrl: './edit-programme.css',
   /**
@@ -64,8 +75,24 @@ export class EditProgramme {
 
   readonly programme = input.required<Programme>();
 
+  /**
+   * The learning-unit catalogue, for the Manage Learning Units tab.
+   *
+   * Supplied by the parent, like the wizard's is: this dialog reads nothing, and
+   * toPickableUnits is where the live filter and the row shape live.
+   */
+  readonly units = input<PickableUnit[]>([]);
+
   readonly saving = input(false);
   readonly error = input('');
+
+  /**
+   * The assignments to choose from, for the Manage Assignments tab.
+   *
+   * Defaulted to empty so the tab renders its own "No assignments available"
+   * rather than the caller needing to know whether there are any.
+   */
+  readonly assignments = input<PickableAssignment[]>([]);
 
   readonly saved = output<Partial<Programme>>();
   readonly closed = output<void>();
@@ -82,6 +109,57 @@ export class EditProgramme {
    * frame of empty fields first.
    */
   private readonly edits = signal<Partial<Programme> | null>(null);
+
+  /* ======================================================================
+     TABS — Basic Info, Manage Learning Units, Manage Assignments
+
+     ALL THREE EDIT THROUGH THE SAME MECHANISM, which is the point worth stating
+     because it is what makes "whatever is edited lands in the right field" true
+     rather than hopeful: every tab calls `patch(field, value)`, `save()` emits
+     the accumulated `Partial<Programme>`, and ProgrammeService.update writes it.
+     That update strips only the identity fields — docId, programmeId, ownerId,
+     programmeCode, createdAt — and passes everything else through, so
+     `learningUnitsIds` and `assignmentIds` persist by the same route as
+     `programmeName`.
+
+     TWO FIELDS, TWO SHAPES. `learningUnitsIds` is an ARRAY and positional;
+     `assignmentIds` is a MAP keyed by doc id. Each tab's picker matches its own
+     shape, which is why they are two components rather than one parameterised
+     one — see the note on AssignmentPicker.
+     ====================================================================== */
+
+  readonly tabs = ['Basic Info', 'Learning Units', 'Assignments'] as const;
+  readonly tab = signal<(typeof this.tabs)[number]>('Basic Info');
+
+  /**
+   * The units currently attached, in order.
+   *
+   * The EDIT if one has been made, otherwise what is stored — the same rule
+   * every other field here follows, so an untouched tab reports the stored list
+   * and a touched one reports the pending change.
+   */
+  readonly selectedIds = computed(
+    () => this.edits()?.learningUnitsIds ?? this.programme().learningUnitsIds ?? []
+  );
+
+  setUnits(ids: string[]): void {
+    this.patch('learningUnitsIds', ids);
+  }
+
+  /**
+   * The assignments currently attached, keyed by doc id.
+   *
+   * The EDIT if one has been made, otherwise what is stored — the same rule every
+   * other field here follows. `?? {}` rather than leaving it undefined: most
+   * programmes have no such key, and the picker needs a map to read.
+   */
+  readonly selectedAssignments = computed(
+    () => this.edits()?.assignmentIds ?? this.programme().assignmentIds ?? {}
+  );
+
+  setAssignments(map: Record<string, ProgrammeAssignment>): void {
+    this.patch('assignmentIds', map);
+  }
 
   private field<K extends keyof Programme>(key: K): Programme[K] {
     const edited = this.edits();
@@ -167,9 +245,23 @@ export class EditProgramme {
     return Object.entries(edited).some(([key, value]) => {
       const original = this.programme()[key as keyof Programme];
 
-      return Array.isArray(value) && Array.isArray(original)
-        ? value.join(' ') !== original.join(' ')
-        : value !== original;
+      if (Array.isArray(value) || Array.isArray(original)) {
+        return !sameArray(value, original);
+      }
+
+      /*
+       * BY VALUE, NOT BY IDENTITY, for the assignments map.
+       *
+       * `value !== original` is object identity, and every edit produces a fresh
+       * object — so a map ticked and then unticked back to what it was would
+       * leave Save enabled and write an identical document. The arrays above had
+       * the same problem, which is why they were already compared by content.
+       */
+      if (isPlainObject(value) || isPlainObject(original)) {
+        return !sameMap(value, original);
+      }
+
+      return value !== original;
     });
   });
 
@@ -195,4 +287,65 @@ export class EditProgramme {
   close(): void {
     this.closed.emit();
   }
+}
+
+/** Whether a value is a plain object — a map field rather than a scalar. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Two arrays with the same members in the same order. */
+function sameArray(a: unknown, b: unknown): boolean {
+  const left = Array.isArray(a) ? a : [];
+  const right = Array.isArray(b) ? b : [];
+
+  return left.length === right.length && left.every((entry, i) => entry === right[i]);
+}
+
+/**
+ * Two maps with the same keys and equivalent entries.
+ *
+ * COMPARES `assignmentDueDate` BY ITS MILLISECONDS, not by reference: a
+ * Timestamp rebuilt from the same instant is a different object, and comparing
+ * references would report a change that is not one. `isEqual` exists on
+ * Firestore's Timestamp but not on a plain `{seconds, nanoseconds}` read back
+ * from an export, so the millis are the safer common ground.
+ */
+function sameMap(a: unknown, b: unknown): boolean {
+  const left = isPlainObject(a) ? a : {};
+  const right = isPlainObject(b) ? b : {};
+  const keys = Object.keys(left);
+
+  if (keys.length !== Object.keys(right).length) {
+    return false;
+  }
+
+  return keys.every(key => {
+    const one = left[key];
+    const two = right[key];
+
+    if (!isPlainObject(one) || !isPlainObject(two)) {
+      return one === two;
+    }
+
+    return (
+      one['assignmentId'] === two['assignmentId'] &&
+      millisOf(one['assignmentDueDate']) === millisOf(two['assignmentDueDate'])
+    );
+  });
+}
+
+/** A Timestamp's millis, however it was stored. null and absent are the same. */
+function millisOf(value: unknown): number | null {
+  const stamp = value as { toMillis?: () => number; seconds?: number } | null | undefined;
+
+  if (stamp?.toMillis) {
+    return stamp.toMillis();
+  }
+
+  if (typeof stamp?.seconds === 'number') {
+    return stamp.seconds * 1000;
+  }
+
+  return null;
 }

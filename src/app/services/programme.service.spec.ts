@@ -25,7 +25,6 @@ function programme(fields: Partial<Programme>): Programme {
     programmeStatus: 'LIVE',
     programmeImagePath: '',
     learningUnitsIds: [],
-    assignmentIds: [],
     ...fields
   } as Programme;
 }
@@ -148,7 +147,6 @@ describe('normaliseProgramme', () => {
     expect(result.programmeStatus).toBe('LIVE');
     expect(result.programmeImagePath).toBe('');
     expect(result.learningUnitsIds).toEqual([]);
-    expect(result.assignmentIds).toEqual([]);
   });
 
   /**

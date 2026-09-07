@@ -801,3 +801,117 @@
     display: none;
   }
 }
+
+/* ==========================================================================
+   INSTITUTIONS TREE
+
+   Production's sidebar group: Institutions, then the schools this teacher
+   works at, then the classes in each. Three indents, and the deepest one is
+   the only row that navigates.
+   ========================================================================== */
+
+/* The group header reuses .nav-item, so it sits at the same rhythm as
+   Dashboard above it; this only adds what a toggle needs. */
+.nav-group {
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+/* Pushed to the right edge, so the chevrons line up down the tree whatever
+   the label length. */
+.nav-chevron {
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.nav-group.is-open {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--white);
+}
+
+/*
+ * THE GUIDE LINE. A single left border on the container rather than one per
+ * row: the rows have different heights once a school name wraps to two lines,
+ * and per-row borders leave gaps at every seam.
+ */
+.nav-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 2px 18px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.nav-school,
+.nav-class {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(203, 213, 225, 0.7);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+/* A school name is long — 'PSBB Learning Leadership Academy' — and wraps to two
+   lines in production's sidebar rather than truncating, because the school is
+   what the row identifies. */
+.nav-school .nav-label {
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.nav-school:hover,
+.nav-class:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--white);
+}
+
+.nav-school.is-open {
+  background: rgba(255, 255, 255, 0.11);
+  color: var(--white);
+}
+
+.nav-classes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 4px 16px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.nav-class {
+  font-size: 12.5px;
+}
+
+/* The classes are the only rows that navigate, so they are the only ones that
+   can be the active route. */
+.nav-class.is-active {
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+/*
+ * COLLAPSED RAIL: the tree goes away entirely.
+ *
+ * The rail is 76px of icons with no room for a label, and a column of identical
+ * building icons at three indents says nothing. The group header keeps its icon
+ * so the section is still reachable — clicking it expands the sidebar's own
+ * behaviour, unchanged.
+ */
+.shell.is-collapsed .nav-tree,
+.shell.is-collapsed .nav-chevron {
+  display: none;
+}

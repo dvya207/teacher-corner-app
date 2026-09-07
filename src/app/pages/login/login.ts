@@ -181,10 +181,36 @@ export class Login implements OnDestroy {
     // Digits only. Paste is the common case: a number copied from a contact card
     // arrives with spaces, dashes or a +91 already on the front.
     const digits = value.replace(/\D/g, '');
-        // Strip a pasted dial code only when it matches the SELECTED one, so choosing
-    // +1 and pasting a number starting 91 does not silently lose two digits.
+
+    /*
+     * STRIPPING A PASTED DIAL CODE IS ONLY SAFE WHEN THE NUMBER IS TOO LONG
+     * WITHOUT IT, and getting that wrong ate two digits from real numbers.
+     *
+     * The previous rule was "starts with the selected dial code". With +91
+     * selected, an Indian mobile that legitimately BEGINS 91 — 91xxxxxxxx is a
+     * real series, Indian mobiles start 6-9 — matched it, so typing 9180000000
+     * left 80000000 in the field: eight digits, silently, as it was typed.
+     *
+     * A leading 91 is only a dial code if what follows it is still a whole
+     * number. So the length decides, not the prefix: strip only when the digits
+     * are EXACTLY dial + a full local number, which is what a pasted +91 number
+     * looks like and what a typed one never does.
+     *
+     *   9180000000    (10) -> kept whole, a real number starting 91
+     *   919180000000  (12) -> 91 stripped, leaving 9180000000
+     *   91800000001   (11) -> kept, then trimmed by maxDigits; a half-typed
+     *                         number must not lose its first two digits
+     *
+     * Deliberately conservative for other countries: their local lengths vary,
+     * so an exact match rarely fires and a pasted dial code is simply kept and
+     * trimmed. Keeping a digit too many is visible and fixable; eating two is
+     * neither.
+     */
     const dial = this.countryCode().replace('+', '');
-    const withoutDial = digits.startsWith(dial) ? digits.slice(dial.length) : digits;
+    const withoutDial =
+      digits.length === dial.length + this.maxDigits() && digits.startsWith(dial)
+        ? digits.slice(dial.length)
+        : digits;
 
     this.phoneNumber.set(withoutDial.slice(0, this.maxDigits()));
     this.errorMessage.set('');
@@ -276,6 +302,9 @@ export class Login implements OnDestroy {
 
     try {
       await this.auth.loginWithGoogle();
+      // SAME BOOKKEEPING AS THE OTP PATH. Omitting it here is what left every
+      // Google account without a teacher record.
+      await this.linkTeacherRecord();
       await this.router.navigate(['/dashboard']);
     } catch (error) {
       this.errorMessage.set(this.auth.describeError(error));
@@ -404,18 +433,60 @@ export class Login implements OnDestroy {
    * counts and a Resend button that never appears.
    */
   /**
-   * Fills in teacherMeta.uid on the record an admin registered for this number.
+   * Makes sure this session has a teacher record: links one, or creates one.
    *
    * AFTER the session exists, because the uid being recorded is this session's.
    *
-   * SWALLOWED ON FAILURE, deliberately. This is bookkeeping that links a record to
-   * an account; a refused write or a dropped network must not turn a successful
-   * sign-in into an error the teacher can do nothing about. The next sign-in tries
-   * again, since the field is only filled when blank.
+   * IT USED TO ONLY LINK, and only on the OTP path. That left two holes. A number
+   * matching no registered record stayed unlinked forever, and Google sign-in
+   * never called this at all — it cannot link by number, because Google supplies
+   * no number. On the dev database that had stranded 7 of 13 accounts with no
+   * teacher record, which is where a teacher's completion, activity progress and
+   * submissions now have to be written.
+   *
+   * WHAT IT DOES NOT DO IS DECIDE ACCESS. Having a record is not approval;
+   * `isRegisteredTeacher` still answers that, and a record created here carries
+   * no institution and no classrooms to be approved for.
+   *
+   * SWALLOWED ON FAILURE, deliberately and unchanged. This is bookkeeping; a
+   * refused write or a dropped network must not turn a successful sign-in into an
+   * error the teacher can do nothing about. The next sign-in tries again, and
+   * every step is idempotent.
    */
   private async linkTeacherRecord(): Promise<void> {
+    /*
+     * EVERY LINE IS INSIDE THE TRY, including reading the uid.
+     *
+     * It was not, briefly, and that was a real defect rather than a test
+     * inconvenience: anything that threw while GATHERING the identity escaped
+     * this method, and since the verify path awaits it, a successful sign-in
+     * would have stopped before navigating and left the teacher on the login
+     * screen with no error. Best-effort means the whole of it.
+     */
     try {
-      await this.teachers.linkSignedInUid(this.phoneNumber(), this.auth.currentUid() ?? '');
+      const uid = this.auth.currentUid();
+
+      if (!uid) {
+        return;
+      }
+
+      /*
+       * THE PHONE PATH KNOWS THE NUMBER FROM THE FORM, not from the auth record —
+       * that is the number the administrator would have registered. Google gives
+       * an email and a display name and no number, so both are passed and
+       * whichever is present is used.
+       */
+      const user = this.auth.currentUser;
+      const [firstName = '', ...rest] = (user?.displayName ?? '').trim().split(/\s+/);
+
+      await this.teachers.ensureRecordForSignedInUser({
+        uid,
+        phoneNumber: this.phoneNumber() || user?.phoneNumber || '',
+        countryCode: this.countryCode(),
+        email: user?.email ?? '',
+        firstName,
+        lastName: rest.join(' ')
+      });
     } catch (error) {
       console.error('Signed in, but could not link the teacher record to this account.', error);
     }

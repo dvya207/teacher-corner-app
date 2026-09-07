@@ -1,0 +1,593 @@
+/* ==========================================================================
+   A CLASSROOM'S LEARNING UNITS
+
+   Production's page, at its proportions: a programme pill and the student count
+   in a header strip, a filter row, then a card grid.
+   ========================================================================== */
+
+.cu-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+
+  /*
+   * THE CONTENT MEASURE — how wide the search row and the cards are allowed to
+   * get, regardless of the window.
+   *
+   * 1100px, and it is measured rather than picked: in the reference the outer
+   * panel spans about 1514px while the filter row and the card grid both span
+   * about 1104px, centred, leaving roughly 205px of gutter each side. With the
+   * 32px gap below, (1100 - 64) / 3 = 345px a card, which is the width its cards
+   * actually are.
+   *
+   * WHY A CAP AT ALL. The grid was `auto-fill, minmax(320px, 1fr)`, so a wide
+   * monitor packed four or five cards edge to edge across the full content
+   * width. The artwork is the card here, and a row of five narrow ones reads as a
+   * thumbnail strip rather than as the deliberate three-up layout being followed.
+   */
+  --cu-measure: 1100px;
+}
+
+/*
+ * THE CENTRED COLUMN.
+ *
+ * The header strip above deliberately does NOT take this: in the reference it
+ * spans the full panel — the programme pill hard left, the action pills hard
+ * right — while everything below it sits in the narrower measure. That contrast
+ * is what makes the strip read as page chrome rather than as the first card.
+ *
+ * One selector list rather than a class on each element, because the rule is
+ * "everything below the strip shares one measure" and stating it once means a
+ * block added later cannot be given a different width by omission.
+ */
+.cu-filters,
+.cu-grid,
+.cu-table-wrap,
+.cu-empty {
+  width: 100%;
+  max-width: var(--cu-measure);
+  /* margin-inline, not `margin: 0 auto`: the vertical rhythm is the flex column's
+     `gap`, and a vertical margin here would add to it unevenly. */
+  margin-inline: auto;
+}
+
+/* A TINTED STRIP, not a white card. The programme pill sits at one end and the
+   action pills at the other, on a ground a shade darker than the page — which is
+   how the UI being followed separates the strip from the cards below it. */
+.cu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: var(--radius-xl);
+  background: var(--ink-100);
+}
+
+/* ---- The programme tabs -------------------------------------------------
+   One per programme the classroom runs. The SELECTED one is the blue pill in
+   production's UI; the rest are quiet, because a row of five filled pills says
+   nothing about which is showing. */
+
+.cu-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cu-tab {
+  display: inline-block;
+  max-width: 420px;
+  padding: 9px 18px;
+  border-radius: var(--radius-full);
+  background: var(--ink-100);
+  color: var(--ink-700);
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.cu-tab:hover {
+  background: var(--tint-blue);
+  color: var(--accent-600);
+}
+
+.cu-tab.is-selected {
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+.cu-tab.is-empty {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.cu-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cu-students,
+.cu-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--ink-700);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Disabled, and looking it — see the note in the template on why these are
+   drawn at all. */
+.cu-pill-btn:disabled {
+  color: var(--ink-400);
+  cursor: not-allowed;
+}
+
+.cu-pill-btn:disabled app-icon {
+  opacity: 0.6;
+}
+
+.cu-count {
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--tint-blue);
+  color: var(--on-blue);
+  font-size: 11.5px;
+}
+
+/* ---- Filters ------------------------------------------------------------- */
+
+/*
+ * BOTH CONTROLS SIZED AND PACKED LEFT, with the spare width left empty.
+ *
+ * This was `minmax(0, 1fr) minmax(0, 190px)`, so the search field absorbed all
+ * the spare width and the select was pushed hard against the panel's right edge
+ * — the two controls sat at opposite ends of a 1100px row. In the reference they
+ * are a PAIR at the left: a ~340px field, a ~14px gap, a ~158px select, and then
+ * nothing for the remaining 550px.
+ *
+ * `justify-content: start` is what does it. With fixed track sizes and no `1fr`,
+ * the leftover space would otherwise be distributed by the default `stretch`; a
+ * third filler column would work too, but an empty track that exists only to
+ * absorb space is a thing to explain later.
+ */
+.cu-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 340px) minmax(0, 158px);
+  justify-content: start;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+/* The magnifier sits inside the field, so the input carries the padding for it
+   rather than the icon being a sibling that pushes the text along. */
+.cu-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cu-search app-icon {
+  position: absolute;
+  left: 13px;
+  color: var(--ink-400);
+  pointer-events: none;
+}
+
+.cu-search input,
+.cu-lang select {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  color: var(--ink-900);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.cu-search input {
+  padding-left: 38px;
+}
+
+.cu-search input::placeholder {
+  color: var(--ink-400);
+}
+
+.cu-search input:focus,
+.cu-lang select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Cards --------------------------------------------------------------- */
+
+/* WIDER COLUMNS AND A TALLER IMAGE. The cards were 260px with a 130px
+   thumbnail, which made a photographed model the smallest thing on a card whose
+   whole job is to be recognised by it. 320px and 165px is closer to the UI being
+   followed, and still fits three across at this content width. */
+/*
+ * THREE, AT A FIXED COUNT — not auto-fill.
+ *
+ * auto-fill decides the count from the available width, which is what packed
+ * five narrow cards onto a wide screen. The reference is three-up at every width
+ * that fits them, and the steps below are explicit so the count is a decision
+ * rather than a consequence of the window. Same approach, and the same reasoning,
+ * as the Learning Units card grid.
+ *
+ * 32px gap: measured off the reference, where a ~346px card sits ~34px from the
+ * next. Also what makes (1100 - 64) / 3 land on 345px.
+ */
+.cu-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+}
+
+/* 1100px of measure minus two 32px gaps over three columns is 345px a card, so
+   below about 1080px of available width the third column would fall under the
+   ~300px a thumbnail, a two-line name and a footer row need. Two, then one. */
+@media (max-width: 1080px) {
+  .cu-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .cu-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cu-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+  transition: box-shadow 0.16s var(--ease), transform 0.16s var(--ease);
+}
+
+.cu-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+/*
+ * THE THUMBNAIL WELL.
+ *
+ * The gradient is the ground the code placeholder sits on AND what shows behind
+ * an image while it loads, so a card never flashes white. `overflow: hidden`
+ * because the image fills the well and the card's top corners are rounded.
+ */
+.cu-thumb {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  height: 165px;
+  background: linear-gradient(135deg, var(--brand-900), var(--accent-500));
+}
+
+/* COVER, not contain: a unit's photo is decoration here, and letterboxing it
+   would leave bands of gradient that read as a broken layout rather than as a
+   deliberate fit. */
+.cu-thumb-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cu-thumb-code {
+  color: var(--white);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-shadow: 0 2px 6px rgb(0 0 0 / 25%);
+}
+
+/* The type, over the thumbnail's top-left corner — production's own badge.
+   Uppercased here so the stored value keeps its exact spelling: a unit's
+   readable id is minted from typeCode and depends on it. */
+.cu-type-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  background: rgb(0 0 0 / 45%);
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cu-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 9px;
+  padding: 16px 18px 18px;
+}
+
+/* Two lines then an ellipsis, as the learning-unit cards do: names run long and
+   a single clamped line loses the parenthetical that distinguishes variants. */
+.cu-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink-900);
+  overflow: hidden;
+}
+
+.cu-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.cu-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cu-dot {
+  color: var(--ink-300);
+}
+
+.cu-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-100);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* A scheduled unit is the exception, so it is the one that gets colour. */
+.cu-chip.is-scheduled {
+  background: var(--tint-green);
+  color: var(--on-green);
+}
+
+.cu-card.is-skeleton {
+  min-height: 300px;
+  background: var(--ink-100);
+  animation: cu-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes cu-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ---- Empty --------------------------------------------------------------- */
+
+.cu-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 46px 24px;
+  border: 1px dashed var(--ink-300);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.cu-empty strong {
+  color: var(--ink-900);
+}
+
+.cu-link {
+  margin-top: 8px;
+  padding: 9px 16px;
+  border-radius: var(--radius-md);
+  background: var(--accent-500);
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Stacked on a narrow screen, and STRETCHED rather than packed left: a 340px
+   field beside a 158px select needs 512px plus the panel's padding, and below
+   that the pair would either overflow or sit as two short controls with a wide
+   empty margin beside them. */
+@media (max-width: 620px) {
+  .cu-filters {
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+  }
+}
+
+/* ==========================================================================
+   Completion pill — top right of the thumbnail
+   ==========================================================================
+   Mirrors .cu-type-badge on the opposite corner, which is where production puts
+   the pair. WHITE-ON-TRANSLUCENT rather than a coloured chip: a photograph can be
+   light, dark and busy within the same 165px, and a tinted pill that reads well
+   over one thumbnail disappears over the next. */
+.cu-progress-pill {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  background: rgb(255 255 255 / 88%);
+  color: var(--ink-700);
+  font-size: 10.5px;
+  font-weight: 700;
+  /* The icon is 12px and the text 10.5px; without this they sit on different
+     baselines and the pill looks tilted. */
+  line-height: 1;
+}
+
+/* ==========================================================================
+   Card footer — the progress track and the action
+   ========================================================================== */
+
+.cu-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px 18px;
+}
+
+/* Takes the spare width so the button sits hard right, as production's does. */
+.cu-track {
+  position: relative;
+  flex: 1;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--ink-100);
+  overflow: hidden;
+}
+
+.cu-track-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--radius-full);
+  background: var(--accent-500);
+  transition: width 0.2s var(--ease);
+}
+
+/*
+ * DISABLED, and styled as such rather than styled as live and merely inert.
+ *
+ * It would open the unit's workflow stepper, which this app does not have. The
+ * greyed fill and the not-allowed cursor are what tell the truth about that at a
+ * glance; the title attribute carries the reason.
+ */
+.cu-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  background: var(--accent-500);
+  color: var(--white);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/*
+ * IT IS A LINK NOW, NOT A BUTTON, so it needs `text-decoration` off — the
+ * disabled rule that used to sit here went with the disabled state, and an <a>
+ * cannot be disabled anyway.
+ */
+.cu-start {
+  text-decoration: none;
+}
+
+.cu-start:hover {
+  background: var(--accent-600);
+}
+
+/* ==========================================================================
+   Row view
+   ==========================================================================
+   Scrolls INSIDE its own wrapper rather than widening the page: seven columns
+   with a long unit name overflow a narrow window, and a horizontally scrolling
+   page moves the sidebar and the topbar with it. */
+.cu-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.cu-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.cu-table th {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--ink-050);
+  color: var(--label);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cu-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink-700);
+  vertical-align: middle;
+}
+
+.cu-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.cu-table tbody tr:hover {
+  background: var(--ink-050);
+}
+
+.cu-cell-code {
+  font-weight: 700;
+  color: var(--ink-900);
+  white-space: nowrap;
+}
+
+/* The one column allowed to be long; the rest stay on one line. */
+.cu-cell-name {
+  min-width: 220px;
+  max-width: 420px;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.cu-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* In a table cell the chip must not claim the row's full height. */
+.cu-table .cu-chip {
+  margin-top: 0;
+}

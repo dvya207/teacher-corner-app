@@ -1,0 +1,465 @@
+<header class="page-head">
+  <div class="page-head-copy">
+    <h1>Assignments</h1>
+    <!-- THREE TYPES, and the subtitle says so. Production's reads "quizzes,
+         uploads, forms, and text blocks"; text blocks, case studies and
+         multi-category are not implemented here, so naming them would promise
+         something the Create menu does not offer. -->
+    <p>Manage quizzes, uploads and forms for your classrooms</p>
+  </div>
+
+  <div class="page-head-actions">
+    <!-- A MENU, not a button: there are three kinds of assignment and the type
+         is chosen before the form opens, which is how production's works too.
+         The wrapper is the positioning context for the popover. -->
+    <div class="create-host">
+      <button
+        type="button"
+        class="add-btn"
+        [attr.aria-expanded]="createMenuOpen()"
+        aria-haspopup="menu"
+        (click)="toggleCreateMenu()"
+      >
+        <app-icon name="plus-circle" [size]="18" />
+        Create Assignment
+      </button>
+
+      @if (createMenuOpen()) {
+        <div class="create-menu" role="menu">
+          @for (entry of types(); track entry.type) {
+            <button
+              type="button"
+              class="create-item"
+              role="menuitem"
+              (click)="openCreate(entry.type)"
+            >
+              <app-icon [name]="$any(entry.icon)" [size]="17" />
+              {{ entry.menuLabel }}
+            </button>
+          }
+        </div>
+      }
+    </div>
+
+    <button type="button" class="trash-btn" (click)="openTrash()">
+      <app-icon name="trash" [size]="17" />
+      Trash
+    </button>
+  </div>
+</header>
+
+<!-- Total plus one card per type — four, where production shows five, because
+     Text Blocks is not a type here. Driven by ASSIGNMENT_TYPES, so the cards and
+     the pills below can never disagree about which types exist. -->
+@if (!statsHidden()) {
+  <section class="stat-cards">
+    <div class="stat-card">
+      <span class="sc-icon sc-total"><app-icon name="clipboard" [size]="20" /></span>
+      <span class="sc-copy">
+        <strong>{{ totalCount() }}</strong>
+        <span>Total</span>
+      </span>
+    </div>
+
+    @for (entry of types(); track entry.type) {
+      <div class="stat-card">
+        <span class="sc-icon" [class]="'sc-icon sc-' + entry.type.toLowerCase()">
+          <app-icon [name]="$any(entry.icon)" [size]="20" />
+        </span>
+        <span class="sc-copy">
+          <strong>{{ countFor(entry.type) }}</strong>
+          <span>{{ entry.plural }}</span>
+        </span>
+      </div>
+    }
+  </section>
+}
+
+@if (error()) {
+  <div class="load-error" role="alert">
+    <strong>Assignments unavailable.</strong>
+    {{ error() }}
+  </div>
+}
+
+@if (notice()) {
+  <div class="toast" role="status">
+    <span class="toast-icon"><app-icon name="check-circle" [size]="18" /></span>
+    {{ notice() }}
+    <button type="button" class="toast-close" (click)="dismissNotice()" aria-label="Dismiss">
+      <app-icon name="close" [size]="14" />
+    </button>
+  </div>
+}
+
+<section class="table-panel">
+
+  <div class="table-toolbar">
+    <div class="filter-pills">
+      @for (filter of filters(); track filter) {
+        <button
+          type="button"
+          class="pill"
+          [class.is-active]="activeFilter() === filter"
+          (click)="setFilter(filter)"
+        >
+          {{ labelFor(filter) }}
+          <span class="pill-count">{{ countFor(filter) }}</span>
+        </button>
+      }
+    </div>
+
+    <div class="toolbar-right">
+      <span class="loaded-count">
+        Loaded {{ filtered().length }} of {{ totalCount() }} entries
+      </span>
+
+      <button type="button" class="hide-btn" (click)="toggleStats()">
+        <app-icon [name]="statsHidden() ? 'eye' : 'eye-off'" [size]="15" />
+        {{ statsHidden() ? 'Show' : 'Hide' }} Stats
+      </button>
+    </div>
+  </div>
+
+  <div class="table-scroll">
+    <table class="asgn-table">
+      <thead>
+        <tr>
+          <th scope="col">Title</th>
+          <th scope="col">Type</th>
+          <th scope="col">Status</th>
+          <th scope="col">Creator</th>
+          <th scope="col">Last Modified</th>
+          <th scope="col" class="asgn-report-head">Report</th>
+          <th scope="col" class="asgn-actions-head">Actions</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        @if (loading()) {
+          <tr><td colspan="7" class="asgn-state">Loading assignments…</td></tr>
+        } @else if (error()) {
+          <!-- NOT "no assignments yet". A failed read is not an empty
+               collection, and saying so would be a plausible-looking wrong
+               answer: the teacher may have fifty. The banner above carries the
+               reason; this says only that the list is unknown. -->
+          <tr>
+            <td colspan="7" class="asgn-state">
+              The list could not be loaded.
+            </td>
+          </tr>
+        } @else if (filtered().length === 0) {
+          <tr>
+            <td colspan="7" class="asgn-state">
+              @if (totalCount() === 0) {
+                <strong>No assignments yet.</strong>
+                Create a quiz, an upload or a form to get started.
+              } @else {
+                Nothing of that type. Try a different filter.
+              }
+            </td>
+          </tr>
+        } @else {
+          @for (row of filtered(); track row.docId) {
+            <tr [class.is-busy]="busyRow() === row.docId">
+              <!-- Title over a shortened id, as production's first column is. The
+                   id is there because it is what a colleague needs to find the
+                   row, and the full value is in the title attribute. -->
+              <td class="asgn-title">
+                <strong [title]="row.displayName">{{ row.displayName || '—' }}</strong>
+                <span class="asgn-id" [title]="row.docId">ID: {{ shortId(row.docId) }}</span>
+              </td>
+
+              <td>
+                <!-- The CONFIGURED label, so a row stored as GAME or TEXTBLOCK
+                     reads as 'Game' or 'Text Block' rather than as a raw
+                     SCREAMING_SNAKE value. The class still keys off the stored
+                     type, so the three this app colours keep their tint and any
+                     other falls back to the badge's default. -->
+                <span class="type-badge" [class]="'type-badge is-' + row.type.toLowerCase()">
+                  {{ typeLabel(row.type) }}
+                </span>
+              </td>
+
+              <td>
+                <span class="status-badge" [class]="'status-badge is-' + statusKind(row.status)">
+                  <span class="status-dot" aria-hidden="true"></span>
+                  {{ statusLabel(row.status) }}
+                </span>
+              </td>
+
+              <td class="asgn-creator">{{ row.creator || '—' }}</td>
+
+              <td class="asgn-date">
+                {{ row.updatedAt ? (row.updatedAt.toDate() | date: 'dd MMM yyyy') : '—' }}
+              </td>
+
+              <!-- REPORT — its own column, between the date and the actions,
+                   which is where production puts it. Separate from Actions on
+                   purpose: editing and deleting change the assignment, and this
+                   only reads from it. -->
+              <td class="asgn-report">
+                <button
+                  type="button"
+                  class="icon-act is-report"
+                  aria-label="Download Report"
+                  title="Download Report"
+                  (click)="openReport(row)"
+                >
+                  <app-icon name="cloud-download" [size]="19" />
+                </button>
+              </td>
+
+              <td class="asgn-actions">
+                <!-- Edit then Trash, in production's order. Each type opens its
+                     own wizard prefilled, and all three emit a whole document. -->
+                <button
+                  type="button"
+                  class="icon-act"
+                  aria-label="Edit"
+                  title="Edit"
+                  [disabled]="busyRow() === row.docId"
+                  (click)="openEdit(row)"
+                >
+                  <app-icon name="edit" [size]="17" />
+                </button>
+
+                <button
+                  type="button"
+                  class="icon-act is-danger"
+                  aria-label="Move to Trash"
+                  title="Move to Trash"
+                  [disabled]="busyRow() === row.docId"
+                  (click)="askMoveToTrash(row)"
+                >
+                  <app-icon name="trash" [size]="17" />
+                </button>
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================================================================
+     Trash
+     ====================================================================== -->
+@if (reporting(); as row) {
+  <app-assignment-report [assignment]="row" (closed)="closeReport()" />
+}
+
+@if (trashOpen()) {
+  <!-- ======================================================================
+       Trash — a FULL-PAGE OVERLAY WITH A REAL TABLE, matching the other four.
+
+       This was a small centre-screen dialog listing names with a Restore button
+       and nothing else. Two things were missing rather than merely different:
+       there was no way to delete a row for good, so the trash could only ever
+       grow, and no Deleted Date, so an accumulating list gave no way to tell
+       what was thrown away when. Both exist on Institutions, Classrooms,
+       Programmes and Learning Units; assignments were the one collection left
+       out.
+       ====================================================================== -->
+  <div class="trash-overlay animate-fade-up">
+
+    <header class="trash-head">
+      <h2>
+        Deleted Assignments
+        <span class="trash-count">{{ trashed().length }}</span>
+      </h2>
+
+      <div class="trash-head-actions">
+        <!-- TWO CLICKS, and the second names the count it will destroy. -->
+        <button
+          type="button"
+          class="empty-btn"
+          [class.is-confirming]="confirmingEmpty()"
+          [disabled]="trashed().length === 0 || busyRow() === '__all__'"
+          (click)="emptyTrash()"
+        >
+          <app-icon name="trash" [size]="16" />
+          @if (busyRow() === '__all__') {
+            Emptying...
+          } @else if (confirmingEmpty()) {
+            Confirm — delete {{ trashed().length }} permanently
+          } @else {
+            Empty Trash
+          }
+        </button>
+
+        <button type="button" class="trash-close" (click)="closeTrash()" aria-label="Close">
+          <app-icon name="close" [size]="19" />
+        </button>
+      </div>
+    </header>
+
+    <div class="trash-body">
+      @if (trashLoading()) {
+        <div class="trash-state">Loading Trash…</div>
+      } @else if (trashError()) {
+        <div class="trash-state is-error" role="alert">{{ trashError() }}</div>
+      } @else if (trashed().length > 0) {
+        <table class="asgn-table trash-table">
+          <thead>
+            <tr>
+              <th class="col-title">Title</th>
+              <th>Type</th>
+              <th>Creator</th>
+              <th>Deleted Date</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            @for (row of trashed(); track row.docId) {
+              <tr [class.is-busy]="busyRow() === row.docId">
+                <td class="col-title" [title]="row.displayName">
+                  <strong>{{ row.displayName || '—' }}</strong>
+                  <span class="asgn-id">ID: {{ shortId(row.docId) }}</span>
+                </td>
+
+                <td>
+                  <!-- The CONFIGURED label, so a row stored as GAME or TEXTBLOCK
+                       reads as 'Game' or 'Text Block' rather than as a raw
+                       SCREAMING_SNAKE value. -->
+                  <span class="type-badge" [class]="'type-badge is-' + row.type.toLowerCase()">
+                    {{ typeLabel(row.type) }}
+                  </span>
+                </td>
+
+                <td class="truncate">{{ row.creator || '—' }}</td>
+
+                <td class="deleted-date">
+                  {{ toDate(row.trashAt) ? (toDate(row.trashAt) | date: 'dd/MM/yyyy') : '—' }}
+                </td>
+
+                <td class="col-actions">
+                  <button
+                    type="button"
+                    class="row-btn is-boxed"
+                    aria-label="Restore"
+                    title="Restore"
+                    [disabled]="busyRow() !== null"
+                    (click)="restore(row)"
+                  >
+                    <app-icon name="restore" [size]="15" />
+                  </button>
+
+                  <button
+                    type="button"
+                    class="row-btn is-boxed is-danger"
+                    aria-label="Delete permanently"
+                    title="Delete permanently"
+                    [disabled]="busyRow() !== null"
+                    (click)="purge(row)"
+                  >
+                    <app-icon name="trash" [size]="15" />
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <div class="trash-empty">
+          <span class="trash-empty-icon"><app-icon name="trash" [size]="26" /></span>
+          <h3>Trash is empty</h3>
+          <p>Assignments you delete will appear here, and can be restored.</p>
+        </div>
+      }
+    </div>
+
+  </div>
+}
+
+<!-- ======================================================================
+     Create, and the delete confirmation
+     ====================================================================== -->
+<!-- ONE WIZARD PER TYPE, all three production's own.
+     See creatingQuiz / creatingUpload / creatingForm. -->
+@if (creatingQuiz()) {
+  <app-quiz-wizard
+    [saving]="saving()"
+    [error]="modalError()"
+    (closed)="closeCreate()"
+    (submitted)="saveNew($event)"
+  />
+}
+
+@if (creatingUpload()) {
+  <app-upload-wizard
+    [saving]="saving()"
+    [error]="modalError()"
+    (closed)="closeCreate()"
+    (submitted)="saveNew($event)"
+  />
+}
+
+@if (creatingForm()) {
+  <app-form-wizard
+    [saving]="saving()"
+    [error]="modalError()"
+    (closed)="closeCreate()"
+    (submitted)="saveNew($event)"
+  />
+}
+
+<!-- ======================================================================
+     Edit — the same three wizards, prefilled.
+
+     Each reuses its create wizard, as production does: the same steps titled
+     "Edit …" with "Update …" at the end, and all three emit a whole document.
+     ====================================================================== -->
+@if (editingQuiz(); as row) {
+  <app-quiz-wizard
+    [quiz]="row"
+    [saving]="saving()"
+    [error]="modalError()"
+    (closed)="closeEdit()"
+    (submitted)="saveContentEdit($event)"
+  />
+}
+
+@if (editingUpload(); as row) {
+  <app-upload-wizard
+    [assignment]="row"
+    [saving]="saving()"
+    [error]="modalError()"
+    (closed)="closeEdit()"
+    (submitted)="saveContentEdit($event)"
+  />
+}
+
+@if (editingForm(); as row) {
+  <app-form-wizard
+    [assignment]="row"
+    [saving]="saving()"
+    [error]="modalError()"
+    (closed)="closeEdit()"
+    (submitted)="saveContentEdit($event)"
+  />
+}
+
+<!-- PRODUCTION'S OWN WARNING, near enough word for word, because it says
+     something this app cannot work out for itself: deleting an assignment drops
+     it from every classroom, teacher and student it was assigned to, and a
+     restore brings back the assignment but NOT those links. That is the sentence
+     worth keeping. Where it differs: production says "lost forever", which is
+     wrong here — this moves the row to the trash and it can be restored. -->
+@if (confirming(); as row) {
+  <app-confirm-dialog
+    heading="Delete Assignment"
+    [message]="'Are you sure you want to delete &quot;' + row.displayName + '&quot;?'"
+    warning="Every teacher, student and classroom this assignment is assigned to will
+             be removed from it. Those have to be set again by hand if it is restored.
+             The assignment itself moves to the trash and can be restored from there."
+    icon="trash"
+    confirmLabel="Confirm"
+    busyLabel="Deleting…"
+    [busy]="busyRow() === row.docId"
+    (confirmed)="moveToTrash()"
+    (cancelled)="cancelConfirm()"
+  />
+}

@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 
 import { AuthService } from '../../services/auth.service';
+import { TeacherService } from '../../services/teacher.service';
 import { OtpService } from '../../services/otp.service';
 import { Login } from './login';
 
@@ -43,6 +44,36 @@ class StubAuthService {
   describeOtpError(error: unknown): string {
     return (error as { message?: string })?.message ?? 'OTP failed.';
   }
+
+  /** The session the login page reads back to identify who just signed in. */
+  uid: string | null = 'uid-1';
+  currentUser: { displayName?: string; email?: string; phoneNumber?: string } | null = {
+    displayName: 'Divya Jain',
+    email: 'divya@example.com'
+  };
+
+  currentUid(): string | null {
+    return this.uid;
+  }
+}
+
+/**
+ * Records what the login page asks for, so the two sign-in paths can be held to
+ * the same promise.
+ */
+class StubTeacherService {
+  ensured: Record<string, unknown>[] = [];
+  fails = false;
+
+  async ensureRecordForSignedInUser(identity: Record<string, unknown>): Promise<string | null> {
+    this.ensured.push(identity);
+
+    if (this.fails) {
+      throw new Error('firestore is unreachable');
+    }
+
+    return 'teacher-doc-1';
+  }
 }
 
 class StubOtpService {
@@ -74,6 +105,7 @@ describe('Login', () => {
   let fixture: ComponentFixture<Login>;
   let component: Login;
   let auth: StubAuthService;
+  let teachers: StubTeacherService;
   let otp: StubOtpService;
   let navigated: unknown[][];
 
@@ -86,6 +118,7 @@ describe('Login', () => {
   beforeEach(async () => {
     TestBed.resetTestingModule();
     auth = new StubAuthService();
+    teachers = new StubTeacherService();
     otp = new StubOtpService();
 
     await TestBed.configureTestingModule({
@@ -93,7 +126,8 @@ describe('Login', () => {
       providers: [
         provideRouter([]),
         { provide: AuthService, useValue: auth },
-        { provide: OtpService, useValue: otp }
+        { provide: OtpService, useValue: otp },
+        { provide: TeacherService, useValue: teachers }
       ]
     }).compileComponents();
 
@@ -176,6 +210,48 @@ describe('Login', () => {
   it('strips a pasted +91 and any punctuation from the number', () => {
     component.onPhoneInput('+91 99999-00004');
     expect(component.phoneNumber()).toBe('9999900004');
+  });
+
+  /*
+   * A NUMBER THAT LEGITIMATELY BEGINS 91.
+   *
+   * Indian mobiles start 6-9, so 91xxxxxxxx is a real series. The dial-code
+   * strip used to fire on the PREFIX, so with +91 selected these numbers lost
+   * their first two digits as they were typed: 9180000000 became 80000000, eight
+   * digits, silently. Stripping is now decided by LENGTH — only a number that is
+   * exactly dial + a full local number has a dial code on it.
+   */
+  it('keeps a ten-digit number that starts with 91', () => {
+    component.onPhoneInput('9180000000');
+    expect(component.phoneNumber()).toBe('9180000000');
+    expect(component.phoneValid()).toBe(true);
+  });
+
+  it('keeps every digit of 9199887766', () => {
+    component.onPhoneInput('9199887766');
+    expect(component.phoneNumber()).toBe('9199887766');
+  });
+
+  it('still strips the dial code from a pasted 91-prefixed 91 number', () => {
+    // Twelve digits: 91 + 9180000000. The only shape that really has a dial code.
+    component.onPhoneInput('919180000000');
+    expect(component.phoneNumber()).toBe('9180000000');
+  });
+
+  it('does not eat the leading 91 of a half-typed number', () => {
+    // Eleven digits, mid-typing. Trimmed from the END by maxDigits; the first two
+    // digits must survive.
+    component.onPhoneInput('91800000001');
+    expect(component.phoneNumber()).toBe('9180000000');
+  });
+
+  it('builds up 91… digit by digit without losing any', () => {
+    // The real failure was per-keystroke, so type it the way a teacher does.
+    const typed = '9180000000';
+    for (let i = 1; i <= typed.length; i++) {
+      component.onPhoneInput(typed.slice(0, i));
+      expect(component.phoneNumber()).toBe(typed.slice(0, i));
+    }
   });
 
   it('reveals the code step only after the send resolves', async () => {
@@ -350,5 +426,109 @@ describe('Login', () => {
     for (const figure of ['248', '1,240', '4.8', '84,500']) {
       expect(hero).not.toContain(figure);
     }
+  });
+});
+
+/**
+ * EVERY SIGNED-IN ACCOUNT ENDS UP WITH A TEACHER RECORD.
+ *
+ * This is the precondition for everything stored under `teachers/{docId}` —
+ * completion, activity progress, submissions. It was not true before: only the
+ * OTP path linked, only against a record an administrator had already
+ * registered, so a number matching nothing and every Google sign-in stayed
+ * unlinked. Measured on the dev database, 7 of 13 accounts had no record.
+ *
+ * Both paths are asserted because the Google one is the one that was missing,
+ * and a future edit is far more likely to add a third path than to break the
+ * first.
+ */
+describe('Login ensures a teacher record exists', () => {
+  let fixture: ComponentFixture<Login>;
+  let component: Login;
+  let auth: StubAuthService;
+  let teachers: StubTeacherService;
+  let otp: StubOtpService;
+  let navigated: unknown[][];
+
+  beforeEach(async () => {
+    TestBed.resetTestingModule();
+    auth = new StubAuthService();
+    teachers = new StubTeacherService();
+    otp = new StubOtpService();
+
+    await TestBed.configureTestingModule({
+      imports: [Login],
+      providers: [
+        provideRouter([]),
+        { provide: AuthService, useValue: auth },
+        { provide: OtpService, useValue: otp },
+        { provide: TeacherService, useValue: teachers }
+      ]
+    }).compileComponents();
+
+    navigated = [];
+    const router = TestBed.inject(Router);
+
+    router.navigate = (...args: unknown[]) => {
+      navigated.push(args);
+
+      return Promise.resolve(true);
+    };
+
+    fixture = TestBed.createComponent(Login);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  async function signInWithOtp(): Promise<void> {
+    component.onPhoneInput('9999900004');
+    fixture.detectChanges();
+    await component.sendCode();
+    component.onDigitInput(0, '123456');
+    fixture.detectChanges();
+    await component.verifyCode();
+  }
+
+  it('ensures a record on the OTP path, carrying the number from the form', async () => {
+    await signInWithOtp();
+
+    expect(teachers.ensured).toHaveLength(1);
+    expect(teachers.ensured[0]['uid']).toBe('uid-1');
+    // The FORM's number, which is what an administrator would have registered,
+    // not whatever the auth record happens to carry.
+    expect(teachers.ensured[0]['phoneNumber']).toBe('9999900004');
+  });
+
+  /** The path that used to do nothing at all. */
+  it('ensures a record on the GOOGLE path too', async () => {
+    await component.signInWithGoogle();
+
+    expect(auth.googleCalls).toBe(1);
+    expect(teachers.ensured).toHaveLength(1);
+    expect(teachers.ensured[0]['uid']).toBe('uid-1');
+    // No number from Google; the email and name are what identify the person.
+    expect(teachers.ensured[0]['email']).toBe('divya@example.com');
+    expect(teachers.ensured[0]['firstName']).toBe('Divya');
+    expect(teachers.ensured[0]['lastName']).toBe('Jain');
+  });
+
+  it('still lands on the dashboard when the record cannot be written', async () => {
+    // BEST EFFORT. Bookkeeping must never cost somebody their sign-in.
+    teachers.fails = true;
+
+    await signInWithOtp();
+
+    expect(navigated).toEqual([[['/dashboard']]]);
+  });
+
+  it('still lands on the dashboard when the session has no uid', async () => {
+    // Gathering the identity happens inside the try for exactly this reason.
+    auth.uid = null;
+    auth.currentUser = null;
+
+    await signInWithOtp();
+
+    expect(teachers.ensured).toHaveLength(0);
+    expect(navigated).toEqual([[['/dashboard']]]);
   });
 });

@@ -7,6 +7,14 @@ import { logger } from 'firebase-functions';
 
 import { EXOTEL_SENDER, sendOtpSms } from './exotel';
 import {
+  AUDIT_COLLECTION,
+  MAX_PASSCODE_ATTEMPTS,
+  PASSCODE_WINDOW_SECONDS,
+  datePassword,
+  timingSafeEqual,
+  toE164
+} from './impersonation';
+import {
   MAX_OTP_REQUESTS_PER_WINDOW,
   MAX_VERIFICATION_ATTEMPTS,
   OTP_EXPIRY_SECONDS,
@@ -319,5 +327,426 @@ async function mintToken(phoneNumber: string): Promise<string> {
       code: (error as { code?: string }).code
     });
     throw new HttpsError('internal', 'Verified, but the login token could not be issued.');
+  }
+}
+
+/* ==========================================================================
+   Impersonation — signing in AS a teacher, for support
+   ========================================================================== */
+
+/**
+ * Mints a session for another user's account, from a mobile number and today's
+ * date.
+ *
+ * NO CALLER AUTHENTICATION. This is the app owner's stated requirement and it is
+ * worth being blunt about at the top of the function rather than burying it: the
+ * endpoint can be called by anyone who knows its URL. Two things gate it, and
+ * that is all — the passcode, and the number already existing in `users` or
+ * `teachers`. See the note inside on section 1.
+ *
+ * HOW IT STILL DIFFERS FROM PRODUCTION, which is now a shorter list than it was:
+ *
+ *   1. The PASSCODE IS CHECKED HERE, against the server's own clock. Production
+ *      compares it in the browser (`if (this.password != this.getPassword())`),
+ *      in a bundle anyone can read, in front of an endpoint that does not check
+ *      it at all — so production's can be skipped entirely and this one cannot.
+ *
+ *   2. Wrong passcodes are THROTTLED, per target number.
+ *
+ *   3. The number must be in this app's own data. Production's mints a token for
+ *      any number it is given.
+ *
+ *   4. Every attempt is AUDITED, allowed or refused, with the caller's IP, before
+ *      the token exists. Production records nothing.
+ *
+ * The minted token carries `impersonated` / `impersonatedBy` claims, so a rule or
+ * a later function can tell a borrowed session apart from the user's own.
+ */
+export const tcDevImpersonate = onCall(
+  { region: REGION },
+  async request => {
+    const auth = getAuth();
+
+    /* ---- 1. Arguments ------------------------------------------------------
+     *
+     * THERE IS NO CALLER CHECK. Not a session, not a claim, not an allowlist.
+     * The app owner's decision, in their words: "just that number should already
+     * be there in users or teachers collection, no needed of loged in another tab
+     * of this webiste".
+     *
+     * So the whole gate is today's passcode plus the number existing in this app's
+     * own data. That is production's own posture for this page, and it means
+     * anyone who knows this endpoint's URL can obtain a working session for any
+     * teacher in the database, since the date is derivable from a calendar. It was
+     * raised twice and confirmed twice; this comment is the record, not an
+     * argument.
+     *
+     * WHAT IS LEFT, precisely:
+     *   - the passcode must be right, and wrong guesses are throttled per number
+     *   - the number must already be in `users` or `teachers`; no account is
+     *     conjured for an arbitrary number
+     *   - an account holding the `admin: true` claim cannot be impersonated
+     *   - every attempt is audited WITH THE CALLER'S IP, which is now the only
+     *     identifying information that exists about who did it
+     */
+    const { countryCode, phoneNumber, password } = (request.data ?? {}) as {
+      countryCode?: string;
+      phoneNumber?: string;
+      password?: string;
+    };
+
+    const target = toE164(countryCode ?? '+91', phoneNumber ?? '');
+
+    /*
+     * A session is no longer required, but it is still RECORDED when one happens
+     * to be present — the page can be used either way, and knowing which is the
+     * difference between an audit entry naming a person and one naming an address.
+     */
+    const callerUid = request.auth?.uid ?? null;
+    const callerEmail = String(request.auth?.token?.email ?? '') || null;
+    const callerIp = String(request.rawRequest?.ip ?? '') || null;
+    const via = callerUid ? 'signed-in' : 'anonymous';
+
+    if (!target) {
+      throw new HttpsError('invalid-argument', 'A mobile number is required.');
+    }
+
+    if (!password || typeof password !== 'string') {
+      throw new HttpsError('invalid-argument', "Today's passcode is required.");
+    }
+
+    /* ---- 2. The passcode, throttled ----------------------------------------
+     *
+     * KEYED ON THE TARGET NUMBER, because there is no caller left to key on. That
+     * bounds guessing against any ONE teacher to five tries per quarter hour.
+     *
+     * ITS LIMIT, stated rather than hidden: an attacker willing to rotate through
+     * numbers is not bounded by this at all, because each number carries its own
+     * budget. With no caller identity there is nothing better available short of a
+     * global counter, and a global counter would let one bad actor lock every
+     * legitimate user out. This is the less-bad of the two.
+     *
+     * CHECKED BEFORE THE TARGET IS RESOLVED, deliberately. The other order lets
+     * anyone enumerate which numbers exist in the database by reading whether they
+     * got 'not found' or 'wrong passcode', without ever knowing the passcode.
+     */
+    const attemptRef = db
+      .collection(AUDIT_COLLECTION)
+      .doc(`attempts_${target.replace('+', '')}`);
+    const attemptSnapshot = await attemptRef.get();
+    const attemptData = attemptSnapshot.exists
+      ? (attemptSnapshot.data() as { failures?: number; windowStart?: Timestamp })
+      : undefined;
+
+    const now = Timestamp.now();
+    const windowOpen =
+      attemptData?.windowStart !== undefined &&
+      (now.toMillis() - attemptData.windowStart.toMillis()) / 1000 < PASSCODE_WINDOW_SECONDS;
+    const failures = windowOpen ? attemptData?.failures ?? 0 : 0;
+
+    if (failures >= MAX_PASSCODE_ATTEMPTS) {
+      await recordImpersonation({
+        callerUid,
+        callerEmail,
+        callerIp,
+        via,
+        outcome: 'denied-throttled',
+        targetPhone: target,
+        targetUid: null
+      });
+      throw new HttpsError(
+        'resource-exhausted',
+        'Too many incorrect passcodes. Try again in 15 minutes.'
+      );
+    }
+
+    if (!timingSafeEqual(password.replace(/\D/g, ''), datePassword(new Date()))) {
+      await attemptRef.set(
+        {
+          failures: failures + 1,
+          windowStart: windowOpen ? attemptData?.windowStart ?? now : now
+        },
+        { merge: true }
+      );
+      await recordImpersonation({
+        callerUid,
+        callerEmail,
+        callerIp,
+        via,
+        outcome: 'denied-bad-passcode',
+        targetPhone: target,
+        targetUid: null
+      });
+      throw new HttpsError('permission-denied', "That is not today's passcode.");
+    }
+
+    // A correct passcode clears the run of failures, so a typo earlier in the
+    // window does not shorten the next legitimate attempt.
+    await attemptRef.set({ failures: 0, windowStart: now }, { merge: true });
+
+    // ---- 3. The target account ---------------------------------------------
+    const resolved = await resolveTarget(target, phoneNumber ?? '');
+
+    if (!resolved) {
+      await recordImpersonation({
+        callerUid,
+        callerEmail,
+        callerIp,
+        via,
+        outcome: 'denied-no-such-user',
+        targetPhone: target,
+        targetUid: null
+      });
+      throw new HttpsError(
+        'not-found',
+        'That mobile number is not in the users or teachers list.'
+      );
+    }
+
+    const targetUser = await auth.getUser(resolved.uid);
+
+    // Another administrator's account is out of bounds. Allowing it would mean a
+    // seed-list address could take over a claim-holder's session and, through
+    // it, this same function — so one compromised support account would escalate
+    // to all of them. Yourself is allowed: it is the harmless case and the
+    // obvious way to try the flow out.
+    if (targetUser.customClaims?.admin === true && targetUser.uid !== callerUid) {
+      await recordImpersonation({
+        callerUid,
+        callerEmail,
+        callerIp,
+        via,
+        outcome: 'denied-target-is-admin',
+        targetPhone: target,
+        targetUid: targetUser.uid
+      });
+      throw new HttpsError('permission-denied', 'Administrator accounts cannot be impersonated.');
+    }
+
+    // ---- 4. Audit BEFORE the token, then mint ------------------------------
+    //
+    // The order matters. A token minted first and audited second leaves no trace
+    // at all if the audit write fails, and an unrecorded support session is the
+    // one thing this whole feature must not produce.
+    //
+    // `targetVia` is on the record because the four routes are not equally
+    // ordinary: 'created' means this call brought an Auth account into existence,
+    // and a run of those is worth being able to find.
+    await recordImpersonation({
+      callerUid,
+      callerEmail,
+      callerIp,
+      via,
+      outcome: 'allowed',
+      targetPhone: target,
+      targetUid: targetUser.uid,
+      targetVia: resolved.via
+    }, true);
+
+    let token: string;
+
+    try {
+      token = await auth.createCustomToken(targetUser.uid, {
+        // Claims, so the session itself says what it is. A banner driven only by
+        // client state disappears on reload; this does not.
+        impersonated: true,
+        // '' rather than null for an anonymous caller: a custom claim set to null
+        // is not the same as an absent one to every consumer, and the client reads
+        // these with String(), which would render the word "null".
+        impersonatedBy: callerUid ?? '',
+        impersonatedByEmail: callerEmail ?? ''
+      });
+    } catch (error) {
+      logger.error('createCustomToken failed for an impersonation.', {
+        code: (error as { code?: string }).code
+      });
+      throw new HttpsError('internal', 'Authorised, but the session token could not be issued.');
+    }
+
+    logger.info('Impersonation granted', { callerUid, via, targetUid: targetUser.uid });
+
+    return {
+      success: true,
+      token,
+      target: {
+        uid: targetUser.uid,
+        phoneNumber: targetUser.phoneNumber ?? target,
+        displayName: targetUser.displayName ?? ''
+      }
+    };
+  }
+);
+
+/*
+ * callerIsKnown() USED TO LIVE HERE and is gone with the caller check itself.
+ * It read `users/{uid}` and then `teachers` by `teacherMeta.uid` to decide
+ * whether the person calling belonged to this app. Nothing calls it now: the only
+ * membership test left is on the TARGET number, in resolveTarget below.
+ */
+
+/**
+ * Finds the account behind a mobile number — ANYONE ALREADY IN users OR teachers.
+ *
+ * WHY THIS IS NOT JUST getUserByPhoneNumber, which is all it used to be. That
+ * asks Firebase Auth, and Auth only knows a number if the account was created
+ * BY a phone sign-in. Three groups of real teachers are therefore invisible to
+ * it, and all three exist in this project today:
+ *
+ *   1. Registered by Google, phone number typed into their profile. `users/{uid}`
+ *      holds it; the Auth record has no phoneNumber at all. Several of these.
+ *   2. Registered by an administrator into `teachers`, and has since signed in —
+ *      so `teacherMeta.uid` names their account, but Auth may still not hold the
+ *      number.
+ *   3. Registered by an administrator and has NEVER signed in. No Auth account
+ *      exists at all.
+ *
+ * The order below is deliberate: cheapest and most authoritative first, and the
+ * account-creating branch last and only for a teacher the organisation has
+ * already recorded.
+ *
+ * THE NUMBER IS STORED IN MORE THAN ONE FORMAT, which is why each query runs
+ * twice. `users.phone` holds bare digits for most rows and E.164 for a few;
+ * `teachers.teacherMeta.phoneNumber` holds digits. Querying one format finds one
+ * subset, silently, which is precisely the failure this function is meant to stop
+ * being.
+ *
+ * A NOTE ON THE REVERSAL. The previous version refused to create an account and
+ * said so at length: "impersonating a number nobody has registered would conjure
+ * the account it then signs into". That reasoning still holds for an ARBITRARY
+ * number, and case 3 is not one — a `teachers` document is the organisation
+ * asserting this person is theirs. The account created here is the same one their
+ * own first sign-in would have created (mintToken keys on the phone number too),
+ * so it is materialised early rather than invented.
+ */
+async function resolveTarget(
+  e164: string,
+  typedDigits: string
+): Promise<{ uid: string; via: 'auth' | 'users' | 'teachers' | 'created' } | null> {
+  const auth = getAuth();
+  const digits = typedDigits.replace(/\D/g, '') || e164.replace(/\D/g, '');
+
+  // 1. Auth, by phone number. The authoritative answer when it has one.
+  try {
+    const user = await auth.getUserByPhoneNumber(e164);
+    return { uid: user.uid, via: 'auth' };
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'auth/user-not-found') {
+      throw error;
+    }
+  }
+
+  // 2. users/{uid}. THE DOCUMENT ID IS THE UID, so a hit here needs no account
+  //    creation and no second lookup — which is what makes the Google-registered
+  //    teachers of case 1 reachable.
+  for (const value of [digits, e164]) {
+    const found = await db.collection('users').where('phone', '==', value).limit(1).get();
+
+    if (!found.empty) {
+      return { uid: found.docs[0].id, via: 'users' };
+    }
+  }
+
+  // 3. teachers/{docId}. The uid is a FIELD here, not the id — the document id is
+  //    the teacher record's own, and teacherMeta.uid is filled in on their first
+  //    sign-in.
+  for (const field of ['teacherMeta.phoneNumber', 'teacherMeta.phone']) {
+    for (const value of [digits, e164]) {
+      const found = await db.collection('teachers').where(field, '==', value).limit(1).get();
+
+      if (found.empty) {
+        continue;
+      }
+
+      const meta = (found.docs[0].data() as { teacherMeta?: Record<string, unknown> }).teacherMeta;
+      const linkedUid = String(meta?.['uid'] ?? '').trim();
+
+      if (linkedUid) {
+        // Guard against a stale link: the record names a uid, the account is gone.
+        // Falling through to creation would then make a SECOND account for the
+        // same person, so the record is trusted only if the account still exists.
+        try {
+          await auth.getUser(linkedUid);
+          return { uid: linkedUid, via: 'teachers' };
+        } catch (error) {
+          if ((error as { code?: string }).code !== 'auth/user-not-found') {
+            throw error;
+          }
+          logger.warn('A teacher record names a uid with no Auth account.', {
+            teacherDocId: found.docs[0].id
+          });
+        }
+      }
+
+      // Case 3: recorded by the organisation, has never signed in.
+      const name = [meta?.['firstName'], meta?.['lastName']]
+        .map(part => String(part ?? '').trim())
+        .filter(Boolean)
+        .join(' ');
+
+      const created = await auth.createUser({
+        phoneNumber: e164,
+        ...(name ? { displayName: name } : {})
+      });
+
+      logger.info('Created an Auth account for a teacher who had never signed in.', {
+        teacherDocId: found.docs[0].id,
+        uid: created.uid
+      });
+
+      return { uid: created.uid, via: 'created' };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * One audit document per attempt.
+ *
+ * `required` DECIDES WHETHER A FAILED WRITE IS FATAL, and the two callers want
+ * opposite answers. On the allowed path it is fatal: an unrecorded support
+ * session is the one outcome this feature must not produce, so a failed audit
+ * refuses the impersonation. On the refusal paths it is not: the caller is being
+ * turned away regardless, and replacing 'that is not today's passcode' with a
+ * storage error would hide the reason they actually need.
+ *
+ * Auto-id, and the `attempts_{uid}` throttle documents share this collection —
+ * they are told apart by having no `outcome` field.
+ */
+async function recordImpersonation(
+  entry: {
+    callerUid: string | null;
+    callerEmail: string | null;
+    /**
+     * The request's source address.
+     *
+     * ADDED WHEN THE CALLER CHECK WAS REMOVED. With no session required, most
+     * attempts carry no uid and no email, and this is the only thing left that
+     * says anything about who made the call.
+     */
+    callerIp: string | null;
+    via: string;
+    outcome: string;
+    targetPhone: string | null;
+    targetUid: string | null;
+    /** Which of the four lookups found the account. Absent on a refusal. */
+    targetVia?: string;
+  },
+  required = false
+): Promise<void> {
+  try {
+    await db.collection(AUDIT_COLLECTION).add({
+      ...entry,
+      at: FieldValue.serverTimestamp()
+    });
+  } catch (error) {
+    logger.error('Could not write the impersonation audit record.', {
+      outcome: entry.outcome,
+      code: (error as { code?: string }).code
+    });
+
+    if (required) {
+      throw new HttpsError('internal', 'Could not record the impersonation, so it was refused.');
+    }
   }
 }

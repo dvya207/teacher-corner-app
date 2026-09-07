@@ -1,0 +1,352 @@
+/* ==========================================================================
+   The workflow step editor dialog — shared by the template form and the
+   classroom stepper.
+
+   MOVED HERE WHOLE from workflow-template-form.css when the dialog became a
+   component. Its `step-*` and `content-*` chrome is its own rather than the
+   `modal-*` set the other dialogs in this app share, because it opens over a
+   full page rather than over the shell and is far wider than they are.
+   ========================================================================== */
+
+.step-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--overlay);
+}
+
+.step-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(980px, 100%);
+  max-height: calc(100dvh - 48px);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.step-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink-600);
+  cursor: pointer;
+}
+
+.step-close:hover {
+  background: var(--ink-100);
+  color: var(--ink-900);
+}
+
+.step-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  overflow: hidden;
+}
+
+.step-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 44px 24px 24px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.step-fields .field {
+  margin-bottom: 0;
+}
+
+.step-fields label,
+.step-fields .field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.step-fields input,
+.step-fields select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink-800);
+}
+
+.step-fields input:focus,
+.step-fields select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/*
+ * A REQUIRED FIELD STILL EMPTY IS NOT MARKED AT ALL — see the rail's note above
+ * for why neither red nor grey works. This editor opens with several empty at
+ * once, so any per-field colour turned the whole step into a warning on ADD NEW
+ * STEP. The blocked note in the footer says what is outstanding instead.
+ */
+
+/*
+ * THE TOGGLE, as production draws it: a switch with its own label beside it,
+ * inside a bordered row. Built from a checkbox so it is keyboard-operable and
+ * announces its state without any ARIA of its own.
+ *
+ * EVERY SELECTOR BELOW IS PREFIXED WITH `.step-fields`, and the specificity IS
+ * the fix rather than a flourish. The row is a <label>, so `.step-fields label`
+ * above — one class and one element, (0,1,1) — outranks a lone class at (0,1,0).
+ * Its `display: block` beat the `display: flex` here, so the row was never a flex
+ * container at all: the track and the words shared a line box and the switch was
+ * drawn across the word 'Show'. Two classes, (0,2,0), wins.
+ *
+ * `margin-bottom: 0` for the same reason — that label rule sets 6px.
+ */
+.step-fields .wt-toggle {
+  /* POSITIONED, so the visually-hidden checkbox inside it has this row to
+     anchor to rather than escaping to the nearest positioned ancestor. */
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-700);
+  cursor: pointer;
+}
+
+.step-fields .wt-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.step-fields .wt-toggle-text {
+  /* Its own flex item, so it cannot share a line box with the track. */
+  flex: 1;
+}
+
+.step-fields .wt-toggle-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--ink-300);
+  transition: background 0.15s;
+}
+
+.step-fields .wt-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--white);
+  transition: transform 0.15s;
+}
+
+.step-fields .wt-toggle input:checked + .wt-toggle-track {
+  background: var(--accent-500);
+}
+
+.step-fields .wt-toggle input:checked + .wt-toggle-track::after {
+  transform: translateX(16px);
+}
+
+.step-fields .wt-toggle input:focus-visible + .wt-toggle-track {
+  box-shadow: var(--focus-ring);
+}
+
+/* ---- Contents ---- */
+
+.step-contents {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 44px 24px 24px;
+  overflow-y: auto;
+}
+
+.step-contents h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--ink-900);
+}
+
+/*
+ * A FULL-WIDTH RED BAND, as production has it, rather than a small × in the
+ * block's corner. Deleting a content block is the one destructive action in this
+ * panel, and a band is both easier to hit and harder to hit by accident than an
+ * icon tucked beside a label.
+ */
+.content-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--tint-red);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.content-delete:hover {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+/* Production's dashed ADD NEW CONTENT band, below every block. */
+.content-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 13px;
+  border: 1px dashed var(--accent-500);
+  border-radius: var(--radius-md);
+  background: var(--tint-blue);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--accent-600);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.content-add:hover {
+  background: color-mix(in srgb, var(--accent-500) 14%, transparent);
+}
+
+.content-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: var(--ink-050);
+}
+
+.content-block .field {
+  margin-bottom: 0;
+}
+
+.content-block label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.content-block input,
+.content-block select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink-800);
+}
+
+.content-block input:focus,
+.content-block select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}
+
+/* Production's 'content : 1' chip, on its own line above the fields. */
+.content-chip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--tint-blue);
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--accent-600);
+}
+
+/* Said out loud, because an unnamed block is DROPPED on save. */
+.content-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--on-amber);
+}
+
+.step-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.step-blocked {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--on-amber);
+}
+
+/* ---- Narrow ------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .wt-body,
+  .step-body {
+    grid-template-columns: 1fr;
+  }
+
+  .wt-rail {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .step-fields {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}

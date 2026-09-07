@@ -36,6 +36,38 @@ service cloud.firestore {
     }
 
     /*
+     * OWNERSHIP — COMMENTED OUT, NOT DELETED, like the pair below it.
+     *
+     * `owns` read the STORED document, so it answered read, update and delete;
+     * `willOwn` read the INCOMING one, so it answered create and stopped an update
+     * reassigning a document to somebody else. They take the document as a
+     * PARAMETER rather than reaching for the ambient `resource`, which is the
+     * difference that made the older pair below uncompilable.
+     *
+     * WorkflowTemplates was the only caller, and it is now SHARED — see its block
+     * for why. So nothing invokes these, and an unused function that mentions
+     * `resource` makes the compiler warn on every deploy ("Invalid variable name:
+     * request"), which is why they are commented rather than merely left in place.
+     *
+     * Kept as the restore path: putting ownership back on a collection means
+     * uncommenting these two and swapping `signedIn()` for them on the lines that
+     * want it. Note that a LIST also needs its query filtered on the same field —
+     * Firestore evaluates a list against the query, not the documents it would
+     * return, so an unfiltered list under an ownership rule is denied outright.
+     *
+     * The five older collections allow any signed-in teacher to write any row, and
+     * tightening them is a separate change with real risk: every existing document
+     * must carry an `ownerId` or its owner loses access.
+     */
+    // function owns(document) {
+    //   return signedIn() && document.data.ownerId == request.auth.uid;
+    // }
+    //
+    // function willOwn(incoming) {
+    //   return signedIn() && incoming.resource.data.ownerId == request.auth.uid;
+    // }
+
+    /*
      * CURRENTLY UNUSED, and kept deliberately.
      *
      * Every rule below now authorises on authentication alone, so neither of these
@@ -57,6 +89,10 @@ service cloud.firestore {
     // Commented rather than merely unused because the rules compiler warns on every
     // deploy otherwise ("Invalid variable name: request"): it cannot validate
     // `resource` inside a function no rule invokes.
+    //
+    // SUPERSEDED by owns()/willOwn() above, which take the document as a
+    // PARAMETER instead of reaching for the ambient `resource` — the difference
+    // that made these two uncompilable.
     //
     // function ownsIncoming() {
     //   return signedIn() && request.resource.data.ownerId == request.auth.uid;
@@ -281,6 +317,64 @@ service cloud.firestore {
       allow delete: if signedIn();
     }
 
+    // ========================================================================
+    // Learning unit resources
+    // ========================================================================
+    //
+    //   learningUnitResources/{resourceId}
+    //
+    // The uploaded files a unit is made of, one document per maturity rung.
+    //
+    // NO OWNER CHECK, matching the four collections above. Ownership on this
+    // document is the unit it points at, and the unit's own rule already grants
+    // every signed-in user read.
+    match /learningUnitResources/{resourceId} {
+      allow read:   if signedIn();
+      // `trash` is the container document for deleted resource documents and
+      // sits in this same collection. Excluding it here stops a resource being
+      // created with that id and overwriting the container — the same exclusion
+      // the four collections above carry.
+      allow create: if signedIn() && resourceId != 'trash';
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Learning unit resources — DELETED
+    // ========================================================================
+    //
+    //   learningUnitResources/trash/DeletedLearningUnitResources/{resourceId}
+    //
+    // Both segments PINNED, as with the four trashes above. update is NOT
+    // granted: nothing legitimately edits a resource document while it is in
+    // the trash.
+    //
+    // Production has no trash here. This one exists because deleting a unit
+    // used to leave its resource documents in the live collection with nothing
+    // pointing at them; see the note in core/firestore-paths.ts.
+    match /learningUnitResources/trash/DeletedLearningUnitResources/{resourceId} {
+      allow read:   if signedIn();
+      allow create: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Board and grade resources
+    // ========================================================================
+    //
+    //   boardGradeResources/{resourceId}
+    //
+    // One document per board for a grade-dependent slot, with the grades keyed
+    // inside it. Same grants as learningUnitResources: these are a learning
+    // unit's content, not anyone's private data, and the unit they belong to is
+    // already readable by every signed-in user.
+    match /boardGradeResources/{resourceId} {
+      allow read:   if signedIn();
+      allow create: if signedIn();
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
     // ------------------------------------------------------------------------
     // The programme-code counter lives at users/{uid}/counters/programmes and
     // needs NO rule of its own — the `users/{uid}/{document=**}` block above
@@ -332,6 +426,96 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // Teachers — WORKFLOW COMPLETION
+    // ========================================================================
+    //
+    //   teachers/{teacherId}/Completion/{learningUnitId}
+    //
+    // Production's own shape and production's own root, which is the ONE place
+    // this app nests private teacher data under `teachers` rather than under
+    // `users`. Completion is progress through a CLASSROOM's workflow, and the
+    // classroom is reached through the teacher record.
+    //
+    // THE OWNER IS teacherMeta.uid, NOT ownerId. `ownerId` is whoever registered
+    // the record — normally a coordinator acting for somebody else — so granting
+    // on it would let an administrator write progress as their teachers and stop
+    // the teacher writing their own. `teacherMeta.uid` is stamped when the
+    // teacher themselves signs in against the record.
+    //
+    // A get() IS UNAVOIDABLE HERE. Every other rule in this file decides from
+    // the path or from the incoming document; this one has to consult the PARENT,
+    // because the owning uid lives on the teacher record and a rule cannot run a
+    // query. That is one extra document read per evaluation, billed to whoever
+    // is writing.
+    //
+    // NO LIST, and no rule on the collection itself: a teacher reads their own
+    // rows through this same match, and nothing needs to enumerate another
+    // teacher's progress.
+    match /teachers/{teacherId}/Completion/{learningUnitId} {
+      allow read, write: if signedIn()
+        && get(/databases/$(database)/documents/teachers/$(teacherId))
+             .data.teacherMeta.uid == request.auth.uid;
+    }
+
+    // ========================================================================
+    // Teachers — ACTIVITY PROGRESS
+    // ========================================================================
+    //
+    //   teachers/{teacherId}/activityProgress/{stageId}
+    //
+    // Same owner test as Completion above, and same reasoning: the owning uid is
+    // teacherMeta.uid on the PARENT, not ownerId, so the rule has to get() it.
+    //
+    // A SEPARATE MATCH RATHER THAN A {document=**} WILDCARD over the teacher.
+    // A recursive grant would also cover every subcollection anybody adds later,
+    // including ones that should not be client-writable, and the two that exist
+    // are cheap to name.
+    match /teachers/{teacherId}/activityProgress/{stageId} {
+      allow read, write: if signedIn()
+        && get(/databases/$(database)/documents/teachers/$(teacherId))
+             .data.teacherMeta.uid == request.auth.uid;
+    }
+
+    // ========================================================================
+    // Teachers — SUBMISSIONS
+    // ========================================================================
+    //
+    //   teachers/{teacherId}/submissions/{summaryId}
+    //   teachers/{teacherId}/submissions/{summaryId}/attempts/{attemptId}
+    //   teachers/{teacherId}/submissions/{summaryId}/submissionMeta/{metaId}
+    //
+    // Moved here from users/{uid}/submissions, which needed no rule of its own
+    // because users/{uid}/{document=**} already covered it. This root does not
+    // have that luxury: the owning uid is teacherMeta.uid on the PARENT, so each
+    // level needs the same get() the two blocks above use.
+    //
+    // THE NESTED LEVELS ARE NAMED, not swept up in a wildcard. A submission is
+    // three documents in one transaction — summary, attempt, meta — and all three
+    // must be writable together or a submit half-lands. Naming them keeps that
+    // explicit and keeps any future subcollection out.
+    //
+    // WRITE, NOT CREATE-ONLY. An attempt is set() inside a transaction that also
+    // increments attemptsCount on the summary, so the summary is updated rather
+    // than created after the first submit.
+    match /teachers/{teacherId}/submissions/{summaryId} {
+      allow read, write: if signedIn()
+        && get(/databases/$(database)/documents/teachers/$(teacherId))
+             .data.teacherMeta.uid == request.auth.uid;
+    }
+
+    match /teachers/{teacherId}/submissions/{summaryId}/attempts/{attemptId} {
+      allow read, write: if signedIn()
+        && get(/databases/$(database)/documents/teachers/$(teacherId))
+             .data.teacherMeta.uid == request.auth.uid;
+    }
+
+    match /teachers/{teacherId}/submissions/{summaryId}/submissionMeta/{metaId} {
+      allow read, write: if signedIn()
+        && get(/databases/$(database)/documents/teachers/$(teacherId))
+             .data.teacherMeta.uid == request.auth.uid;
+    }
+
+    // ========================================================================
     // Teachers — DELETED
     // ========================================================================
     //
@@ -350,6 +534,58 @@ service cloud.firestore {
       allow read:   if signedIn();
       allow create: if signedIn();
       allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Assignments — quizzes, uploads and forms
+    // ========================================================================
+    //
+    //   Assignments/{assignmentId}
+    //
+    // Same shape as the five collections above, with ONE difference in the
+    // sentinel: the trash container here is '--trash--', not 'trash', because
+    // that is the id production's own service reads
+    // (Assignments/--trash--/DeletedAssignments). Excluding it from create stops
+    // an assignment being written over the container.
+    //
+    // Reads and updates need no exclusion, for the same reason as the others: the
+    // container carries no ownerId, so every ownership check already fails for it.
+    match /Assignments/{assignmentId} {
+      allow read:   if signedIn();
+      // FOUR RESERVED IDS, not one. Production's collection holds --trash--,
+      // --schema--, ---quizzer_schema--- and --default_assignments--, none of
+      // which is an assignment; a create addressed at any of them would replace a
+      // reference document with a row. Only the trash was excluded before.
+      // The three dashes on ---quizzer_schema--- are its real id, not a typo.
+      allow create: if signedIn()
+                    && !(assignmentId in [
+                         '--trash--',
+                         '--schema--',
+                         '---quizzer_schema---',
+                         '--default_assignments--'
+                       ]);
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // ========================================================================
+    // Assignments — DELETED
+    // ========================================================================
+    //
+    //   Assignments/--trash--/DeletedAssignments/{assignmentId}
+    //
+    // Both segments PINNED rather than wildcards, so nobody can invent
+    // Assignments/anything/DeletedAssignments/ and get an unaudited tree. The
+    // '--trash--' document itself gets no rule, so it stays unreadable; it holds
+    // no fields and need not exist.
+    //
+    // create is what a DELETE does (the document moves here) and delete is what a
+    // RESTORE does, so both halves of each transaction are permitted. update is
+    // NOT granted: nothing legitimately edits a document while it is in the trash.
+    match /Assignments/{trash}/DeletedAssignments/{assignmentId} {
+      allow read:   if signedIn() && trash == '--trash--';
+      allow create: if signedIn() && trash == '--trash--';
+      allow delete: if signedIn() && trash == '--trash--';
     }
 
     // ========================================================================
@@ -412,6 +648,221 @@ service cloud.firestore {
     // exclusion becomes required — see the guide's step 7.
     match /OTPVerifications/{phone} {
       allow read, write: if false;
+    }
+
+    // ========================================================================
+    // Impersonation audit — SERVER-OWNED, no client access at all
+    // ========================================================================
+    //
+    //   ImpersonationAudit/{entry}
+    //
+    // One document per impersonation attempt — allowed or refused — plus the
+    // `attempts_{uid}` documents holding the wrong-passcode counters. Written
+    // only by tcDevImpersonate through the Admin SDK, which bypasses these rules
+    // entirely, so denying every client costs the function nothing.
+    //
+    // WRITE MUST BE DENIED because this is the record of who borrowed whose
+    // account. A client that can write here can forge an entry naming somebody
+    // else, or overwrite its own — and an audit log anyone can edit is worse than
+    // no audit log, because it still looks authoritative. It can also reset its
+    // own `attempts_{uid}` counter, which removes the throttle on the passcode.
+    //
+    // READ IS DENIED TOO, which is the less obvious half. The entries carry the
+    // administrator's email and the impersonated teacher's phone number and uid;
+    // read access for every signed-in teacher would publish which colleagues had
+    // support visits and from whom. Reading the log is a console or Admin SDK
+    // task, not something the app does — and it will stay that way until there is
+    // an admin surface with a real role behind it.
+    match /ImpersonationAudit/{entry} {
+      allow read, write: if false;
+    }
+
+    // ========================================================================
+    // Workflow templates — reusable blueprints for a learning unit's steps
+    // ========================================================================
+    //
+    //   WorkflowTemplates/{templateId}
+    //   WorkflowTemplates/--trash--/DeletedWorkflowTemplates/{templateId}
+    //
+    // SHARED, LIKE PRODUCTION, and this was owner-scoped until it caused a real
+    // support question: "I created a template and it is not showing."
+    //
+    // Production reads the whole collection with no owner filter, so all 46 of its
+    // templates are visible to every teacher — a workflow template is a shared
+    // blueprint, not personal data. Scoping it by owner also interacts badly with
+    // impersonation: a template built while impersonating one teacher vanished when
+    // viewing as another, with no error and nothing to distinguish it from a failed
+    // save.
+    //
+    // `ownerId` IS STILL WRITTEN on create, and nothing reads it for access. It
+    // records who built the template, which stays worth having.
+    //
+    // THE CONSEQUENCE IS DELIBERATE AND WORTH STATING: any signed-in teacher can
+    // edit or delete any template, including one somebody else built. That is
+    // production's behaviour, and narrowing it needs the role system this app does
+    // not have — the same reason the five older collections above are as loose.
+    //
+    // THE TRASH CONTAINER IS '--trash--', NOT 'trash', because that is what
+    // production's own WorkflowTemplates uses. Excluding it from create stops a
+    // template being written over the container.
+    match /WorkflowTemplates/{templateId} {
+      allow read:   if signedIn();
+      allow create: if signedIn() && templateId != '--trash--';
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
+    // Both segments PINNED rather than wildcards, so nobody can invent
+    // WorkflowTemplates/anything/DeletedWorkflowTemplates/ and get an
+    // unowned tree.
+    //
+    // create is what a DELETE does (the document moves here) and delete is what a
+    // RESTORE does, so both halves of each transaction are permitted. update is
+    // NOT granted: nothing legitimately edits a template while it is in the trash.
+    match /WorkflowTemplates/{trash}/DeletedWorkflowTemplates/{templateId} {
+      allow read:   if signedIn() && trash == '--trash--';
+      allow create: if signedIn() && trash == '--trash--';
+      allow delete: if signedIn() && trash == '--trash--';
+    }
+
+    // ========================================================================
+    // Workflows — a template INSTANTIATED for one learning unit in a classroom
+    // ========================================================================
+    //
+    //   workflows/{workflowId}
+    //
+    // LOWERCASE, like this app's five other own collections. Production names it
+    // `Workflows`; the pair flips together on the day its names are adopted.
+    //
+    // NO LIST, AND NONE IS NEEDED. Nothing queries this collection — a workflow is
+    // reached by id from `classrooms/{id}.programmes.{programmeId}.workflowIds[]`,
+    // which is the only route to it in this app and in production. A get is
+    // authorised by these rules the same way a list would be; the absence of a
+    // query is the service's design, not a gap here.
+    //
+    // SHARED, like WorkflowTemplates above and for the same reason: a workflow
+    // belongs to a CLASSROOM, not to the teacher who happened to open the unit
+    // first, and co-teachers on one class must see the same steps. There is no
+    // ownerId on these documents to check even if it were wanted.
+    //
+    // TWO RESERVED IDS, and they are production's own: '--schema--' is a reference
+    // document describing the shape, '--trash--' is the container the deleted ones
+    // hang under. Neither is a workflow, and a create addressed at either would
+    // replace a reference document with a row.
+    //
+    // DELETE IS ALLOWED NOW, because trashing is a delete: the document is copied
+    // to the trash and removed from here in one transaction. The reserved ids are
+    // excluded from it too — deleting '--schema--' would take production's
+    // reference document with it.
+    match /workflows/{workflowId} {
+      allow read:   if signedIn();
+      allow create: if signedIn() && !(workflowId in ['--trash--', '--schema--']);
+      allow update: if signedIn() && !(workflowId in ['--trash--', '--schema--']);
+      allow delete: if signedIn() && !(workflowId in ['--trash--', '--schema--']);
+    }
+
+    // ========================================================================
+    // Workflows — DELETED
+    // ========================================================================
+    //
+    //   workflows/--trash--/DeletedWorkflows/{workflowId}
+    //
+    // PRODUCTION'S OWN PATH, so a workflow trashed here lands where its console
+    // and tooling already look. Both segments PINNED rather than wildcards, so
+    // nobody can invent workflows/anything/DeletedWorkflows/ and get an
+    // unaudited tree.
+    //
+    // create is what a DELETE does (the document moves here) and delete is what a
+    // PURGE or a RESTORE does, so both halves of each transaction are permitted.
+    // update is NOT granted: nothing legitimately edits a workflow while it is in
+    // the trash — restoring it is what makes it editable again.
+    match /workflows/{trash}/DeletedWorkflows/{workflowId} {
+      allow read:   if signedIn() && trash == '--trash--';
+      allow create: if signedIn() && trash == '--trash--';
+      allow delete: if signedIn() && trash == '--trash--';
+    }
+
+    // ========================================================================
+    // DELETED STEPS — a second trash, one level down
+    // ========================================================================
+    //
+    //   workflows/--trash--/DeletedWorkflowSteps/{autoId}
+    //   WorkflowTemplates/--trash--/DeletedWorkflowTemplateSteps/{autoId}
+    //
+    // WHY A STEP NEEDS ITS OWN TRASH. A step is an ENTRY IN AN ARRAY, not a
+    // document. Removing one and saving overwrites `workflowSteps` — nothing was
+    // deleted, so the trashes above never see it, and the rail has no undo. A step
+    // carries its content blocks, their categories, access levels and durations:
+    // minutes of arrangement, discarded by one click on a bin icon.
+    //
+    // NOT PRODUCTION PATHS, and said plainly. Production removes the entry and
+    // writes; nothing records what was in it. These are this app's own, named to
+    // sit beside the trash paths production does have, and additive — nothing in
+    // production reads them.
+    //
+    // AUTO-ID DOCUMENTS. A step has no stable id (`workflowStepId` appears in 0 of
+    // production's 2593 real steps) and the same step can be removed, re-added and
+    // removed again, so a generated id per removal is the only thing that cannot
+    // collide.
+    //
+    // NO UPDATE AND NO DELETE. This is an archive: once a removal is recorded,
+    // nothing in the app rewrites or clears it. Purging is an operator's job
+    // through the console, not a button, precisely because it is the last copy.
+    match /workflows/{trash}/DeletedWorkflowSteps/{entryId} {
+      allow read:   if signedIn() && trash == '--trash--';
+      allow create: if signedIn() && trash == '--trash--';
+    }
+
+    match /WorkflowTemplates/{trash}/DeletedWorkflowTemplateSteps/{entryId} {
+      allow read:   if signedIn() && trash == '--trash--';
+      allow create: if signedIn() && trash == '--trash--';
+    }
+
+    // ========================================================================
+    // Students and their submissions — READ ONLY, for the assignment report
+    // ========================================================================
+    //
+    //   Students/{studentId}
+    //   Students/{studentId}/remoteSubmissions/{submissionId}
+    //   Students/{studentId}/remoteSubmissions/{submissionId}/attempts/{attemptId}
+    //   CustomAuthentication/{studentId}
+    //
+    // NEITHER COLLECTION EXISTS IN THIS DATABASE TODAY. They are production's,
+    // where its player records what a student answered, and the assignment report
+    // exports them. The rules are here so the report works the moment the data
+    // does rather than failing with a permission error that reads like a bug.
+    //
+    // READ ONLY, AND THAT IS THE POINT. This app has no student surface and
+    // writes nothing here; a submission is a record of what somebody answered,
+    // and an app that can rewrite it can change a mark after the fact. Every
+    // write stays denied, including for the report.
+    //
+    // NO OWNERSHIP CHECK, unlike every collection above. A student record has no
+    // `ownerId` — it belongs to a student, not to the teacher reading it — and the
+    // report's whole job is to read a cohort the teacher did not create. Signed-in
+    // is therefore the honest gate, and it is worth being explicit that this is a
+    // WEAKER rule than the rest of this file: any signed-in teacher can read any
+    // student's submissions. Narrowing it needs the classroom-membership check
+    // that a real role system would give, and that does not exist yet.
+    match /Students/{studentId} {
+      allow read:  if signedIn();
+      allow write: if false;
+
+      match /remoteSubmissions/{submissionId} {
+        allow read:  if signedIn();
+        allow write: if false;
+
+        match /attempts/{attemptId} {
+          allow read:  if signedIn();
+          allow write: if false;
+        }
+      }
+    }
+
+    // The student's display name, which is all the report reads from here.
+    match /CustomAuthentication/{studentId} {
+      allow read:  if signedIn();
+      allow write: if false;
     }
 
     // Everything else in THIS database is denied. Safe to state explicitly now
