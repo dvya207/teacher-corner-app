@@ -39,6 +39,16 @@ export interface FormSubmissionTarget {
  * PRODUCTION'S OWN SHAPE, read off a live submission rather than its code: the
  * source question's fields are carried through unchanged and `answer` is added.
  * A `starRating` answer is a NUMBER and everything else is a string.
+ *
+ * A `checkBoxGroup` ANSWER IS AN ARRAY OF STRINGS, and it is the one member of this
+ * union production does not write, because `checkBoxGroup` is this app's own type. An
+ * array rather than a joined string on purpose: the options themselves are stored
+ * comma separated, so joining the chosen ones the same way would make an option
+ * containing a comma indistinguishable from two options. Firestore stores arrays
+ * natively, so nothing is encoded.
+ *
+ * AN EMPTY ARRAY IS "NOT ANSWERED", the same way '' is for a text field and 0 is
+ * for a rating. See `AssignmentForm.hasAnswer`, which is where that is decided.
  */
 export interface AnsweredFormQuestion {
   questionType: string;
@@ -48,7 +58,7 @@ export interface AnsweredFormQuestion {
   fieldIcon: string | null;
   isSubquestion: boolean;
   dropDownOptions: string[];
-  answer: string | number;
+  answer: string | number | string[];
 }
 
 /** What one form submission stores. */
@@ -227,7 +237,16 @@ export class FormSubmissionService {
    * wrong one. `canAnswer` below is what stops either from blocking the form.
    */
   optionsFor(question: FormQuestion): string[] {
-    if (question.questionType === 'dropDown') {
+    /* THREE TYPES READ THE SAME FIELD. `dropDown` stores its choices as a comma
+       separated string and the two row-authored types store an array;
+       `splitOptions` takes either. They differ in how many may be picked and in
+       how they are drawn, not in where the choices live. See the note on
+       'checkBoxGroup' and 'radioGroup' in data/assignment-options.ts. */
+    if (
+      question.questionType === 'dropDown' ||
+      question.questionType === 'checkBoxGroup' ||
+      question.questionType === 'radioGroup'
+    ) {
       return splitOptions(question.dropDownOptions);
     }
 
@@ -252,6 +271,10 @@ export class FormSubmissionService {
    * nothing to pick. Both are unanswerable, and both must therefore be excluded
    * from the rule that each answer unlocks the next question, or a form would
    * dead-end on a field nobody can fill.
+   *
+   * `checkBoxGroup` AND `radioGroup` ARE HELD TO THE SAME OPTION TEST as the
+   * dropdowns, for the same reason: a group with no options is a question with no
+   * answer, and letting it through would seal every question after it.
    */
   canAnswer(question: FormQuestion): boolean {
     if (question.questionType === 'none') {
@@ -260,6 +283,8 @@ export class FormSubmissionService {
 
     if (
       question.questionType === 'dropDown' ||
+      question.questionType === 'checkBoxGroup' ||
+      question.questionType === 'radioGroup' ||
       question.questionType === 'dropDownDynamic' ||
       question.questionType === 'dropDownDependent'
     ) {
@@ -289,9 +314,18 @@ function scopeKey(where: FormSubmissionTarget): string {
  * TRIMMED AND EMPTIES DROPPED, because a stored 'Yes,No,' would otherwise offer a
  * blank third option that looks like a choice and answers nothing.
  */
-export function splitOptions(value: string | undefined): string[] {
-  return (value ?? '')
-    .split(',')
-    .map(entry => entry.trim())
-    .filter(entry => entry !== '');
+/**
+ * The options a question lists, from either stored shape.
+ *
+ * AN ARRAY IS TAKEN AS-IS, only trimmed and de-blanked. It is what a
+ * `checkBoxGroup` writes, and splitting its entries on commas would undo the
+ * whole reason it stores an array: an option is allowed to contain one.
+ *
+ * A STRING IS SPLIT, which is what `dropDown` and every question written before
+ * the array shape existed carries.
+ */
+export function splitOptions(value: string | string[] | undefined): string[] {
+  const entries = Array.isArray(value) ? value : (value ?? '').split(',');
+
+  return entries.map(entry => `${entry}`.trim()).filter(entry => entry !== '');
 }

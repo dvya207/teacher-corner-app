@@ -652,3 +652,95 @@
   font-style: normal;
   color: var(--ink-500);
 }
+
+/* --------------------------------------------------------------------------
+   The checkBoxGroup option rows
+
+   DELIBERATELY THE SAME GEOMETRY AS THE QUIZ WIZARD'S MCQ options, because they
+   are the same job: number, a box to type in, a button to remove, and one to
+   add. Copied rather than shared because the two wizards keep their own
+   stylesheets and neither imports the other; the values are the ones to keep in
+   step if either changes.
+
+   NARROWER THAN THE QUIZ ROW, having neither a correct-answer control nor a
+   Text/Image select. A form is not marked, so no option is correct, and no
+   player here renders an image option.
+   -------------------------------------------------------------------------- */
+
+.fw-options {
+  margin-top: 4px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--white);
+}
+
+.fw-options-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.fw-options-head strong {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--label);
+}
+
+.fw-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.fw-mini {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--ink-100);
+  color: var(--ink-700);
+}
+
+.fw-mini:hover {
+  background: var(--accent-500);
+  color: var(--white);
+}
+
+.fw-mini.is-danger:hover {
+  background: var(--danger);
+}
+
+.fw-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 0;
+}
+
+.fw-option-no {
+  width: 18px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-500);
+  text-align: center;
+}
+
+.fw-option-value {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 11px;
+  border: 1px solid var(--ink-300);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.fw-option-value:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--focus-ring);
+}

@@ -230,6 +230,178 @@ describe('AssignmentForm', () => {
     });
   });
 
+  describe('the checkBoxGroup type', () => {
+
+    /*
+     * THIS APP'S OWN TYPE, and the only form question whose answer is a LIST.
+     * Every assertion here is about that difference: what counts as answered,
+     * what order the picks are stored in, and what reaches the record.
+     */
+
+    const multi = () =>
+      question({
+        questionType: 'checkBoxGroup',
+        dropDownOptions: 'Time, Materials , Noise'
+      });
+
+    it('reads its options from dropDownOptions, like a plain dropdown', () => {
+      const { component } = mount([multi()]);
+
+      expect(component.options(multi())).toEqual(['Time', 'Materials', 'Noise']);
+    });
+
+    it('is unanswered until a box is ticked', () => {
+      const { component } = mount([multi()]);
+
+      expect(component.hasAnswer(0)).toBe(false);
+
+      component.toggle(0, 'Noise', true);
+
+      expect(component.hasAnswer(0)).toBe(true);
+    });
+
+    /* Unticking the last box returns the question to unanswered, which is what
+       locks the questions after it again. An empty array is not an answer. */
+    it('is unanswered again once every box is cleared', () => {
+      const { component } = mount([multi()]);
+
+      component.toggle(0, 'Noise', true);
+      component.toggle(0, 'Noise', false);
+
+      expect(component.chosen(0)).toEqual([]);
+      expect(component.hasAnswer(0)).toBe(false);
+    });
+
+    /*
+     * STORED IN THE QUESTION'S ORDER, NOT IN TICK ORDER. Two teachers who pick
+     * the same boxes must store the same array, or a report comparing answers
+     * would treat one order as different data from the other.
+     */
+    it('stores the picks in the order the question asks them', () => {
+      const { component } = mount([multi()]);
+
+      component.toggle(0, 'Noise', true);
+      component.toggle(0, 'Time', true);
+
+      expect(component.chosen(0)).toEqual(['Time', 'Noise']);
+    });
+
+    it('ticking the same box twice does not double it', () => {
+      const { component } = mount([multi()]);
+
+      component.toggle(0, 'Time', true);
+      component.toggle(0, 'Time', true);
+
+      expect(component.chosen(0)).toEqual(['Time']);
+    });
+
+    /* `value()` feeds text inputs. An array reaching one would render 'a,b' in a
+       box, so it is deliberately blank for this type. */
+    it('reports no single value, so no text field can render the array', () => {
+      const { component } = mount([multi()]);
+
+      component.toggle(0, 'Time', true);
+
+      expect(component.value(0)).toBe('');
+    });
+
+    it('submits the array itself', () => {
+      const { component, outcomes } = mount([multi()]);
+
+      component.toggle(0, 'Materials', true);
+      component.toggle(0, 'Time', true);
+      component.submit();
+
+      expect(outcomes[0].questions[0].answer).toEqual(['Time', 'Materials']);
+      expect(outcomes[0].answered).toBe(1);
+    });
+
+    /* Same rule as an unresolvable dropdown: a group with no boxes has nothing
+       to pick, so it must not seal the questions after it. */
+    it('with no options, passes the unlock through', () => {
+      const { component } = mount([
+        question({ questionType: 'checkBoxGroup', dropDownOptions: '' }),
+        question({ questionNumber: 2 })
+      ]);
+
+      expect(component.canAnswer(
+        question({ questionType: 'checkBoxGroup', dropDownOptions: '' })
+      )).toBe(false);
+      expect(component.isOpen(1)).toBe(true);
+    });
+  });
+
+  describe('the radioGroup type', () => {
+
+    /*
+     * ANSWERED EXACTLY LIKE A DROPDOWN, a single string, and that is the point of
+     * these tests: it shares the checkbox group's option field and its markup but
+     * none of its answer handling.
+     */
+
+    const radio = () =>
+      question({
+        questionType: 'radioGroup',
+        dropDownOptions: ['Yes', 'No', 'Only partly, we ran out of time']
+      });
+
+    it('reads its options from the stored array', () => {
+      const { component } = mount([radio()]);
+
+      expect(component.options(radio()))
+        .toEqual(['Yes', 'No', 'Only partly, we ran out of time']);
+    });
+
+    it('is unanswered until one is picked', () => {
+      const { component } = mount([radio()]);
+
+      expect(component.hasAnswer(0)).toBe(false);
+
+      component.set(0, 'No');
+
+      expect(component.hasAnswer(0)).toBe(true);
+    });
+
+    /* A SINGLE STRING, so picking again REPLACES rather than accumulating. This
+       is the difference from the checkbox group, which would hold both. */
+    it('picking a second option replaces the first', () => {
+      const { component } = mount([radio()]);
+
+      component.set(0, 'Yes');
+      component.set(0, 'No');
+
+      expect(component.value(0)).toBe('No');
+    });
+
+    it('submits the picked option as a string, not an array', () => {
+      const { component, outcomes } = mount([radio()]);
+
+      component.set(0, 'Only partly, we ran out of time');
+      component.submit();
+
+      expect(outcomes[0].questions[0].answer)
+        .toBe('Only partly, we ran out of time');
+      expect(outcomes[0].answered).toBe(1);
+    });
+
+    /* An option holding a comma survives, which is the reason these types store
+       an array rather than a joined string. */
+    it('keeps an option containing a comma whole', () => {
+      const { component } = mount([radio()]);
+
+      expect(component.options(radio())[2])
+        .toBe('Only partly, we ran out of time');
+    });
+
+    it('with no options, passes the unlock through', () => {
+      const empty = question({ questionType: 'radioGroup', dropDownOptions: [] });
+      const { component } = mount([empty, question({ questionNumber: 2 })]);
+
+      expect(component.canAnswer(empty)).toBe(false);
+      expect(component.isOpen(1)).toBe(true);
+    });
+  });
+
   describe('the dropdown variants', () => {
 
     /** A LITERAL LIST, split on commas and trimmed. */

@@ -117,7 +117,11 @@
             (input)="instructions.set(valueOf($event))"
           />
 
-          @for (question of questions(); track $index) {
+          <!-- `qIndex` ALIASED so the nested options loop can still reach the
+               QUESTION's index: an inner @for shadows $index with its own. The
+               existing $index references below are unaffected, since nothing
+               shadows it at this level. -->
+          @for (question of questions(); track $index; let qIndex = $index) {
             <div class="fw-question">
 
               <!-- The heading echoes the text as it is typed, and switches to a
@@ -187,6 +191,59 @@
                         (input)="setDropDownOptions($index, valueOf($event))"
                       />
                     </div>
+                  }
+
+                  <!-- ONE OPTION PER ROW, as the quiz wizard authors its MCQ
+                       options. No correct-answer control and no Text/Image
+                       select: a form is not marked, so no option is "correct",
+                       and neither player can render an image option. -->
+                  @if (usesOptionRows(question)) {
+                    <section class="fw-options">
+                      <header class="fw-options-head">
+                        <strong>OPTIONS</strong>
+                        <span class="fw-hint">(One per row)</span>
+
+                        <button
+                          type="button"
+                          class="fw-mini"
+                          aria-label="Add option"
+                          title="Add option"
+                          (click)="addOption($index)"
+                        >
+                          <app-icon name="plus" [size]="14" />
+                        </button>
+                      </header>
+
+                      @for (
+                        option of optionRows(question);
+                        track $index;
+                        let optionIndex = $index
+                      ) {
+                        <div class="fw-option">
+                          <span class="fw-option-no">{{ optionIndex + 1 }}</span>
+
+                          <input
+                            class="fw-option-value"
+                            type="text"
+                            autocomplete="off"
+                            placeholder="Option text"
+                            [value]="option"
+                            [attr.aria-label]="'Option ' + (optionIndex + 1)"
+                            (input)="setOptionAt(qIndex, optionIndex, valueOf($event))"
+                          />
+
+                          <button
+                            type="button"
+                            class="fw-mini is-danger"
+                            aria-label="Remove option"
+                            title="Remove option"
+                            (click)="removeOption(qIndex, optionIndex)"
+                          >
+                            <app-icon name="close" [size]="13" />
+                          </button>
+                        </div>
+                      }
+                    </section>
                   }
 
                   @if (needsDynamicName(question)) {

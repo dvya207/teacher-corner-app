@@ -81,7 +81,12 @@ export class AssignmentForm {
   readonly submitted = output<FormOutcome>();
 
   /** One answer per question, by index. A star rating holds a number. */
-  readonly answers = signal<Record<number, string | number>>({});
+  /*
+   * A `checkBoxGroup` ANSWER IS A string[]; every other type's is a string or a number.
+   * Widened here rather than kept in a second signal so that `isOpen`, the
+   * answered counts and the reset effect all keep working off one place.
+   */
+  readonly answers = signal<Record<number, string | number | string[]>>({});
 
   constructor() {
     /*
@@ -173,8 +178,18 @@ export class AssignmentForm {
     return true;
   }
 
+  /*
+   * WHAT COUNTS AS ANSWERED, per shape. A rating starts at 0 and 0 is untouched
+   * rather than worst; a checkbox group starts as an empty array; everything else
+   * starts as ''. All three mean "not answered yet", and this is the one place
+   * that is decided, because `isOpen` unlocks the next field from it.
+   */
   hasAnswer(index: number): boolean {
     const answer = this.answers()[index];
+
+    if (Array.isArray(answer)) {
+      return answer.length > 0;
+    }
 
     return typeof answer === 'number' ? answer > 0 : (answer ?? '').trim() !== '';
   }
@@ -182,7 +197,13 @@ export class AssignmentForm {
   value(index: number): string {
     const answer = this.answers()[index];
 
-    return answer === undefined ? '' : String(answer);
+    /* A checkbox group has no single value, and String(['a','b']) would put
+       'a,b' into a text input. Its selections are read with `chosen` instead. */
+    if (answer === undefined || Array.isArray(answer)) {
+      return '';
+    }
+
+    return String(answer);
   }
 
   rating(index: number): number {
@@ -191,8 +212,46 @@ export class AssignmentForm {
     return typeof answer === 'number' ? answer : Number(answer) || 0;
   }
 
-  set(index: number, value: string | number): void {
+  set(index: number, value: string | number | string[]): void {
     this.answers.update(all => ({ ...all, [index]: value }));
+  }
+
+  /** The options ticked on a checkbox question. Empty until one is. */
+  chosen(index: number): string[] {
+    const answer = this.answers()[index];
+
+    return Array.isArray(answer) ? answer : [];
+  }
+
+  isChosen(index: number, option: string): boolean {
+    return this.chosen(index).includes(option);
+  }
+
+  /**
+   * Ticks or unticks one box.
+   *
+   * KEPT IN THE OPTIONS' OWN ORDER rather than in tick order, so two teachers who
+   * pick the same boxes store the same array and a stored answer reads in the
+   * order the question asked. Rebuilt from the option list for that reason instead
+   * of being appended to.
+   */
+  toggle(index: number, option: string, on: boolean): void {
+    const picked = new Set(this.chosen(index));
+
+    if (on) {
+      picked.add(option);
+    } else {
+      picked.delete(option);
+    }
+
+    const inOrder = this.options(this.questions()[index]).filter(o => picked.has(o));
+
+    this.set(index, inOrder);
+  }
+
+  /** Whether a box was ticked, from the change event. */
+  checkedOf(event: Event): boolean {
+    return (event.target as HTMLInputElement).checked;
   }
 
   /** The five stars, so the template has something to iterate. */
@@ -244,10 +303,14 @@ export class AssignmentForm {
            it on the way in, and its stored submissions hold `[]` for every
            non-dropdown question. */
         dropDownOptions: this.options(question),
+        /* THREE SHAPES, one per answer kind. A checkbox group stores the array
+           itself; see AnsweredFormQuestion.answer for why it is not joined. */
         answer:
           question.questionType === 'starRating'
             ? this.rating(at)
-            : this.value(at)
+            : question.questionType === 'checkBoxGroup'
+              ? this.chosen(at)
+              : this.value(at)
       })
     );
 

@@ -82,6 +82,66 @@
             />
           }
 
+          <!-- RADIO BUTTONS, this app's own type. Answered exactly like a
+               dropdown, a single string, and drawn like the checkbox group above
+               so the two read as siblings. Every option is visible without a
+               tap, which is the reason this exists beside `dropDown`. -->
+          @case ('radioGroup') {
+            @if (options(question).length === 0) {
+              <p class="af-note">
+                This question lists no options, so there is nothing to choose.
+              </p>
+            } @else {
+              <div
+                class="af-checks"
+                role="radiogroup"
+                [attr.aria-label]="question.question"
+              >
+                @for (option of options(question); track option) {
+                  <label class="af-check" [class.is-on]="value(qIndex) === option">
+                    <input
+                      type="radio"
+                      [name]="'af-radio-' + qIndex"
+                      [checked]="value(qIndex) === option"
+                      [disabled]="!isOpen(qIndex)"
+                      (change)="set(qIndex, option)"
+                    />
+                    <span>{{ option }}</span>
+                  </label>
+                }
+              </div>
+            }
+          }
+
+          <!-- CHECKBOXES, this app's own type. Rendered as real checkboxes rather
+               than a multi-select <select>, which is unusable on a phone and
+               hides every option but the first few on a desktop. -->
+          @case ('checkBoxGroup') {
+            @if (options(question).length === 0) {
+              <p class="af-note">
+                This question lists no options, so there is nothing to choose.
+              </p>
+            } @else {
+              <div
+                class="af-checks"
+                role="group"
+                [attr.aria-label]="question.question"
+              >
+                @for (option of options(question); track option) {
+                  <label class="af-check" [class.is-on]="isChosen(qIndex, option)">
+                    <input
+                      type="checkbox"
+                      [checked]="isChosen(qIndex, option)"
+                      [disabled]="!isOpen(qIndex)"
+                      (change)="toggle(qIndex, option, checkedOf($event))"
+                    />
+                    <span>{{ option }}</span>
+                  </label>
+                }
+              </div>
+            }
+          }
+
           @default {
             <!-- THE THREE DROPDOWN VARIANTS. Each reads a different field and two
                  of them name a Configuration document rather than listing their

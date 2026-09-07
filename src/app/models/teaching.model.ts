@@ -1850,7 +1850,20 @@ export interface FormQuestion {
   question: string;
   prompt: string;
   isSubquestion: boolean;
-  dropDownOptions: string;
+  /**
+   * The choices, for a type that lists its own.
+   *
+   * EITHER SHAPE, AND BOTH ARE REAL. The collection already held a string and an
+   * array for this field before this app existed, which is why the form wizard
+   * has always had to coerce it on read.
+   *
+   * WHICH SHAPE IS WRITTEN NOW DEPENDS ON THE TYPE. `dropDown` keeps the comma
+   * separated string production writes. `checkBoxGroup` writes an ARRAY, because
+   * its options are authored one per row and an author typing "Ran out of time,
+   * mostly" into a row means one option, not two. A joined string cannot express
+   * that and would split it silently.
+   */
+  dropDownOptions: string | string[];
   dropDownOptionsDynamic: string;
   dropDownOptionsDependent: string;
   fieldIcon: string;

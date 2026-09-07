@@ -315,11 +315,26 @@ describe('ClassroomWorkflow', () => {
 
   describe('the linked assignment', () => {
 
+    /*
+     * A LONGER BUDGET THAN VITEST'S 5s DEFAULT, and nothing here is slow on
+     * purpose.
+     *
+     * This is the FIRST `mount()` in this file, so it alone pays for compiling
+     * ClassroomWorkflow and everything it embeds, the assignment form included.
+     * Its siblings below run the same mount against a warm compiler and finish
+     * in a fraction of the time. Under a full parallel run that cold compile
+     * passes 5 seconds on a loaded machine, and the test then fails for having
+     * been scheduled first rather than for anything it asserts. Run on its own
+     * it has always passed.
+     *
+     * Raised rather than the assertion weakened: what is being checked is that
+     * a content block's assignment resolves at all, which has no timing in it.
+     */
     it('resolves the assignment a content block points at', async () => {
       const { component } = await mount();
 
       expect(component.openAssignment()?.docId).toBe('a1');
-    });
+    }, 20000);
 
     /**
      * A QUIZ'S QUESTIONS COME FROM `questionsData`, and this is the whole point of

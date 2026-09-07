@@ -46,6 +46,18 @@ export const ASSIGNMENT_TYPE_OPTIONS: readonly ConfiguredAssignmentType[] = Obje
  *
  * The three dropDown variants are what FormQuestion's three dropDownOptions
  * fields exist for — plain, dynamic and dependent each read a different one.
+ *
+ * NINE, NOT PRODUCTION'S SEVEN. 'checkBoxGroup' and 'radioGroup' are this app's
+ * own additions and are listed last so the first seven stay in production's
+ * order. Both author their options as ROWS rather than as a comma separated
+ * string, and they differ from each other only in how many may be picked. See
+ * the note in scripts/seed-configuration.mjs.
+ *
+ * `radioGroup` OVERLAPS `dropDown` DELIBERATELY: both pick exactly one option.
+ * The difference is that a dropdown collapses its choices behind a tap while a
+ * radio group shows all of them, which is what a teacher answering in front of a
+ * class needs, and that its options are authored one per row so an option may
+ * contain a comma.
  */
 export const FORM_QUESTION_TYPES: readonly ConfiguredFormQuestionType[] = Object.freeze([
   { key: 'none', display: 'Display Only' },
@@ -54,7 +66,9 @@ export const FORM_QUESTION_TYPES: readonly ConfiguredFormQuestionType[] = Object
   { key: 'dropDown', display: 'Drop Down' },
   { key: 'starRating', display: 'Star Rating' },
   { key: 'dropDownDynamic', display: 'Drop Down (Dynamic)' },
-  { key: 'dropDownDependent', display: 'Drop Down (Dependent)' }
+  { key: 'dropDownDependent', display: 'Drop Down (Dependent)' },
+  { key: 'checkBoxGroup', display: 'Checkboxes (Multi-Select)' },
+  { key: 'radioGroup', display: 'Radio Buttons (Single-Select)' }
 ]);
 
 /**

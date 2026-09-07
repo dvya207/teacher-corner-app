@@ -337,6 +337,169 @@ describe('FormWizard', () => {
    * THE PER-TYPE FIELD, read off production's own template rather than inferred:
    * four of the seven types get one, and each writes a different key.
    */
+  describe('the checkBoxGroup option rows', () => {
+
+    /*
+     * AUTHORED AS ROWS, STORED AS AN ARRAY, which is the whole difference from
+     * `dropDown`. It shares the `dropDownOptions` field and nothing else about
+     * how that field is edited or written.
+     */
+
+    /* BOTH ROW TYPES, one editor. Whether one option may be picked or several is
+       decided when the form is ANSWERED, so there is nothing for the author to
+       do differently and no reason for two editors. */
+    it('uses rows rather than the comma text field, for both row types', async () => {
+      const { component } = await mount();
+
+      for (const type of ['checkBoxGroup', 'radioGroup']) {
+        component.setQuestionType(0, type);
+        const question = component.questions()[0];
+
+        expect(component.usesOptionRows(question)).toBe(true);
+        // The comma box is dropDown's alone; two editors for one field.
+        expect(component.needsOptions(question)).toBe(false);
+      }
+    });
+
+    it('authors a radioGroup through the same rows', async () => {
+      const { component } = await mount();
+
+      component.setQuestionType(0, 'radioGroup');
+      component.setOptionAt(0, 0, 'Yes');
+      component.addOption(0);
+      component.setOptionAt(0, 1, 'Only partly, we ran out of time');
+
+      expect(component.optionRows(component.questions()[0]))
+        .toEqual(['Yes', 'Only partly, we ran out of time']);
+    });
+
+    /* A header with nothing under it gives an author nowhere to start. */
+    it('starts with one empty row', async () => {
+      const { component } = await mount();
+
+      component.setQuestionType(0, 'checkBoxGroup');
+
+      expect(component.optionRows(component.questions()[0])).toEqual(['']);
+    });
+
+    it('adds and fills rows', async () => {
+      const { component } = await mount();
+
+      component.setQuestionType(0, 'checkBoxGroup');
+      component.setOptionAt(0, 0, 'Time');
+      component.addOption(0);
+      component.setOptionAt(0, 1, 'Materials');
+
+      expect(component.optionRows(component.questions()[0]))
+        .toEqual(['Time', 'Materials']);
+    });
+
+    it('removes the row asked for, not the last one', async () => {
+      const { component } = await mount();
+
+      component.setQuestionType(0, 'checkBoxGroup');
+      component.setOptionAt(0, 0, 'Time');
+      component.addOption(0);
+      component.setOptionAt(0, 1, 'Materials');
+      component.addOption(0);
+      component.setOptionAt(0, 2, 'Noise');
+
+      component.removeOption(0, 1);
+
+      expect(component.optionRows(component.questions()[0]))
+        .toEqual(['Time', 'Noise']);
+    });
+
+    /* NEVER DOWN TO NOTHING, or the editor reaches a state with no box to type
+       in and no way back except changing the type and back again. */
+    it('clearing the last row leaves an empty one', async () => {
+      const { component } = await mount();
+
+      component.setQuestionType(0, 'checkBoxGroup');
+      component.setOptionAt(0, 0, 'Time');
+      component.removeOption(0, 0);
+
+      expect(component.optionRows(component.questions()[0])).toEqual(['']);
+    });
+
+    /*
+     * THE REASON THIS TYPE STORES AN ARRAY. An author typing a comma into a row
+     * means one option; a comma joined string would silently make it two, and
+     * nobody would find out until a teacher saw the mangled list.
+     */
+    it('keeps an option that contains a comma whole', async () => {
+      const { component } = await mount();
+
+      component.setQuestionType(0, 'checkBoxGroup');
+      component.setOptionAt(0, 0, 'Ran out of time, mostly');
+
+      expect(component.optionRows(component.questions()[0]))
+        .toEqual(['Ran out of time, mostly']);
+    });
+
+    /* Switching type must not leave the other editor's shape behind: a string
+       reaching the row editor would show one row that cannot be typed into. */
+    it('clears to an array when the type becomes a row type', async () => {
+      for (const type of ['checkBoxGroup', 'radioGroup']) {
+        const { component } = await mount();
+
+        component.setQuestionType(0, 'dropDown');
+        component.setDropDownOptions(0, 'Yes,No');
+        component.setQuestionType(0, type);
+
+        expect(component.questions()[0].dropDownOptions).toEqual([]);
+      }
+    });
+
+    /* Switching BETWEEN the two row types keeps the options, because both edit
+       and store them the same way. Clearing here would lose an author's work for
+       a change that alters nothing about how the options are written. */
+    it('keeps the options when switching between the two row types', async () => {
+      const { component } = await mount();
+
+      component.setQuestionType(0, 'checkBoxGroup');
+      component.setOptionAt(0, 0, 'Yes');
+      component.setQuestionType(0, 'radioGroup');
+
+      expect(component.optionRows(component.questions()[0])).toEqual(['Yes']);
+    });
+
+    it('clears to a string when the type stops being checkBoxGroup', async () => {
+      const { component } = await mount();
+
+      component.setQuestionType(0, 'checkBoxGroup');
+      component.setOptionAt(0, 0, 'Time');
+      component.setQuestionType(0, 'dropDown');
+
+      expect(component.questions()[0].dropDownOptions).toBe('');
+    });
+
+    /* A stored question written before this type existed, or edited by hand, can
+       hold the comma string. The row editor has to be able to open it. */
+    it('opens a comma string stored on a checkBoxGroup question as rows', async () => {
+      const { component } = await mount(
+        storedForm({
+          questions: [
+            {
+              questionType: 'checkBoxGroup',
+              questionNumber: 1,
+              question: 'What got in the way?',
+              prompt: '',
+              isSubquestion: false,
+              dropDownOptions: 'Time,Materials',
+              dropDownOptionsDynamic: '',
+              dropDownOptionsDependent: '',
+              fieldIcon: ''
+            }
+          ]
+        })
+      );
+
+      expect(component.optionRows(component.questions()[0]))
+        .toEqual(['Time', 'Materials']);
+    });
+  });
+
   describe('the per-type field', () => {
 
     it('offers Drop Down Options only for dropDown', async () => {
@@ -558,6 +721,43 @@ describe('FormWizard', () => {
   });
 
   describe('saving', () => {
+
+    /*
+     * BLANK ROWS DROPPED, and the array kept as an array.
+     *
+     * `addOption` appends an empty row before it is filled in and the editor
+     * keeps one so there is always somewhere to type, so without this a saved
+     * document would carry '' entries no author added. The players filter blanks
+     * on read, so this is not what stops a blank checkbox appearing; it is what
+     * stops the editor showing the author rows they never made.
+     */
+    it('saves checkBoxGroup options as a trimmed array', async () => {
+      const { component, saved } = await mount();
+
+      fillBasics(component);
+      fillQuestion(component, 0, 'What got in the way?', 'checkBoxGroup');
+      component.setOptionAt(0, 0, '  Time  ');
+      component.addOption(0);
+      component.setOptionAt(0, 1, 'Ran out of materials, mostly');
+      // Left empty on purpose: this is the row `addOption` just made.
+      component.addOption(0);
+      component.save();
+
+      expect(saved[0].questions[0].dropDownOptions)
+        .toEqual(['Time', 'Ran out of materials, mostly']);
+    });
+
+    /* dropDown is untouched by any of this: same field, still a string. */
+    it('leaves a dropDown question storing its comma string', async () => {
+      const { component, saved } = await mount();
+
+      fillBasics(component);
+      fillQuestion(component, 0, 'Did it run to time?', 'dropDown');
+      component.setDropDownOptions(0, 'Yes,No');
+      component.save();
+
+      expect(saved[0].questions[0].dropDownOptions).toBe('Yes,No');
+    });
 
     it('emits the base fields production stores', async () => {
       const { component, saved } = await mount();

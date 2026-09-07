@@ -135,6 +135,66 @@
 }
 
 /* --------------------------------------------------------------------------
+   Option lists, for the checkBoxGroup and radioGroup types
+
+   ONE SET OF RULES FOR BOTH CONTROLS. A checkbox group and a radio group differ
+   only in how many may be picked, and drawing them differently would suggest
+   some other difference. The markup swaps the input's `type` and its container's
+   `role`; nothing here needs to know which it got, and `:has()` reaches the
+   input either way.
+   -------------------------------------------------------------------------- */
+
+/*
+ * ONE PER ROW, not wrapped inline. Option text here is a whole phrase written by
+ * whoever built the form ("The class ran out of time"), so laying them out in a
+ * row puts a ragged, hard-to-scan block in front of a reader who has to check
+ * several of them.
+ */
+.af-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/*
+ * THE WHOLE ROW IS THE TARGET, because it is a <label> wrapping both the box and
+ * its text. A 13px checkbox is a poor tap target on a phone, and the text beside
+ * it is the part a reader aims at.
+ */
+.af-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-400);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink-800);
+  cursor: pointer;
+}
+
+.af-check.is-on {
+  border-color: var(--accent-500);
+  background: var(--ink-050);
+}
+
+.af-check input {
+  /* Nudged down so the box sits on the first line of a wrapping label rather
+     than centred against the whole block. */
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.af-check:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+
+.af-check:has(input:disabled) {
+  background: var(--ink-050);
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
    The star rating
    -------------------------------------------------------------------------- */
 

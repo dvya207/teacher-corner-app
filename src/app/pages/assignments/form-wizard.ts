@@ -9,6 +9,49 @@ import {
 } from '../../models/teaching.model';
 import { AuthService } from '../../services/auth.service';
 import { ConfigurationService } from '../../services/configuration.service';
+import { splitOptions } from '../../services/form-submission.service';
+
+/**
+ * The form question types whose options are authored as ROWS and stored as an
+ * ARRAY, rather than typed into one comma separated box.
+ *
+ * A SET RATHER THAN A LITERAL PER SITE, because four places branch on this and a
+ * typo in any of them would silently fall back to the comma text field, which
+ * looks like nothing more than a styling glitch until an option with a comma in
+ * it splits in two.
+ *
+ * The two differ only in how many options may be picked, which is the PLAYER's
+ * concern. Authoring them is identical, so they share one editor.
+ */
+const ROW_OPTION_TYPES: ReadonlySet<string> = new Set([
+  'checkBoxGroup',
+  'radioGroup'
+]);
+
+/** Whether a type's options are authored as rows. */
+function hasOptionRows(questionType: string): boolean {
+  return ROW_OPTION_TYPES.has(questionType);
+}
+
+/**
+ * The stored options, in the shape the type's own editor edits.
+ *
+ * `checkBoxGroup` IS EDITED AS ROWS and so wants an array, whatever the document
+ * happens to carry: a question authored before this type existed, or edited by
+ * hand, can hold the comma string, and the row editor has to be able to open it.
+ * Every other type is edited in a text field and so wants the string, because an
+ * array reaching a text input renders as '[object Object]'.
+ */
+function normaliseOptions(
+  stored: string | string[] | undefined,
+  questionType: string
+): string | string[] {
+  if (hasOptionRows(questionType)) {
+    return Array.isArray(stored) ? stored : splitOptions(stored);
+  }
+
+  return Array.isArray(stored) ? stored.join(',') : (stored ?? '');
+}
 
 /** The three steps, in production's order. Labels are the stepper's tooltips. */
 export const FORM_STEPS = [
@@ -178,9 +221,11 @@ export class FormWizard implements OnInit {
    * carry `options` and `allowMultiple` from an `mcq` type this dialog does not
    * offer, and dropping them on read would delete them on the next save.
    *
-   * `dropDownOptions` IS COERCED TO A STRING because the collection holds both a
-   * string and an array for it. The editor is a text field either way, and an
-   * array arriving where a string is expected renders as '[object Object]'.
+   * `dropDownOptions` IS NORMALISED TO THE SHAPE ITS TYPE EDITS, because the
+   * collection holds both a string and an array for it. `checkBoxGroup` is edited
+   * one option per row and so wants an array; every other type is edited in a
+   * text field and so wants the comma separated string. Handing either editor the
+   * other's shape is what rendered '[object Object]' in the box before.
    *
    * `questionNumber` is re-derived from the position rather than trusted, so a gap
    * left by an old removal cannot survive into the saved document.
@@ -195,7 +240,7 @@ export class FormWizard implements OnInit {
       question: question.question ?? '',
       prompt: question.prompt ?? '',
       isSubquestion: question.isSubquestion === true,
-      dropDownOptions: Array.isArray(options) ? options.join(',') : (options ?? ''),
+      dropDownOptions: normaliseOptions(options, question.questionType ?? ''),
       dropDownOptionsDynamic: question.dropDownOptionsDynamic ?? '',
       dropDownOptionsDependent: question.dropDownOptionsDependent ?? '',
       fieldIcon: question.fieldIcon ?? ''
@@ -385,9 +430,27 @@ export class FormWizard implements OnInit {
    * reason in the other direction.
    */
   setQuestionType(index: number, value: string): void {
+    const was = this.questions()[index].questionType ?? '';
+
     this.patch(index, {
       questionType: value,
-      dropDownOptions: '',
+      /*
+       * KEPT WHEN BOTH TYPES AUTHOR ROWS, cleared otherwise.
+       *
+       * `checkBoxGroup` and `radioGroup` write the same options the same way and
+       * differ only in how many may be picked when the form is answered, so
+       * switching between them changes nothing about what was authored. Clearing
+       * there would throw away an author's typed options for a change that did
+       * not affect them, which is the kind of loss nobody expects from a
+       * dropdown.
+       *
+       * Everywhere else it is CLEARED TO THE SHAPE THE NEW TYPE EDITS, not to ''
+       * for all of them: the row editor reads an array, and handing it a string
+       * would put one empty row on screen that cannot be typed into.
+       */
+      dropDownOptions: hasOptionRows(value) && hasOptionRows(was)
+        ? normaliseOptions(this.questions()[index].dropDownOptions, value)
+        : (hasOptionRows(value) ? [] : ''),
       dropDownOptionsDynamic: '',
       dropDownOptionsDependent: '',
       prompt: ''
@@ -404,6 +467,63 @@ export class FormWizard implements OnInit {
 
   setDropDownOptions(index: number, value: string): void {
     this.patch(index, { dropDownOptions: value });
+  }
+
+  // ---- The row option editor, for checkBoxGroup and radioGroup -----------
+  //
+  // ONE OPTION PER ROW, added and removed with a button, which is how the quiz
+  // wizard has always authored its MCQ options. A form's rows carry none of the
+  // quiz's scoring furniture: there is no correct answer to tick, because a form
+  // is not marked.
+  //
+  // ONE EDITOR FOR BOTH TYPES. Whether one option may be picked or several is
+  // decided when the form is ANSWERED, not when it is written, so there is
+  // nothing for the author to do differently and no reason for two editors.
+
+  /**
+   * The rows to render. Always AT LEAST ONE, so a fresh question shows an empty
+   * box to type into rather than a header with nothing under it.
+   */
+  optionRows(question: FormQuestion): string[] {
+    const stored = question.dropDownOptions;
+    const rows = Array.isArray(stored) ? [...stored] : splitOptions(stored);
+
+    return rows.length > 0 ? rows : [''];
+  }
+
+  addOption(index: number): void {
+    this.patch(index, {
+      dropDownOptions: [...this.optionRows(this.questions()[index]), '']
+    });
+  }
+
+  /**
+   * Removes one row.
+   *
+   * NEVER DOWN TO NOTHING: clearing the last row empties it instead of deleting
+   * it, so the editor cannot reach a state with no box to type in and no way
+   * back except changing the type and back again.
+   */
+  removeOption(index: number, optionIndex: number): void {
+    const rows = this.optionRows(this.questions()[index]);
+    const left = rows.filter((_, position) => position !== optionIndex);
+
+    this.patch(index, { dropDownOptions: left.length > 0 ? left : [''] });
+  }
+
+  setOptionAt(index: number, optionIndex: number, value: string): void {
+    const rows = this.optionRows(this.questions()[index]);
+
+    this.patch(index, {
+      dropDownOptions: rows.map((row, position) =>
+        position === optionIndex ? value : row
+      )
+    });
+  }
+
+  /** Whether this question's options are authored as rows. */
+  usesOptionRows(question: FormQuestion): boolean {
+    return hasOptionRows(question.questionType);
   }
 
   setDynamicName(index: number, value: string): void {
@@ -440,6 +560,16 @@ export class FormWizard implements OnInit {
    * field inside it — 'RYSI_Categories,subjects' — so production's label is
    * describing what the value is, and the symmetrical-sounding name would have
    * been wrong.
+   */
+  /*
+   * THE COMMA TEXT FIELD, which is `dropDown` alone.
+   *
+   * `checkBoxGroup` and `radioGroup` store their choices in this same
+   * `dropDownOptions` field but author them as rows, so they answer
+   * `usesOptionRows` instead. Two editors for one field, because they disagree
+   * about what an option may contain: a comma separated box cannot express an
+   * option with a comma in it, and a row can. See the note on the field in
+   * models/teaching.model.ts.
    */
   needsOptions(question: FormQuestion): boolean {
     return question.questionType === 'dropDown';
@@ -571,7 +701,18 @@ export class FormWizard implements OnInit {
       questions: this.questions().map((question, index) => ({
         ...question,
         question: question.question.trim(),
-        questionNumber: index + 1
+        questionNumber: index + 1,
+        /*
+         * OPTION ROWS TRIMMED AND BLANKS DROPPED on the way out. The editor keeps
+         * an empty row so there is always somewhere to type, and `addOption`
+         * appends one before it is filled in, so a saved document would otherwise
+         * carry '' entries that no author put there. The players filter them on
+         * read, so this is not what stops a blank checkbox appearing; it is what
+         * stops the editor showing the author rows they never added.
+         */
+        dropDownOptions: this.usesOptionRows(question)
+          ? splitOptions(question.dropDownOptions)
+          : question.dropDownOptions
       }))
     });
   }

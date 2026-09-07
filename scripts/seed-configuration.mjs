@@ -139,6 +139,34 @@ const assignmentsTypes = [
  * "Display Only", a block of text with no input, and `text` and `textBox` are a
  * single line and a multi-line box rather than synonyms.
  */
+/*
+ * 'checkBoxGroup' AND 'radioGroup' ARE THIS APP'S OWN, the two form question
+ * types here that production's `questionTypesForm` does not carry. Its seven are
+ * all above them.
+ *
+ * WHY IT EXISTS. Every option list a form could ask for was single-select:
+ * `dropDown` picks exactly one and the three dropDown variants differ only in
+ * where their options come from. A question like "which of these did the class
+ * struggle with" has no honest answer in that vocabulary, and the workaround was
+ * one dropDown per option.
+ *
+ * IT REUSES `dropDownOptions` rather than adding a field of its own. The value is
+ * the same thing in both cases, a comma separated list of choices, and whether
+ * one or several may be picked is what the TYPE says, not what the field says.
+ * A `checkBoxGroupOptions` beside it would also have to be written on all 209 existing
+ * questions, because this collection stores every field on every question
+ * regardless of type.
+ *
+ * A checkBoxGroup's ANSWER IS AN ARRAY, which is the one place it is not like
+ * `dropDown`. A radioGroup's is a single string, exactly like a dropdown's. See
+ * FormSubmissionService.AnsweredFormQuestion.answer.
+ *
+ * WHY `radioGroup` WHEN `dropDown` ALREADY PICKS ONE. A dropdown hides its
+ * choices until tapped, which is wrong for the case these were added for: a
+ * teacher answering with a class in front of them, who needs to see what is on
+ * offer without opening anything. It also authors its options as rows, so one of
+ * them may contain a comma.
+ */
 const questionTypesForm = [
   { display: 'Display Only', key: 'none' },
   { display: 'Text Field', key: 'text' },
@@ -146,7 +174,9 @@ const questionTypesForm = [
   { display: 'Drop Down', key: 'dropDown' },
   { display: 'Star Rating', key: 'starRating' },
   { display: 'Drop Down (Dynamic)', key: 'dropDownDynamic' },
-  { display: 'Drop Down (Dependent)', key: 'dropDownDependent' }
+  { display: 'Drop Down (Dependent)', key: 'dropDownDependent' },
+  { display: 'Checkboxes (Multi-Select)', key: 'checkBoxGroup' },
+  { display: 'Radio Buttons (Single-Select)', key: 'radioGroup' }
 ];
 
 /**
@@ -266,8 +296,22 @@ const assignmentDefaults = {
   quizMediaFolder: 'quizzer_resources'
 };
 
-/** learning-unit-options.ts DIFFICULTY_LEVELS. Strings, as production stores them. */
-const luDifficultyLevels = ['1', '2', '3', '4', '5'];
+/**
+ * learning-unit-options.ts DIFFICULTY_LEVELS. Strings, as production stores them.
+ *
+ * SIX LEVELS, STARTING AT 0. This read ['1'..'5'] and that was a transcription
+ * slip in this hand-copied constant, not a decision: DIFFICULTY_LEVELS itself has
+ * always carried '0'..'5', and the note on it explains why at length. Production's
+ * own units store difficultyLevel 0, two of the six in teacher-corner-dev do right
+ * now, and a list starting at 1 cannot show what they hold, so the select fell back
+ * to its first option and offered to save 1 over a stored 0.
+ *
+ * The live document was already correct, so nothing needed repairing in the
+ * database. What this fixes is the seed: a full run would have overwritten six
+ * good levels with five and reintroduced the exact bug learning-unit-options.ts
+ * documents fixing. Found by scripts/verify-configuration.mjs.
+ */
+const luDifficultyLevels = ['0', '1', '2', '3', '4', '5'];
 
 /** institution-options.ts BOARDS */
 const boards = [

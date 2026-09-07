@@ -508,10 +508,20 @@ describe('ConfigurationService', () => {
         .toEqual(['QUIZ', 'UPLOAD', 'GAME', 'FORM', 'TEXTBLOCK']);
     });
 
+    /*
+     * PRODUCTION'S SEVEN FIRST, IN ITS ORDER, then this app's own.
+     *
+     * `checkBoxGroup` and `radioGroup` are not production's and are asserted
+     * LAST for that reason: the order of the first seven is production's
+     * document, and anything added here has to go after them so a reader can
+     * still see that list unchanged. Both author their options as rows; see
+     * data/assignment-options.ts.
+     */
     it('ships the form field types in production\'s order', () => {
       expect(FORM_QUESTION_TYPES.map(entry => entry.key)).toEqual([
         'none', 'text', 'textBox', 'dropDown',
-        'starRating', 'dropDownDynamic', 'dropDownDependent'
+        'starRating', 'dropDownDynamic', 'dropDownDependent',
+        'checkBoxGroup', 'radioGroup'
       ]);
     });
 
